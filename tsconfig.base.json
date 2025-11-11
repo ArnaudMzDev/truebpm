@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "lib": ["DOM", "ESNext"],
+    "jsx": "react-jsx",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@truebpm/ui": ["packages/ui"],
+      "@truebpm/types": ["packages/types"],
+      "@truebpm/config": ["packages/config"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build"],
+  "include": ["apps", "packages"]
+}

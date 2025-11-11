@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+overrides:
+  '@truebpm/config': link:packages/config
+  '@truebpm/types': link:packages/types
+  '@truebpm/ui': link:packages/ui

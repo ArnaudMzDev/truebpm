@@ -1,0 +1,38 @@
+name: TrueBPM CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Cloner le repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Installer Node + pnpm
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10
+
+      # 3️⃣ Installer les dépendances
+      - name: Install dependencies
+        run: pnpm install
+
+      # 4️⃣ Lancer le lint
+      - name: Run lint
+        run: pnpm lint
+
+      # 5️⃣ Build toutes les apps
+      - name: Build all apps
+        run: pnpm build
