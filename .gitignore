@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+.expo
+.expo-shared
+.env
+.env.local
+.next
+.DS_Store
+pnpm-lock.yaml
+
