@@ -14,7 +14,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProblemsViewState">
-    <option name="selectedTabId" value="ProjectErrors" />
+    <option name="selectedTabId" value="CurrentFile" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 4
@@ -37,10 +37,16 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "pnpm",
-    "ts.external.directory.path": "/Users/arnaudmz/Documents/TrueBPM/truebpm/packages/ui/node_modules/typescript/lib",
+    "ts.external.directory.path": "/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/typescript/lib",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/apps/api/app" />
+      <recent name="$PROJECT_DIR$/apps/mobile/src/screens" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>

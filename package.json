@@ -2,7 +2,6 @@
   "name": "truebpm",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "turbo run dev",
@@ -32,5 +31,11 @@
     "@truebpm/config": "link:packages/config",
     "@truebpm/types": "link:packages/types",
     "@truebpm/ui": "link:packages/ui"
+  },
+  "pnpm": {
+    "overrides": {
+      "react": "19.1.0",
+      "react-native": "0.81.5"
+    }
   }
 }
