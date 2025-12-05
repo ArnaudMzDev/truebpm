@@ -1,68 +1,77 @@
+// apps/mobile/src/screens/SplashScreen.tsx
 import React, { useEffect, useRef } from "react";
 import { View, Animated, StyleSheet, Easing } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../../App";
+import { RootStackParamList } from "../navigation/types";
+
+type SplashNav = NativeStackNavigationProp<RootStackParamList, "Splash">;
 
 export default function SplashScreen() {
-    const navigation =
-        useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const navigation = useNavigation<SplashNav>();
 
     const opacity = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(20)).current;
 
     useEffect(() => {
+        // Animation logo
         Animated.parallel([
             Animated.timing(opacity, {
                 toValue: 1,
-                duration: 1100,
+                duration: 1200,
                 useNativeDriver: true,
                 easing: Easing.out(Easing.exp),
             }),
             Animated.timing(translateY, {
                 toValue: 0,
-                duration: 1100,
+                duration: 1200,
                 useNativeDriver: true,
                 easing: Easing.out(Easing.exp),
             }),
         ]).start();
 
-        const timer = setTimeout(() => {
-            navigation.replace("Login");
-        }, 2200);
+        // Auto-login
+        const checkToken = async () => {
+            try {
+                const token = await AsyncStorage.getItem("token");
 
-        return () => clearTimeout(timer);
-    }, []);
+                setTimeout(() => {
+                    if (token) {
+                        navigation.replace("Main"); // ou "Home" selon ton Stack
+                    } else {
+                        navigation.replace("Login");
+                    }
+                }, 1800);
+            } catch (e) {
+                console.log("Splash token check error:", e);
+                navigation.replace("Login");
+            }
+        };
+
+        checkToken();
+    }, [navigation]);
 
     return (
         <View style={styles.container}>
-            <View style={styles.logoRow}>
-                {/* True */}
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Animated.Text
                     style={[
                         styles.logoText,
-                        {
-                            color: "#fff",
-                            opacity,
-                            transform: [{ translateY }],
-                        },
+                        { color: "white", opacity, transform: [{ translateY }] },
                     ]}
                 >
                     True
                 </Animated.Text>
 
-                {/* BPM avec gradient */}
                 <MaskedView
                     maskElement={
                         <Animated.Text
                             style={[
                                 styles.logoText,
-                                {
-                                    opacity,
-                                    transform: [{ translateY }],
-                                },
+                                { opacity, transform: [{ translateY }] },
                             ]}
                         >
                             BPM
@@ -71,9 +80,7 @@ export default function SplashScreen() {
                 >
                     <LinearGradient
                         colors={["#9B5CFF", "#5E17EB"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.gradientFill}
+                        style={{ width: 120, height: 60 }}
                     />
                 </MaskedView>
             </View>
@@ -88,20 +95,9 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-
-    logoRow: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-
     logoText: {
         fontSize: 48,
         fontWeight: "800",
         letterSpacing: 1,
-    },
-
-    gradientFill: {
-        width: 140,
-        height: 60,
     },
 });

@@ -13,6 +13,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
 
+import Constants from "expo-constants";
+
+const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
+const API_URL = `http://${localIP}:3000`;
 // ---------------- ERROR MESSAGE ----------------
 
 function ErrorMessage({ message }: { message: string }) {
@@ -53,9 +57,6 @@ export default function LoginScreen({ navigation }: any) {
 
     const formFilled = email.trim() !== "" && password.trim() !== "";
 
-    // 🔥 URL FIXÉE (tu avais un "\n" avant !)
-    const API_URL = "http://192.168.1.52:3000/api/auth/login";
-
     // ---------------- LOGIN ----------------
 
     const handleLogin = async () => {
@@ -67,7 +68,7 @@ export default function LoginScreen({ navigation }: any) {
         setLoading(true);
 
         try {
-            const res = await fetch(API_URL, {
+            const res = await fetch(`${API_URL}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password }),
@@ -80,12 +81,11 @@ export default function LoginScreen({ navigation }: any) {
                 return setError(data.error || "Identifiants incorrects.");
             }
 
-            // 🔥 STOCKAGE TOKEN + USER
             await AsyncStorage.setItem("token", data.token);
             await AsyncStorage.setItem("user", JSON.stringify(data.user));
 
             setLoading(false);
-            navigation.replace("Home");
+            navigation.replace("Main");
 
         } catch (err) {
             console.error("LOGIN ERROR :", err);

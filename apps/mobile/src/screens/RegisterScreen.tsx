@@ -1,22 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-    View,
-    Text,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    KeyboardAvoidingView,
-    Platform,
-    Animated,
+    View, Text, StyleSheet, TextInput, TouchableOpacity,
+    KeyboardAvoidingView, Platform, Animated
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
+import Constants from "expo-constants";
 
-const API_URL = "http://192.168.1.52:3000"; // 🔥 REMPLACE PAR TON IP LOCALE
+const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
+const API_URL = `http://${localIP}:3000`;
 
 /* ----------------------------- ERROR MESSAGE ----------------------------- */
-
 function ErrorMessage({ message }: { message: string }) {
     const opacity = useRef(new Animated.Value(0)).current;
 
@@ -32,7 +28,6 @@ function ErrorMessage({ message }: { message: string }) {
     }, [message]);
 
     if (!message) return null;
-
     return (
         <Animated.View style={{ opacity, marginTop: 5 }}>
             <Text style={styles.errorText}>{message}</Text>
@@ -41,22 +36,20 @@ function ErrorMessage({ message }: { message: string }) {
 }
 
 /* ----------------------------- VALIDATIONS ----------------------------- */
-
 function validateEmail(email: string) {
     return /\S+@\S+\.\S+/.test(email);
 }
 
 function validatePassword(pw: string) {
-    const min = pw.length >= 8;
-    const upper = /[A-Z]/.test(pw);
-    const number = /\d/.test(pw);
-    const special = /[!@#$%^&*(),.?":{}|<>]/.test(pw);
-
-    return min && upper && number && special;
+    return (
+        pw.length >= 8 &&
+        /[A-Z]/.test(pw) &&
+        /[0-9]/.test(pw) &&
+        /[^a-zA-Z0-9]/.test(pw)
+    );
 }
 
 /* ----------------------------- SCREEN ----------------------------- */
-
 export default function RegisterScreen({ navigation }: any) {
     const [focused, setFocused] = useState<string | null>(null);
 
@@ -80,9 +73,7 @@ export default function RegisterScreen({ navigation }: any) {
         if (!pseudo.trim()) return setError("Choisis un pseudo.");
         if (!validateEmail(email)) return setError("Email invalide.");
         if (!validatePassword(password))
-            return setError(
-                "Mot de passe trop faible (8 caractères, majuscule, chiffre, symbole)."
-            );
+            return setError("Mot de passe trop faible.");
         if (password !== confirm)
             return setError("Les mots de passe ne correspondent pas.");
 
@@ -102,8 +93,14 @@ export default function RegisterScreen({ navigation }: any) {
                 return setError(data.error || "Erreur inconnue.");
             }
 
+            // 🔥 Stockage du token & user -> AUTO LOGIN
+            await AsyncStorage.setItem("token", data.token);
+            await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
             setLoading(false);
-            navigation.navigate("Login");
+
+            // 🔥 Aller direct vers la création de profil
+            navigation.replace("ProfileSetup");
 
         } catch (err) {
             setLoading(false);
@@ -135,7 +132,6 @@ export default function RegisterScreen({ navigation }: any) {
                         style={[styles.input, focused === "pseudo" && styles.inputFocused]}
                         placeholder="Ton pseudo"
                         placeholderTextColor="#777"
-                        autoCapitalize="none"
                         onFocus={() => setFocused("pseudo")}
                         onBlur={() => setFocused(null)}
                         onChangeText={setPseudo}
@@ -202,7 +198,6 @@ export default function RegisterScreen({ navigation }: any) {
 }
 
 /* ----------------------------- STYLES ----------------------------- */
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#000", paddingHorizontal: 24, justifyContent: "center" },
     header: { alignItems: "center", marginBottom: 35 },
@@ -217,7 +212,7 @@ const styles = StyleSheet.create({
     },
     inputFocused: {
         borderColor: "#9B5CFF", shadowColor: "#9B5CFF",
-        shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.3, shadowRadius: 8
     },
     errorText: { color: "#ff4d4d", fontSize: 14, fontWeight: "500" },
     button: {

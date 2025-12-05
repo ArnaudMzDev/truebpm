@@ -1,10 +1,28 @@
-const API_URL = "http://localhost:3000"; 
-// ⚠️ iPhone réel → remplace par IP locale : http://192.168.X.X:3000
+// 🔥 Mets ton IP ici
+const API_URL = "http://192.168.1.146:3000";
 
-export async function api(path: string, options: any = {}) {
+// GET sécurisé avec token
+export async function apiGet(path: string, token: string) {
     const res = await fetch(`${API_URL}${path}`, {
-        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-        ...options,
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${token}`
+        }
+    });
+
+    const data = await res.json();
+    return { ok: res.ok, data };
+}
+
+// POST ou PATCH générique (si besoin plus tard)
+export async function apiSend(path: string, token: string, body: any, method = "POST") {
+    const res = await fetch(`${API_URL}${path}`, {
+        method,
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
     });
 
     const data = await res.json();

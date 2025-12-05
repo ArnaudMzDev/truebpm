@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 export async function POST(req: Request) {
     try {
@@ -9,6 +10,7 @@ export async function POST(req: Request) {
 
         await connectDB();
 
+        // Vérifier si email existe
         const exists = await User.findOne({ email });
         if (exists) {
             return NextResponse.json(
@@ -17,11 +19,35 @@ export async function POST(req: Request) {
             );
         }
 
+        // Hash PW
         const hashed = await bcrypt.hash(password, 10);
 
-        await User.create({ pseudo, email, password: hashed });
+        // Création user
+        const newUser = await User.create({
+            pseudo,
+            email,
+            password: hashed,
+        });
 
-        return NextResponse.json({ success: true }, { status: 201 });
+        // Générer token
+        const token = jwt.sign(
+            { id: newUser._id },
+            process.env.JWT_SECRET!,
+            { expiresIn: "7d" }
+        );
+
+        return NextResponse.json(
+            {
+                user: {
+                    id: newUser._id,
+                    pseudo: newUser.pseudo,
+                    email: newUser.email,
+                },
+                token,
+            },
+            { status: 201 }
+        );
+
     } catch (err) {
         console.error("❌ Register error:", err);
         return NextResponse.json(

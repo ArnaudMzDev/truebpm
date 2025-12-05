@@ -4,7 +4,20 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b7041585-3975-4118-bd64-fec653cf918c" name="Changes" comment="" />
+    <list default="true" id="b7041585-3975-4118-bd64-fec653cf918c" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/register/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/auth/register/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/models/User.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/User.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/lib/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/lib/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/RegisterScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/RegisterScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/SplashScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/SplashScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -20,6 +33,9 @@
   &quot;associatedIndex&quot;: 4
 }</component>
   <component name="ProjectId" id="35Cbhryo9BuFoi55aT09cKcE91z" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -37,12 +53,15 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "pnpm",
+    "prettierjs.PrettierConfiguration.Package": "/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/prettier",
     "ts.external.directory.path": "/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/typescript/lib",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/apps/mobile/src" />
+      <recent name="$PROJECT_DIR$/apps/api/app/api" />
       <recent name="$PROJECT_DIR$/apps/api/app" />
       <recent name="$PROJECT_DIR$/apps/mobile/src/screens" />
     </key>
@@ -64,10 +83,23 @@
       <workItem from="1762617123746" duration="820000" />
       <workItem from="1762857582598" duration="599000" />
       <workItem from="1762858397938" duration="1336000" />
+      <workItem from="1764668817839" duration="42000" />
+      <workItem from="1764960154856" duration="4473000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="javascript">
+          <url>file://$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx</url>
+          <properties lambdaOrdinal="-1" />
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>
