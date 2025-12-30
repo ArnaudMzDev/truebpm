@@ -8,25 +8,65 @@ const PostSchema = new Schema(
             required: true,
         },
 
+        /* -------------------- ENTITY -------------------- */
+        entityType: {
+            type: String,
+            enum: ["song", "album", "artist"],
+            default: "song",
+        },
+
+        entityId: {
+            type: String,
+            default: null, // Apple Music / iTunes id
+        },
+
+        /* -------------------- DISPLAY INFO -------------------- */
+        trackTitle: {
+            type: String,
+            required: true,
+        },
+
+        artist: {
+            type: String,
+            required: true,
+        },
+
+        coverUrl: {
+            type: String,
+            default: null,
+        },
+
+        /* -------------------- RATING MODE -------------------- */
         mode: {
             type: String,
             enum: ["general", "multi"],
             required: true,
         },
 
-        trackTitle: { type: String, required: true },
-        artist: { type: String, required: true },
-        coverUrl: { type: String, default: null },
+        // Note simple /5
+        rating: {
+            type: Number,
+            min: 1,
+            max: 5,
+            default: null,
+        },
 
-        rating: { type: Number, min: 0, max: 10, default: null },
+        // Multi-critères dynamique
+        ratings: {
+            type: Map,
+            of: Number,
+            default: {},
+        },
 
-        prod: { type: Number, min: 0, max: 10, default: null },
-        lyrics: { type: Number, min: 0, max: 10, default: null },
-        emotion: { type: Number, min: 0, max: 10, default: null },
-
-        comment: { type: String, default: "" },
+        /* -------------------- CONTENT -------------------- */
+        comment: {
+            type: String,
+            default: "",
+        },
     },
-    { timestamps: true }
+    {
+        timestamps: true,
+    }
 );
 
 export default models.Post || model("Post", PostSchema);

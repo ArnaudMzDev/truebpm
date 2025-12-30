@@ -1,34 +1,34 @@
 import jwt from "jsonwebtoken";
 
-// ----------------------------
-// SIGN TOKEN
-// ----------------------------
-export function signToken(id: string) {
-    return jwt.sign({ id }, process.env.JWT_SECRET!, {
-        expiresIn: "7d",
-    });
+type JwtPayload = { id: string };
+
+function getJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error("JWT_SECRET is missing");
+    return secret;
 }
 
-// ----------------------------
-// VERIFY TOKEN pour route.ts
-// ----------------------------
+export function signToken(id: string) {
+    return jwt.sign({ id }, getJwtSecret(), { expiresIn: "7d" });
+}
+
 export async function verifyToken(req: Request): Promise<string | null> {
     try {
-        // 1) Récupération du header Authorization
         const header = req.headers.get("authorization");
-
         if (!header) return null;
 
-        // 2) Le header doit être "Bearer xxx"
-        const token = header.split(" ")[1];
+        const parts = header.split(" ");
+        if (parts.length < 2) return null;
+
+        const scheme = parts[0];
+        const token = parts[1];
+
+        if (scheme.toLowerCase() !== "bearer") return null;
         if (!token) return null;
 
-        // 3) Vérification du token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string };
-
-        return decoded.id;
-    } catch (err) {
-        console.log("❌ verifyToken error:", err);
+        const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
+        return decoded?.id ?? null;
+    } catch {
         return null;
     }
 }

@@ -1,5 +1,4 @@
-// apps/mobile/src/screens/EditProfileScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     View,
     Text,
@@ -33,39 +32,67 @@ type User = {
     bannerUrl?: string;
 };
 
+// JSON safe pour éviter "Unexpected character: <"
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text();
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        console.log("Non-JSON response:", text.slice(0, 200));
+        return null;
+    }
+}
+
 export default function EditProfileScreen({ navigation }: any) {
     const [user, setUser] = useState<User | null>(null);
 
+    // URI affichées (peuvent être http(s) OU file:// OU null)
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [bannerUri, setBannerUri] = useState<string | null>(null);
+
     const [bio, setBio] = useState("");
     const [loading, setLoading] = useState(false);
 
-    /* -------------------- LOAD USER -------------------- */
+    // ✅ On conserve les valeurs “source” pour savoir si l’utilisateur a modifié
+    const [initialAvatar, setInitialAvatar] = useState<string>("");
+    const [initialBanner, setInitialBanner] = useState<string>("");
+    const [initialBio, setInitialBio] = useState<string>("");
 
+    /* -------------------- LOAD USER -------------------- */
     useEffect(() => {
         const loadUser = async () => {
             const raw = await AsyncStorage.getItem("user");
-            if (raw) {
+            if (!raw) return;
+
+            try {
                 const u: User = JSON.parse(raw);
                 setUser(u);
-                setAvatarUri(u.avatarUrl || null);
-                setBannerUri(u.bannerUrl || null);
-                setBio(u.bio || "");
+
+                const a = (u.avatarUrl || "").trim();
+                const b = (u.bannerUrl || "").trim();
+                const bi = (u.bio || "").trim();
+
+                setInitialAvatar(a);
+                setInitialBanner(b);
+                setInitialBio(bi);
+
+                setAvatarUri(a ? a : null);
+                setBannerUri(b ? b : null);
+                setBio(bi);
+            } catch (e) {
+                console.log("EditProfile loadUser parse error:", e);
             }
         };
+
         loadUser();
     }, []);
 
     /* -------------------- IMAGE PICKER -------------------- */
-
     const pickImage = async (type: "avatar" | "banner") => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
-            Alert.alert(
-                "Permission",
-                "On a besoin d'accéder à ta galerie pour choisir une image."
-            );
+            Alert.alert("Permission refusée", "L'application a besoin d'accéder à ta galerie.");
             return;
         }
 
@@ -76,18 +103,16 @@ export default function EditProfileScreen({ navigation }: any) {
             quality: 0.8,
         });
 
-        if (!result.canceled && result.assets && result.assets.length > 0) {
+        if (!result.canceled && result.assets?.length > 0) {
             const uri = result.assets[0].uri;
             if (type === "avatar") setAvatarUri(uri);
-            else setBannerUri(uri);
+            if (type === "banner") setBannerUri(uri);
         }
     };
 
-    /* -------------------- CLOUDINARY -------------------- */
-
+    /* -------------------- CLOUDINARY UPLOAD -------------------- */
     const uploadToCloudinary = async (uri: string, folder: string) => {
         const formData = new FormData();
-
         formData.append(
             "file",
             {
@@ -96,27 +121,41 @@ export default function EditProfileScreen({ navigation }: any) {
                 name: "upload.jpg",
             } as any
         );
-
         formData.append("upload_preset", UPLOAD_PRESET);
         formData.append("folder", folder);
 
-        const res = await fetch(CLOUDINARY_URL, {
-            method: "POST",
-            body: formData,
-        });
+        const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
+        const data = await safeJson(res);
 
-        const data = await res.json();
-
-        if (!res.ok) {
+        if (!res.ok || !data?.secure_url) {
             console.log("Cloudinary error:", data);
-            throw new Error("Erreur upload image.");
+            throw new Error("Erreur lors de l'upload Cloudinary");
         }
 
         return data.secure_url as string;
     };
 
-    /* -------------------- SAVE PROFILE -------------------- */
+    /* -------------------- HELPERS : changed? -------------------- */
+    const bioChanged = useMemo(() => bio.trim() !== initialBio, [bio, initialBio]);
 
+    const avatarChanged = useMemo(() => {
+        // si avatarUri = file:// => changé
+        if (avatarUri?.startsWith("file")) return true;
+
+        // si avatarUri null alors changed uniquement si initialAvatar existait
+        if (avatarUri === null) return initialAvatar.length > 0;
+
+        // sinon http(s): compare
+        return (avatarUri || "").trim() !== initialAvatar;
+    }, [avatarUri, initialAvatar]);
+
+    const bannerChanged = useMemo(() => {
+        if (bannerUri?.startsWith("file")) return true;
+        if (bannerUri === null) return initialBanner.length > 0;
+        return (bannerUri || "").trim() !== initialBanner;
+    }, [bannerUri, initialBanner]);
+
+    /* -------------------- SAVE PROFILE -------------------- */
     const handleSave = async () => {
         try {
             setLoading(true);
@@ -124,30 +163,44 @@ export default function EditProfileScreen({ navigation }: any) {
             const token = await AsyncStorage.getItem("token");
             if (!token) {
                 setLoading(false);
-                return Alert.alert("Erreur", "Utilisateur non authentifié.");
+                return Alert.alert("Erreur", "Tu n'es pas connecté.");
             }
 
-            let avatarUrl: string | undefined = user?.avatarUrl;
-            let bannerUrl: string | undefined = user?.bannerUrl;
+            // ✅ Payload intelligent : on n’envoie que ce qui a changé
+            const payload: any = {};
 
-            // Avatar : si uri locale (file://), on upload
-            if (avatarUri && avatarUri.startsWith("file")) {
-                avatarUrl = await uploadToCloudinary(
-                    avatarUri,
-                    "truebpm/profile/avatar"
-                );
-            } else if (avatarUri === null) {
-                avatarUrl = "";
+            if (bioChanged) payload.bio = bio.trim();
+
+            // AVATAR
+            if (avatarChanged) {
+                if (avatarUri === null) {
+                    // ✅ suppression volontaire => null (backend = efface)
+                    payload.avatarUrl = null;
+                } else if (avatarUri.startsWith("file")) {
+                    const url = await uploadToCloudinary(avatarUri, "truebpm/profile/avatar");
+                    payload.avatarUrl = url;
+                } else {
+                    // http(s) choisi/retourné -> set
+                    payload.avatarUrl = avatarUri.trim();
+                }
             }
 
-            // Bannière
-            if (bannerUri && bannerUri.startsWith("file")) {
-                bannerUrl = await uploadToCloudinary(
-                    bannerUri,
-                    "truebpm/profile/banner"
-                );
-            } else if (bannerUri === null) {
-                bannerUrl = "";
+            // BANNER
+            if (bannerChanged) {
+                if (bannerUri === null) {
+                    payload.bannerUrl = null;
+                } else if (bannerUri.startsWith("file")) {
+                    const url = await uploadToCloudinary(bannerUri, "truebpm/profile/banner");
+                    payload.bannerUrl = url;
+                } else {
+                    payload.bannerUrl = bannerUri.trim();
+                }
+            }
+
+            // Rien à sauvegarder
+            if (Object.keys(payload).length === 0) {
+                setLoading(false);
+                return Alert.alert("Info", "Aucune modification à enregistrer.");
             }
 
             const res = await fetch(`${API_URL}/api/user/profile`, {
@@ -156,61 +209,66 @@ export default function EditProfileScreen({ navigation }: any) {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({
-                    bio: bio.trim(), // <– toujours envoyé
-                    avatarUrl,
-                    bannerUrl,
-                }),
+                body: JSON.stringify(payload),
             });
 
-            const data = await res.json();
+            const data = await safeJson(res);
 
             if (!res.ok) {
                 console.log("Profile edit error:", data);
                 setLoading(false);
-                return Alert.alert(
-                    "Erreur",
-                    data.error || "Impossible d'enregistrer le profil."
-                );
+                return Alert.alert("Erreur", data?.error || "Impossible d'enregistrer.");
             }
 
-            // 🔥 On met à jour le user stocké côté mobile
-            if (data.user) {
-                await AsyncStorage.setItem("user", JSON.stringify(data.user));
+            if (!data?.user?._id) {
+                setLoading(false);
+                return Alert.alert("Erreur", "Réponse serveur invalide.");
             }
+
+            // ✅ Cache local = user backend (source de vérité)
+            await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+            // ✅ On met à jour les “initial” pour éviter des faux “changed”
+            const next = data.user as User;
+
+            const a = (next.avatarUrl || "").trim();
+            const b = (next.bannerUrl || "").trim();
+            const bi = (next.bio || "").trim();
+
+            setUser(next);
+            setInitialAvatar(a);
+            setInitialBanner(b);
+            setInitialBio(bi);
+
+            setAvatarUri(a ? a : null);
+            setBannerUri(b ? b : null);
+            setBio(bi);
 
             setLoading(false);
-            Alert.alert("Profil mis à jour", "Ton profil a bien été modifié !");
-
+            Alert.alert("Succès", "Ton profil a été mis à jour.");
             navigation.replace("Profile");
-
         } catch (err) {
-            console.log(err);
+            console.log("Profile update error:", err);
             setLoading(false);
-            Alert.alert("Erreur", "Une erreur est survenue.");
+            Alert.alert("Erreur", "Impossible de modifier ton profil.");
         }
     };
 
     if (!user) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={{ color: "#fff" }}>Chargement du profil...</Text>
+                <Text style={{ color: "#fff" }}>Chargement...</Text>
             </View>
         );
     }
 
     /* -------------------- RENDER -------------------- */
-
     return (
         <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: "#000" }}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-            <ScrollView
-                contentContainerStyle={styles.container}
-                keyboardShouldPersistTaps="handled"
-            >
-                {/* HEADER */}
+            <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
                 <View style={styles.header}>
                     <Logo size={22} />
                     <Text style={styles.title}>Modifier mon profil</Text>
@@ -218,44 +276,33 @@ export default function EditProfileScreen({ navigation }: any) {
 
                 {/* BANNIÈRE */}
                 <Text style={styles.sectionTitle}>Bannière</Text>
-                <TouchableOpacity
-                    style={styles.bannerPlaceholder}
-                    onPress={() => pickImage("banner")}
-                >
+                <TouchableOpacity style={styles.bannerPlaceholder} onPress={() => pickImage("banner")}>
                     {bannerUri ? (
                         <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
                     ) : (
-                        <Text style={styles.bannerPlaceholderText}>
-                            Choisir une bannière
-                        </Text>
+                        <Text style={styles.bannerPlaceholderText}>Choisir une bannière</Text>
                     )}
                 </TouchableOpacity>
 
                 {/* AVATAR */}
                 <Text style={styles.sectionTitle}>Photo de profil</Text>
                 <View style={styles.avatarRow}>
-                    <TouchableOpacity
-                        style={styles.avatarPlaceholder}
-                        onPress={() => pickImage("avatar")}
-                    >
+                    <TouchableOpacity style={styles.avatarPlaceholder} onPress={() => pickImage("avatar")}>
                         {avatarUri ? (
                             <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
                         ) : (
-                            <Text style={styles.avatarPlaceholderText}>
-                                Choisir une photo
-                            </Text>
+                            <Text style={styles.avatarPlaceholderText}>Choisir une photo</Text>
                         )}
                     </TouchableOpacity>
-                    <Text style={styles.avatarHint}>
-                        Conseil : choisis une image claire & reconnaissable.
-                    </Text>
+
+                    <Text style={styles.avatarHint}>Conseil : une image claire & reconnaissable fonctionne mieux.</Text>
                 </View>
 
                 {/* BIO */}
                 <Text style={styles.sectionTitle}>Bio</Text>
                 <TextInput
                     style={styles.bioInput}
-                    placeholder="Parle un peu de toi, de ta musique, de ton mood..."
+                    placeholder="Parle un peu de toi..."
                     placeholderTextColor="#666"
                     multiline
                     maxLength={280}
@@ -264,15 +311,13 @@ export default function EditProfileScreen({ navigation }: any) {
                 />
                 <Text style={styles.bioCount}>{bio.length}/280</Text>
 
-                {/* BOUTON */}
+                {/* BUTTON */}
                 <TouchableOpacity
                     style={[styles.button, loading && styles.buttonDisabled]}
                     disabled={loading}
                     onPress={handleSave}
                 >
-                    <Text style={styles.buttonText}>
-                        {loading ? "Enregistrement..." : "Enregistrer"}
-                    </Text>
+                    <Text style={styles.buttonText}>{loading ? "Enregistrement..." : "Enregistrer"}</Text>
                 </TouchableOpacity>
             </ScrollView>
         </KeyboardAvoidingView>
@@ -321,13 +366,8 @@ const styles = StyleSheet.create({
         alignItems: "center",
         overflow: "hidden",
     },
-    bannerImage: {
-        width: "100%",
-        height: "100%",
-    },
-    bannerPlaceholderText: {
-        color: "#777",
-    },
+    bannerImage: { width: "100%", height: "100%" },
+    bannerPlaceholderText: { color: "#777" },
     avatarRow: {
         flexDirection: "row",
         alignItems: "center",
@@ -345,20 +385,13 @@ const styles = StyleSheet.create({
         overflow: "hidden",
         marginRight: 16,
     },
-    avatarImage: {
-        width: "100%",
-        height: "100%",
-    },
+    avatarImage: { width: "100%", height: "100%" },
     avatarPlaceholderText: {
         color: "#777",
         fontSize: 11,
         textAlign: "center",
     },
-    avatarHint: {
-        flex: 1,
-        color: "#777",
-        fontSize: 12,
-    },
+    avatarHint: { flex: 1, color: "#777", fontSize: 12 },
     bioInput: {
         marginTop: 4,
         minHeight: 90,
@@ -384,12 +417,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginTop: 28,
     },
-    buttonDisabled: {
-        opacity: 0.6,
-    },
-    buttonText: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "700",
-    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });

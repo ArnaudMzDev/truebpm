@@ -12,12 +12,10 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
-
 import Constants from "expo-constants";
 
 const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
 const API_URL = `http://${localIP}:3000`;
-// ---------------- ERROR MESSAGE ----------------
 
 function ErrorMessage({ message }: { message: string }) {
     const opacity = useRef(new Animated.Value(0)).current;
@@ -31,7 +29,7 @@ function ErrorMessage({ message }: { message: string }) {
                 useNativeDriver: true,
             }).start();
         }
-    }, [message]);
+    }, [message, opacity]);
 
     if (!message) return null;
 
@@ -42,10 +40,25 @@ function ErrorMessage({ message }: { message: string }) {
     );
 }
 
-// ---------------- VALIDATION ----------------
-
 function validateEmail(email: string) {
     return /\S+@\S+\.\S+/.test(email);
+}
+
+/**
+ * Parse JSON en mode safe :
+ * - si le serveur renvoie HTML (404/405) => évite "Unexpected character: <"
+ */
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text();
+    if (!text) return null;
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        // utile pour debug (retour HTML, etc.)
+        console.log("Non-JSON response:", text.slice(0, 200));
+        return null;
+    }
 }
 
 export default function LoginScreen({ navigation }: any) {
@@ -57,8 +70,6 @@ export default function LoginScreen({ navigation }: any) {
 
     const formFilled = email.trim() !== "" && password.trim() !== "";
 
-    // ---------------- LOGIN ----------------
-
     const handleLogin = async () => {
         setError("");
 
@@ -68,33 +79,61 @@ export default function LoginScreen({ navigation }: any) {
         setLoading(true);
 
         try {
-            const res = await fetch(`${API_URL}/api/auth/login`, {
+            // 1) Login -> token
+            const loginRes = await fetch(`${API_URL}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email: email.trim(), password }),
             });
 
-            const data = await res.json();
+            const loginData = await safeJson(loginRes);
 
-            if (!res.ok) {
+            if (!loginRes.ok) {
                 setLoading(false);
-                return setError(data.error || "Identifiants incorrects.");
+                return setError(loginData?.error || "Identifiants incorrects.");
             }
 
-            await AsyncStorage.setItem("token", data.token);
-            await AsyncStorage.setItem("user", JSON.stringify(data.user));
+            const token: string | undefined = loginData?.token;
+            if (!token) {
+                setLoading(false);
+                return setError("Réponse serveur invalide.");
+            }
+
+            await AsyncStorage.setItem("token", token);
+
+            // 2) Source de vérité -> /user/me
+            const meRes = await fetch(`${API_URL}/api/user/me`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            const meData = await safeJson(meRes);
+
+            if (!meRes.ok) {
+                // Token pas accepté / backend pas prêt => on purge et on affiche
+                await AsyncStorage.multiRemove(["token", "user"]);
+                setLoading(false);
+                return setError(meData?.error || "Impossible de récupérer le profil.");
+            }
+
+            if (!meData?.user?._id) {
+                await AsyncStorage.multiRemove(["token", "user"]);
+                setLoading(false);
+                return setError("Profil invalide.");
+            }
+
+            await AsyncStorage.setItem("user", JSON.stringify(meData.user));
 
             setLoading(false);
             navigation.replace("Main");
-
         } catch (err) {
-            console.error("LOGIN ERROR :", err);
+            console.error("LOGIN ERROR:", err);
             setLoading(false);
             setError("Impossible de se connecter au serveur.");
         }
     };
-
-    // ---------------- UI ----------------
 
     return (
         <KeyboardAvoidingView
@@ -114,13 +153,9 @@ export default function LoginScreen({ navigation }: any) {
                 </View>
             ) : (
                 <View style={styles.form}>
-                    {/* EMAIL */}
                     <Text style={styles.label}>Email</Text>
                     <TextInput
-                        style={[
-                            styles.input,
-                            focused === "email" && styles.inputFocused,
-                        ]}
+                        style={[styles.input, focused === "email" && styles.inputFocused]}
                         placeholder="exemple@mail.com"
                         placeholderTextColor="#777"
                         keyboardType="email-address"
@@ -129,28 +164,27 @@ export default function LoginScreen({ navigation }: any) {
                         onBlur={() => setFocused(null)}
                         onChangeText={setEmail}
                         value={email}
+                        returnKeyType="next"
                     />
 
-                    {/* PASSWORD */}
                     <Text style={styles.label}>Mot de passe</Text>
                     <TextInput
-                        style={[
-                            styles.input,
-                            focused === "password" && styles.inputFocused,
-                        ]}
-                        placeholder="••••••••"
+                        style={[styles.input, focused === "password" && styles.inputFocused]}
+                        placeholder="Mot de passe"
                         placeholderTextColor="#777"
                         secureTextEntry
                         onFocus={() => setFocused("password")}
                         onBlur={() => setFocused(null)}
                         onChangeText={setPassword}
                         value={password}
+                        returnKeyType="done"
+                        onSubmitEditing={() => {
+                            if (formFilled) handleLogin();
+                        }}
                     />
 
-                    {/* ERROR */}
                     <ErrorMessage message={error} />
 
-                    {/* BUTTON */}
                     <TouchableOpacity
                         style={[styles.button, !formFilled && styles.buttonDisabled]}
                         disabled={!formFilled}
@@ -159,7 +193,6 @@ export default function LoginScreen({ navigation }: any) {
                         <Text style={styles.buttonText}>Se connecter</Text>
                     </TouchableOpacity>
 
-                    {/* LINK REGISTER */}
                     <TouchableOpacity onPress={() => navigation.navigate("Register")}>
                         <Text style={styles.registerText}>
                             Pas de compte ?{" "}
@@ -172,18 +205,33 @@ export default function LoginScreen({ navigation }: any) {
     );
 }
 
-// ---------------- STYLES ----------------
-
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#000", paddingHorizontal: 24, justifyContent: "center" },
+    container: {
+        flex: 1,
+        backgroundColor: "#000",
+        paddingHorizontal: 24,
+        justifyContent: "center",
+    },
     header: { alignItems: "center", marginBottom: 40 },
     subtitle: { marginTop: 10, fontSize: 16, color: "#aaa" },
     form: { width: "100%" },
-    label: { color: "#fff", marginBottom: 8, marginTop: 12, fontSize: 14, fontWeight: "600" },
+    label: {
+        color: "#fff",
+        marginBottom: 8,
+        marginTop: 12,
+        fontSize: 14,
+        fontWeight: "600",
+    },
     input: {
-        width: "100%", height: 52, borderRadius: 14,
-        paddingHorizontal: 16, fontSize: 16, color: "#fff",
-        backgroundColor: "#141414", borderWidth: 1, borderColor: "#333",
+        width: "100%",
+        height: 52,
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        color: "#fff",
+        backgroundColor: "#141414",
+        borderWidth: 1,
+        borderColor: "#333",
     },
     inputFocused: {
         borderColor: "#9B5CFF",
@@ -193,7 +241,13 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 0 },
     },
     errorText: { color: "#ff4d4d", fontSize: 14, fontWeight: "500" },
-    button: { backgroundColor: "#5E17EB", paddingVertical: 14, borderRadius: 12, alignItems: "center", marginTop: 28 },
+    button: {
+        backgroundColor: "#5E17EB",
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: "center",
+        marginTop: 28,
+    },
     buttonDisabled: { backgroundColor: "#2f116e", opacity: 0.5 },
     buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
     registerText: { color: "#aaa", textAlign: "center", marginTop: 18 },

@@ -1,50 +1,41 @@
+import "@/lib/loadModels";
 import { NextResponse } from "next/server";
-import User from "@/models/User";
 import { connectDB } from "@/lib/db";
+import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 
-// GET /api/auth/me
 export async function GET(req: Request) {
     try {
         await connectDB();
 
-        // Récupération du token dans l'en-tête Authorization
-        const authHeader = req.headers.get("authorization");
-        if (!authHeader)
+        const userId = await verifyToken(req);
+        if (!userId) {
             return NextResponse.json(
-                { error: "Token manquant." },
-                { status: 401 }
+                { error: "Non authentifié." },
+                { status: 401, headers: { "Cache-Control": "no-store" } }
             );
+        }
 
-        const token = authHeader.replace("Bearer ", "").trim();
-        if (!token)
+        const user = await User.findById(userId)
+            .select("_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt")
+            .lean();
+
+        if (!user) {
             return NextResponse.json(
-                { error: "Token invalide." },
-                { status: 401 }
+                { error: "Utilisateur introuvable." },
+                { status: 404, headers: { "Cache-Control": "no-store" } }
             );
+        }
 
-        // Vérification du token via notre helper sécurisé
-        const decoded = verifyToken(token);
-        if (!decoded || !decoded.id)
-            return NextResponse.json(
-                { error: "Token invalide ou expiré." },
-                { status: 401 }
-            );
-
-        // Cherche l'utilisateur associé au token
-        const user = await User.findById(decoded.id).select("-password");
-        if (!user)
-            return NextResponse.json(
-                { error: "Utilisateur non trouvé." },
-                { status: 404 }
-            );
-
-        return NextResponse.json({ user }, { status: 200 });
+        return NextResponse.json(
+            { user },
+            { status: 200, headers: { "Cache-Control": "no-store" } }
+        );
     } catch (err) {
-        console.error("❌ /api/auth/me error:", err);
+        console.error("❌ GET /api/user/me error:", err);
         return NextResponse.json(
             { error: "Erreur interne du serveur." },
-            { status: 500 }
+            { status: 500, headers: { "Cache-Control": "no-store" } }
         );
     }
 }

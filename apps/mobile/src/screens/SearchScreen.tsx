@@ -9,100 +9,212 @@ import {
     StyleSheet,
     ActivityIndicator,
 } from "react-native";
-import { usePlayer } from "../context/PlayerContext";
 import Constants from "expo-constants";
+import { Ionicons } from "@expo/vector-icons";
 
 const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
 const API_URL = `http://${localIP}:3000`;
 
+/* ----------------------------- TYPES ---------------------------- */
+
 type SearchType = "song" | "album" | "artist";
 
-export default function SearchScreen() {
+type SongItem = {
+    id: string;
+    type: "song";
+    title: string;
+    artist: string;
+    cover: string | null;
+    previewUrl: string | null;
+};
+
+type AlbumItem = {
+    id: string;
+    type: "album";
+    title: string;
+    artist: string;
+    cover: string | null;
+};
+
+type ArtistItem = {
+    id: string;
+    type: "artist";
+    name: string;
+    cover: string | null;
+};
+
+type AnyItem = SongItem | AlbumItem | ArtistItem;
+
+type CreatePostNavPayload = {
+    entityType: "song" | "album" | "artist";
+    entityId: string | null;
+    track: {
+        title: string;
+        artist: string;
+        cover: string | null;
+        previewUrl?: string | null;
+    };
+};
+
+/* ---------------------------------------------------------------- */
+
+export default function SearchScreen({ navigation }: any) {
     const [query, setQuery] = useState("");
     const [type, setType] = useState<SearchType>("song");
-    const [results, setResults] = useState<any[]>([]);
+    const [results, setResults] = useState<AnyItem[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const { playPreview } = usePlayer();
+    const search = async (forcedType?: SearchType) => {
+        const effective = forcedType ?? type;
 
-    const search = async () => {
         if (!query.trim()) return;
-        setLoading(true);
 
         try {
-            const res = await fetch(
-                `${API_URL}/api/search/apple?q=${encodeURIComponent(
-                    query
-                )}&type=${type}`
-            );
+            setLoading(true);
 
-            const data = await res.json();
+            const url = `${API_URL}/api/search/apple?q=${encodeURIComponent(
+                query.trim()
+            )}&type=${effective}`;
 
-            if (!res.ok) {
-                console.log("Search error:", data);
+            const res = await fetch(url);
+            const json = await res.json();
+
+            if (!res.ok || !json.items) {
+                console.log("Search error:", json);
                 setResults([]);
-                setLoading(false);
-                return;
+            } else {
+                setResults(json.items);
             }
-
-            setResults(data.items || []);
-        } catch (e) {
-            console.log("Search fetch error:", e);
+        } catch (err) {
+            console.log("Search fetch error:", err);
             setResults([]);
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
 
-    const renderItem = ({ item }: any) => {
-        if (type === "song") {
+    const goToCreatePost = (payload: CreatePostNavPayload) => {
+        navigation.navigate("CreatePost", payload);
+    };
+
+    const renderItem = ({ item }: { item: AnyItem }) => {
+        if (item.type === "song") {
             return (
                 <TouchableOpacity
                     style={styles.item}
                     onPress={() => {
-                        if (item.previewUrl) {
-                            playPreview({
+                        goToCreatePost({
+                            entityType: "song",
+                            entityId: item.id,
+                            track: {
                                 title: item.title,
                                 artist: item.artist,
                                 cover: item.cover,
-                                url: item.previewUrl,
-                            });
-                        }
+                                previewUrl: item.previewUrl,
+                            },
+                        });
                     }}
                 >
-                    <Image source={{ uri: item.cover }} style={styles.cover} />
+                    {item.cover ? (
+                        <Image source={{ uri: item.cover }} style={styles.cover} />
+                    ) : (
+                        <View style={styles.placeholder}>
+                            <Ionicons name="musical-notes" size={18} color="#bbb" />
+                        </View>
+                    )}
 
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-                        <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
+                        <Text numberOfLines={1} style={styles.title}>
+                            {item.title}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.artist}>
+                            {item.artist}
+                        </Text>
                     </View>
 
-                    {item.previewUrl && <Text style={styles.play}>▶</Text>}
+                    {item.previewUrl ? (
+                        <Ionicons name="play" size={18} color="#bbb" />
+                    ) : null}
                 </TouchableOpacity>
             );
         }
 
-        if (type === "album") {
+        if (item.type === "album") {
             return (
-                <View style={styles.item}>
-                    <Image source={{ uri: item.cover }} style={styles.cover} />
+                <TouchableOpacity
+                    style={styles.item}
+                    onPress={() => {
+                        goToCreatePost({
+                            entityType: "album",
+                            entityId: item.id,
+                            track: {
+                                title: item.title,
+                                artist: item.artist,
+                                cover: item.cover,
+                                previewUrl: null,
+                            },
+                        });
+                    }}
+                >
+                    {item.cover ? (
+                        <Image source={{ uri: item.cover }} style={styles.cover} />
+                    ) : (
+                        <View style={styles.placeholder}>
+                            <Ionicons name="disc" size={18} color="#bbb" />
+                        </View>
+                    )}
 
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-                        <Text style={styles.artist} numberOfLines={1}>{item.artist}</Text>
+                        <Text numberOfLines={1} style={styles.title}>
+                            {item.title}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.artist}>
+                            {item.artist}
+                        </Text>
                     </View>
-                </View>
+
+                    <Ionicons name="chevron-forward" size={18} color="#666" />
+                </TouchableOpacity>
             );
         }
 
+        // artist
         return (
-            <View style={styles.item}>
-                <Image source={{ uri: item.cover }} style={styles.cover} />
+            <TouchableOpacity
+                style={styles.item}
+                onPress={() => {
+                    // Pour un artiste : on met le nom dans title & artist (compat avec schema actuel)
+                    goToCreatePost({
+                        entityType: "artist",
+                        entityId: item.id,
+                        track: {
+                            title: item.name,
+                            artist: item.name,
+                            cover: item.cover,
+                            previewUrl: null,
+                        },
+                    });
+                }}
+            >
+                {item.cover ? (
+                    <Image source={{ uri: item.cover }} style={styles.cover} />
+                ) : (
+                    <View style={styles.placeholder}>
+                        <Ionicons name="person" size={18} color="#bbb" />
+                    </View>
+                )}
 
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.title} numberOfLines={1}>{item.name}</Text>
+                    <Text numberOfLines={1} style={styles.title}>
+                        {item.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.artist}>
+                        Artiste
+                    </Text>
                 </View>
-            </View>
+
+                <Ionicons name="chevron-forward" size={18} color="#666" />
+            </TouchableOpacity>
         );
     };
 
@@ -114,40 +226,42 @@ export default function SearchScreen() {
                 placeholderTextColor="#777"
                 value={query}
                 onChangeText={setQuery}
-                onSubmitEditing={search}
+                onSubmitEditing={() => search()}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
             />
 
             <View style={styles.filters}>
-                <TouchableOpacity
-                    style={[styles.filter, type === "song" && styles.filterActive]}
-                    onPress={() => setType("song")}
-                >
-                    <Text style={styles.filterText}>Sons</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.filter, type === "album" && styles.filterActive]}
-                    onPress={() => setType("album")}
-                >
-                    <Text style={styles.filterText}>Albums</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.filter, type === "artist" && styles.filterActive]}
-                    onPress={() => setType("artist")}
-                >
-                    <Text style={styles.filterText}>Artistes</Text>
-                </TouchableOpacity>
+                {(["song", "album", "artist"] as SearchType[]).map((t) => (
+                    <TouchableOpacity
+                        key={t}
+                        style={[styles.filter, type === t && styles.filterActive]}
+                        onPress={() => {
+                            setType(t);
+                            if (query.trim()) search(t);
+                        }}
+                    >
+                        <Text style={styles.filterText}>
+                            {t === "song" ? "Sons" : t === "album" ? "Albums" : "Artistes"}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" color="#9B5CFF" />
+                <ActivityIndicator
+                    size="large"
+                    color="#9B5CFF"
+                    style={{ marginTop: 30 }}
+                />
             ) : (
                 <FlatList
                     data={results}
                     keyExtractor={(item) => item.id}
                     renderItem={renderItem}
                     contentContainerStyle={{ paddingBottom: 200 }}
+                    keyboardShouldPersistTaps="handled"
                 />
             )}
         </View>
@@ -155,12 +269,18 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#000", padding: 16, paddingTop: 50 },
+    container: {
+        flex: 1,
+        backgroundColor: "#000",
+        padding: 16,
+        paddingTop: 50,
+    },
     input: {
         backgroundColor: "#111",
         padding: 14,
         borderRadius: 12,
         color: "#fff",
+        fontSize: 16,
         borderWidth: 1,
         borderColor: "#222",
     },
@@ -178,8 +298,13 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         alignItems: "center",
     },
-    filterActive: { backgroundColor: "#5E17EB" },
-    filterText: { color: "#fff", fontWeight: "600" },
+    filterActive: {
+        backgroundColor: "#5E17EB",
+    },
+    filterText: {
+        color: "#fff",
+        fontWeight: "600",
+    },
     item: {
         flexDirection: "row",
         padding: 12,
@@ -187,9 +312,32 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginTop: 10,
         alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#1f1f1f",
     },
-    cover: { width: 60, height: 60, borderRadius: 8 },
-    title: { color: "#fff", fontSize: 15, fontWeight: "700" },
-    artist: { color: "#aaa", marginTop: 3 },
-    play: { color: "#fff", fontSize: 20, marginLeft: 10 },
+    cover: {
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+    },
+    placeholder: {
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+        backgroundColor: "#1b1b1b",
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "#2a2a2a",
+    },
+    title: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "700",
+    },
+    artist: {
+        color: "#aaa",
+        marginTop: 3,
+        fontSize: 13,
+    },
 });

@@ -1,89 +1,115 @@
-import React, { createContext, useState, useContext, useRef } from "react";
+import React, { createContext, useContext, useRef, useState } from "react";
 import { Audio, AVPlaybackStatusSuccess } from "expo-av";
 
-type Track = {
+export type Track = {
     title: string;
     artist: string;
-    cover: string;
     url: string;
+
+    // Normalisé
+    coverUrl?: string;
+
+    // Tolérance legacy (pour ne rien casser)
+    cover?: string;
+    artwork?: string;
 };
 
 type PlayerContextType = {
     currentTrack: Track | null;
     isPlaying: boolean;
+    positionMs: number;
+    durationMs: number;
+
     playPreview: (track: Track) => Promise<void>;
-    pause: () => Promise<void>;
-    resume: () => Promise<void>;
-    stop: () => Promise<void>;
     togglePlay: () => Promise<void>;
+    seekTo: (ms: number) => Promise<void>;
+    close: () => Promise<void>;
 };
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
 
-export const PlayerProvider = ({ children }: any) => {
+export function PlayerProvider({ children }: { children: React.ReactNode }) {
+    const soundRef = useRef<Audio.Sound | null>(null);
+
     const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [positionMs, setPositionMs] = useState(0);
+    const [durationMs, setDurationMs] = useState(1);
 
-    const soundRef = useRef<Audio.Sound | null>(null);
+    const unload = async () => {
+        if (soundRef.current) {
+            await soundRef.current.stopAsync();
+            await soundRef.current.unloadAsync();
+            soundRef.current = null;
+        }
+    };
+
+    const normalizeTrack = (track: Track): Track => {
+        const coverUrl =
+            track.coverUrl ||
+            track.cover ||
+            track.artwork ||
+            "";
+
+        return {
+            ...track,
+            coverUrl,
+        };
+    };
 
     const playPreview = async (track: Track) => {
         try {
-            // Stop old sound
-            if (soundRef.current) {
-                await soundRef.current.unloadAsync();
-            }
+            await unload();
+
+            const normalized = normalizeTrack(track);
 
             const { sound } = await Audio.Sound.createAsync(
-                { uri: track.url },
+                { uri: normalized.url },
                 { shouldPlay: true }
             );
 
             soundRef.current = sound;
-
-            setCurrentTrack(track);
+            setCurrentTrack(normalized);
             setIsPlaying(true);
 
             sound.setOnPlaybackStatusUpdate((status) => {
                 const s = status as AVPlaybackStatusSuccess;
+                if (!s.isLoaded) return;
+
+                setPositionMs(s.positionMillis ?? 0);
+                setDurationMs(s.durationMillis ?? 1);
+                setIsPlaying(s.isPlaying);
+
                 if (s.didJustFinish) {
-                    setIsPlaying(false);
+                    close();
                 }
             });
-        } catch (err) {
-            console.log("Audio play error:", err);
+        } catch (e) {
+            console.log("Audio error:", e);
         }
     };
 
-    const pause = async () => {
-        if (soundRef.current) {
-            await soundRef.current.pauseAsync();
-            setIsPlaying(false);
-        }
-    };
-
-    const resume = async () => {
-        if (soundRef.current) {
-            await soundRef.current.playAsync();
-            setIsPlaying(true);
-        }
-    };
-
-    const stop = async () => {
-        if (soundRef.current) {
-            await soundRef.current.stopAsync();
-            setIsPlaying(false);
-        }
-    };
-
-    // 🔥 ICI : togglePlay manquait !
     const togglePlay = async () => {
         if (!soundRef.current) return;
 
         if (isPlaying) {
-            await pause();
+            await soundRef.current.pauseAsync();
         } else {
-            await resume();
+            await soundRef.current.playAsync();
         }
+    };
+
+    const seekTo = async (ms: number) => {
+        if (!soundRef.current) return;
+        await soundRef.current.setPositionAsync(ms);
+    };
+
+    const close = async () => {
+        await unload();
+        setCurrentTrack(null);
+        setIsPlaying(false);
+        setPositionMs(0);
+        setDurationMs(1);
     };
 
     return (
@@ -91,16 +117,21 @@ export const PlayerProvider = ({ children }: any) => {
             value={{
                 currentTrack,
                 isPlaying,
+                positionMs,
+                durationMs,
                 playPreview,
-                pause,
-                resume,
-                stop,
-                togglePlay, // 🔥 ajouté ici
+                togglePlay,
+                seekTo,
+                close,
             }}
         >
             {children}
         </PlayerContext.Provider>
     );
-};
+}
 
-export const usePlayer = () => useContext(PlayerContext)!;
+export const usePlayer = () => {
+    const ctx = useContext(PlayerContext);
+    if (!ctx) throw new Error("usePlayer must be used inside PlayerProvider");
+    return ctx;
+};

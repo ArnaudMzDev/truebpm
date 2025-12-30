@@ -6,15 +6,29 @@
   <component name="ChangeListManager">
     <list default="true" id="b7041585-3975-4118-bd64-fec653cf918c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/register/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/auth/register/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/[id]/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/login/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/auth/login/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/logout/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/auth/logout/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/middleware.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/middleware.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/create/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/create/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/feed/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/list/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/search/apple/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/search/apple/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/me/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/me/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/profile/route.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/lib/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/lib/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/models/Post.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/Post.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/models/User.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/User.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/lib/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/lib/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PlayerBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PlayerBar.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/context/PlayerContext.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/context/PlayerContext.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/CreatePostScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/CreatePostScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/EditProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/EditProfileScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/RegisterScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/RegisterScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/SearchScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/SearchScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/SplashScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/SplashScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
     </list>
@@ -40,24 +54,25 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
-    "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "/Users/arnaudmz/Documents/TrueBPM/truebpm",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "pnpm",
-    "prettierjs.PrettierConfiguration.Package": "/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/prettier",
-    "ts.external.directory.path": "/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/typescript/lib",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/arnaudmz/Documents/TrueBPM/truebpm&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;pnpm&quot;,
+    &quot;prettierjs.PrettierConfiguration.Package&quot;: &quot;/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/prettier&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;/Users/arnaudmz/Documents/TrueBPM/truebpm/node_modules/typescript/lib&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/apps/mobile/src" />
@@ -84,19 +99,33 @@
       <workItem from="1762857582598" duration="599000" />
       <workItem from="1762858397938" duration="1336000" />
       <workItem from="1764668817839" duration="42000" />
-      <workItem from="1764960154856" duration="4473000" />
+      <workItem from="1764960154856" duration="9782000" />
+      <workItem from="1765059138021" duration="10622000" />
+      <workItem from="1765298003384" duration="3537000" />
+      <workItem from="1765890547396" duration="822000" />
+      <workItem from="1765891390955" duration="11435000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx</url>
-          <properties lambdaOrdinal="-1" />
           <option name="timeStamp" value="1" />
         </line-breakpoint>
       </breakpoints>

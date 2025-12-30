@@ -1,4 +1,3 @@
-// apps/mobile/src/screens/SplashScreen.tsx
 import React, { useEffect, useRef } from "react";
 import { View, Animated, StyleSheet, Easing } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -7,8 +6,23 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
+import Constants from "expo-constants";
 
 type SplashNav = NativeStackNavigationProp<RootStackParamList, "Splash">;
+
+const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
+const API_URL = `http://${localIP}:3000`;
+
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text().catch(() => "");
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        console.log("Splash non-JSON response:", text.slice(0, 200));
+        return null;
+    }
+}
 
 export default function SplashScreen() {
     const navigation = useNavigation<SplashNav>();
@@ -17,7 +31,6 @@ export default function SplashScreen() {
     const translateY = useRef(new Animated.Value(20)).current;
 
     useEffect(() => {
-        // Animation logo
         Animated.parallel([
             Animated.timing(opacity, {
                 toValue: 1,
@@ -33,26 +46,55 @@ export default function SplashScreen() {
             }),
         ]).start();
 
-        // Auto-login
-        const checkToken = async () => {
+        const bootstrap = async () => {
+            const minDelay = new Promise((r) => setTimeout(r, 900));
+
             try {
                 const token = await AsyncStorage.getItem("token");
 
-                setTimeout(() => {
-                    if (token) {
-                        navigation.replace("Main"); // ou "Home" selon ton Stack
-                    } else {
-                        navigation.replace("Login");
-                    }
-                }, 1800);
+                if (!token) {
+                    await minDelay;
+                    navigation.replace("Login");
+                    return;
+                }
+
+                const res = await fetch(`${API_URL}/api/user/me`, {
+                    method: "GET",
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+
+                // Token invalide
+                if (res.status === 401 || res.status === 403) {
+                    await AsyncStorage.multiRemove(["token", "user"]);
+                    await minDelay;
+                    navigation.replace("Login");
+                    return;
+                }
+
+                const json = await safeJson(res);
+
+                // Backend KO / mauvaise réponse
+                if (!res.ok || !json?.user?._id) {
+                    await AsyncStorage.multiRemove(["token", "user"]);
+                    await minDelay;
+                    navigation.replace("Login");
+                    return;
+                }
+
+                await AsyncStorage.setItem("user", JSON.stringify(json.user));
+
+                await minDelay;
+                navigation.replace("Main");
             } catch (e) {
-                console.log("Splash token check error:", e);
+                console.log("Splash bootstrap error:", e);
+                await AsyncStorage.multiRemove(["token", "user"]);
+                await minDelay;
                 navigation.replace("Login");
             }
         };
 
-        checkToken();
-    }, [navigation]);
+        bootstrap();
+    }, [navigation, opacity, translateY]);
 
     return (
         <View style={styles.container}>

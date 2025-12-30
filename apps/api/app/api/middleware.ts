@@ -1,34 +1,46 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import jwt from "jsonwebtoken";
+import "@/lib/loadModels";
+import { NextRequest, NextResponse } from "next/server";
+import { verifyToken } from "@/lib/auth";
 
-export function middleware(req: NextRequest) {
-    const protectedRoutes = ["/api/user/me"]; // tu pourras en ajouter
+export async function middleware(req: NextRequest) {
+    const { pathname } = req.nextUrl;
 
-    if (protectedRoutes.includes(req.nextUrl.pathname)) {
-        const token = req.headers.get("authorization")?.replace("Bearer ", "");
-
-        if (!token) {
-            return NextResponse.json(
-                { error: "Token manquant." },
-                { status: 401 }
-            );
-        }
-
-        try {
-            jwt.verify(token, process.env.JWT_SECRET!);
-            return NextResponse.next();
-        } catch (err) {
-            return NextResponse.json(
-                { error: "Token invalide ou expiré." },
-                { status: 401 }
-            );
-        }
+    // On ne protège que l'API
+    if (!pathname.startsWith("/api")) {
+        return NextResponse.next();
     }
 
-    return NextResponse.next();
+    // Routes publiques (pas d'auth)
+    const publicRoutes = [
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/health",
+        "/api/apple/token",
+        "/api/apple/search",
+        "/api/search/apple",
+        "/api/music/token",
+        "/api/music/search",
+    ];
+
+    if (publicRoutes.some((p) => pathname.startsWith(p))) {
+        return NextResponse.next();
+    }
+
+    // Vérif token + injection x-user-id
+    const userId = await verifyToken(req);
+
+    if (!userId) {
+        return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+    }
+
+    const headers = new Headers(req.headers);
+    headers.set("x-user-id", userId);
+
+    return NextResponse.next({
+        request: { headers },
+    });
 }
 
 export const config = {
-    matcher: ["/api/user/:path*"],
+    matcher: ["/api/:path*"],
 };

@@ -1,87 +1,94 @@
+import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 
-async function upsertProfile(req: Request) {
+export async function PATCH(req: Request) {
     try {
+        await connectDB();
+
         const userId = await verifyToken(req);
         if (!userId) {
             return NextResponse.json(
                 { error: "Non authentifié." },
-                { status: 401 }
+                { status: 401, headers: { "Cache-Control": "no-store" } }
             );
         }
 
-        await connectDB();
+        const body = await req.json().catch(() => null);
+        if (!body || typeof body !== "object") {
+            return NextResponse.json(
+                { error: "Requête invalide." },
+                { status: 400, headers: { "Cache-Control": "no-store" } }
+            );
+        }
 
-        const { bio, avatarUrl, bannerUrl } = await req.json();
+        const { pseudo, bio, avatarUrl, bannerUrl } = body as {
+            pseudo?: unknown;
+            bio?: unknown;
+            avatarUrl?: unknown; // string | null
+            bannerUrl?: unknown; // string | null
+        };
 
         const update: Record<string, any> = {};
 
-        if (typeof bio === "string") update.bio = bio;
-        if (typeof avatarUrl === "string") update.avatarUrl = avatarUrl;
-        if (typeof bannerUrl === "string") update.bannerUrl = bannerUrl;
+        // pseudo: string non vide
+        if (typeof pseudo === "string") {
+            const p = pseudo.trim();
+            if (p.length > 0) update.pseudo = p;
+        }
 
-        const user = await User.findByIdAndUpdate(
-            userId,
-            { $set: update },
-            { new: true }
-        ).select("-password");
+        // bio: string (peut être vide si tu veux autoriser une bio vide)
+        if (typeof bio === "string") {
+            update.bio = bio.trim();
+        }
+
+        // avatarUrl:
+        // - null => effacer
+        // - "" => ignorer (anti-reset)
+        // - "https://..." => set
+        if (avatarUrl === null) {
+            update.avatarUrl = "";
+        } else if (typeof avatarUrl === "string") {
+            const a = avatarUrl.trim();
+            if (a.length > 0) update.avatarUrl = a;
+        }
+
+        // bannerUrl: même logique
+        if (bannerUrl === null) {
+            update.bannerUrl = "";
+        } else if (typeof bannerUrl === "string") {
+            const b = bannerUrl.trim();
+            if (b.length > 0) update.bannerUrl = b;
+        }
+
+        // Si aucun champ valide -> on renvoie l'user actuel (évite un update vide)
+        const user = (Object.keys(update).length > 0
+                ? await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
+                : await User.findById(userId)
+        )
+            ?.select(
+                "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt"
+            )
+            .lean();
 
         if (!user) {
             return NextResponse.json(
                 { error: "Utilisateur introuvable." },
-                { status: 404 }
+                { status: 404, headers: { "Cache-Control": "no-store" } }
             );
         }
 
-        return NextResponse.json({ user }, { status: 200 });
-    } catch (err) {
-        console.error("❌ Profile upsert error:", err);
         return NextResponse.json(
-            { error: "Erreur serveur." },
-            { status: 500 }
+            { success: true, user },
+            { status: 200, headers: { "Cache-Control": "no-store" } }
+        );
+    } catch (err) {
+        console.error("❌ PATCH /api/user/profile error:", err);
+        return NextResponse.json(
+            { error: "Erreur interne serveur." },
+            { status: 500, headers: { "Cache-Control": "no-store" } }
         );
     }
-}
-
-export async function GET(req: Request) {
-    try {
-        const userId = await verifyToken(req);
-        if (!userId) {
-            return NextResponse.json(
-                { error: "Non authentifié." },
-                { status: 401 }
-            );
-        }
-
-        await connectDB();
-
-        const user = await User.findById(userId).select("-password");
-
-        if (!user) {
-            return NextResponse.json(
-                { error: "Utilisateur introuvable." },
-                { status: 404 }
-            );
-        }
-
-        return NextResponse.json({ user }, { status: 200 });
-    } catch (err) {
-        console.error("❌ Profile GET error:", err);
-        return NextResponse.json(
-            { error: "Erreur serveur." },
-            { status: 500 }
-        );
-    }
-}
-
-// Pour compat avec ProfileSetup (POST) et Edit (PATCH)
-export async function POST(req: Request) {
-    return upsertProfile(req);
-}
-
-export async function PATCH(req: Request) {
-    return upsertProfile(req);
 }

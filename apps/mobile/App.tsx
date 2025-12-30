@@ -1,4 +1,5 @@
 import React from "react";
+import { View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -9,17 +10,29 @@ import SplashScreen from "./src/screens/SplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import ProfileSetupScreen from "./src/screens/ProfileSetupScreen";
+
 import HomeScreen from "./src/screens/HomeScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import EditProfileScreen from "./src/screens/EditProfileScreen";
+
 import CreatePostScreen from "./src/screens/CreatePostScreen";
-import SearchScreen from "./src/screens/SearchScreen";
+import SearchScreen from "./src/screens/SearchScreen"; // MUSIQUE
+import ExploreSearchScreen from "./src/screens/ExploreSearchScreen"; // GLOBAL
+
+import UserProfileScreen from "./src/screens/UserProfileScreen";
+import FollowersListScreen from "./src/screens/FollowersListScreen";
+import FollowingListScreen from "./src/screens/FollowingListScreen";
 
 import PlayerBar from "./src/components/PlayerBar";
 import { PlayerProvider } from "./src/context/PlayerContext";
+import {UserProvider} from "./src/context/UserContext";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+
+function EmptyScreen() {
+    return <View style={{ flex: 1, backgroundColor: "#000" }} />;
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                 MAIN TABS                                  */
@@ -39,27 +52,53 @@ function MainTabs() {
                 },
                 tabBarActiveTintColor: "#9B5CFF",
                 tabBarInactiveTintColor: "#777",
+                tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
 
-                tabBarIcon: ({ color, size }) => {
-                    let icon = "home";
+                tabBarIcon: ({ color }) => {
+                    let icon: any = "home";
 
                     if (route.name === "Home") icon = "home";
-                    if (route.name === "Search") icon = "search";
-                    if (route.name === "CreatePost") icon = "add-circle";
+                    if (route.name === "ExploreSearch") icon = "search";
+                    if (route.name === "CreatePostTab") icon = "add-circle";
                     if (route.name === "Notifications") icon = "notifications";
                     if (route.name === "ProfileTab") icon = "person";
 
-                    return <Ionicons name={icon as any} size={26} color={color} />;
+                    return <Ionicons name={icon} size={26} color={color} />;
                 },
             })}
         >
-            <Tabs.Screen name="Home" component={HomeScreen} />
-            <Tabs.Screen name="Search" component={SearchScreen} />
-            <Tabs.Screen name="CreatePost" component={CreatePostScreen} />
+            <Tabs.Screen
+                name="Home"
+                component={HomeScreen}
+                options={{ title: "Accueil" }}
+            />
+
+            {/* Recherche globale */}
+            <Tabs.Screen
+                name="ExploreSearch"
+                component={ExploreSearchScreen}
+                options={{ title: "Recherche" }}
+            />
+
+            {/* Créer : ouvre la recherche MUSIQUE en pickTrack */}
+            <Tabs.Screen
+                name="CreatePostTab"
+                component={EmptyScreen}
+                options={{ title: "Créer" }}
+                listeners={({ navigation }) => ({
+                    tabPress: (e) => {
+                        e.preventDefault();
+                        navigation.navigate("MusicSearch", { mode: "pickTrack" });
+                    },
+                })}
+            />
+
             <Tabs.Screen
                 name="Notifications"
-                component={() => null} // Placeholder pour plus tard
+                component={() => null}
+                options={{ title: "Notif" }}
             />
+
             <Tabs.Screen
                 name="ProfileTab"
                 component={ProfileScreen}
@@ -72,10 +111,12 @@ function MainTabs() {
 /* -------------------------------------------------------------------------- */
 /*                                ROOT NAVIGATION                             */
 /* -------------------------------------------------------------------------- */
+
 export default function App() {
     return (
         <SafeAreaProvider>
             <PlayerProvider>
+                <UserProvider>
                 <NavigationContainer>
                     <Stack.Navigator screenOptions={{ headerShown: false }}>
                         {/* Auth */}
@@ -84,15 +125,25 @@ export default function App() {
                         <Stack.Screen name="Register" component={RegisterScreen} />
                         <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
 
-                        {/* Main app */}
+                        {/* Lists */}
+                        <Stack.Screen name="FollowersList" component={FollowersListScreen} />
+                        <Stack.Screen name="FollowingList" component={FollowingListScreen} />
+
+                        {/* Main */}
                         <Stack.Screen name="Main" component={MainTabs} />
 
-                        {/* Screens accessibles depuis le profil */}
+                        {/* Recherche MUSIQUE (hors tab) */}
+                        <Stack.Screen name="MusicSearch" component={SearchScreen} />
+
+                        {/* Create post (ouvert après sélection d’un track depuis Search musique) */}
+                        <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+
+                        {/* Profil */}
                         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                        <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                     </Stack.Navigator>
                 </NavigationContainer>
-
-                {/* ALWAYS visible player bar */}
+                </UserProvider>
                 <PlayerBar />
             </PlayerProvider>
         </SafeAreaProvider>

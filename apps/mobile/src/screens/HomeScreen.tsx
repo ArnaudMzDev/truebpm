@@ -1,102 +1,149 @@
-import React, { useEffect, useState } from "react";
+// apps/mobile/src/screens/HomeScreen.tsx
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
     View,
     Text,
     StyleSheet,
-    Image,
+    ActivityIndicator,
     FlatList,
-    TouchableOpacity,
+    RefreshControl,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import PostCard from "../components/PostCard";
+import { PostType } from "../components/PostCard/types";
 
 const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
 const API_URL = `http://${localIP}:3000`;
 
-export default function HomeScreen({ navigation }: any) {
-    const insets = useSafeAreaInsets(); // 🔥 récupère haut/bas encoche
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text();
+    if (!text) return null;
 
-    const [posts, setPosts] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    try {
+        return JSON.parse(text);
+    } catch {
+        console.log("Non-JSON response:", text.slice(0, 200));
+        return null;
+    }
+}
 
-    const loadFeed = async () => {
+export default function HomeScreen() {
+    const [posts, setPosts] = useState<PostType[]>([]);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const [cursor, setCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(true);
+
+    const LIMIT = 15;
+
+    // évite les double fetch (React 18 strict mode / remount)
+    const didInit = useRef(false);
+
+    const fetchInitial = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/posts/feed`);
-            const data = await res.json();
+            setInitialLoading(true);
+            setCursor(null);
+            setHasMore(true);
 
-            if (res.ok) setPosts(data.posts);
-        } catch (e) {
-            console.log("Feed error:", e);
+            const res = await fetch(`${API_URL}/api/posts?limit=${LIMIT}`);
+            const json = await safeJson(res);
+
+            if (!res.ok) {
+                console.log("Home fetchInitial error:", res.status, json);
+                setPosts([]);
+                setCursor(null);
+                setHasMore(false);
+                return;
+            }
+
+            setPosts(json?.posts || []);
+            setCursor(json?.nextCursor || null);
+            setHasMore(!!json?.nextCursor);
+        } catch (err) {
+            console.log("Home fetchInitial error:", err);
+        } finally {
+            setInitialLoading(false);
         }
-        setLoading(false);
+    }, []);
+
+    const loadMore = useCallback(async () => {
+        if (!cursor || loadingMore || !hasMore) return;
+
+        try {
+            setLoadingMore(true);
+
+            const res = await fetch(
+                `${API_URL}/api/posts?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`
+            );
+            const json = await safeJson(res);
+
+            if (!res.ok) {
+                console.log("Home loadMore error:", res.status, json);
+                return;
+            }
+
+            const newPosts: PostType[] = json?.posts || [];
+            setPosts((prev) => [...prev, ...newPosts]);
+
+            setCursor(json?.nextCursor || null);
+            setHasMore(!!json?.nextCursor);
+        } catch (err) {
+            console.log("Home loadMore error:", err);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [cursor, loadingMore, hasMore]);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await fetchInitial();
+        setRefreshing(false);
     };
 
     useEffect(() => {
-        loadFeed();
-    }, []);
+        if (didInit.current) return;
+        didInit.current = true;
+        fetchInitial();
+    }, [fetchInitial]);
 
-    const renderPost = ({ item }: any) => (
-        <TouchableOpacity
-            style={styles.post}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate("PostDetails", { post: item })}
-        >
-            {item.coverUrl && (
-                <Image source={{ uri: item.coverUrl }} style={styles.cover} />
-            )}
-
-            <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.title} numberOfLines={1}>
-                    {item.trackTitle}
-                </Text>
-
-                <Text style={styles.artist} numberOfLines={1}>
-                    {item.artist}
-                </Text>
-
-                <View style={styles.row}>
-                    <Text style={styles.rating}>⭐ {item.rating}/5</Text>
-
-                    <TouchableOpacity
-                        onPress={() =>
-                            navigation.navigate("Profile", { userId: item.userId._id })
-                        }
-                    >
-                        <Text style={styles.user}>
-                            par {item.userId.pseudo}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
+    if (initialLoading && posts.length === 0) {
+        return (
+            <View style={styles.loader}>
+                <ActivityIndicator size="large" color="#9B5CFF" />
             </View>
-        </TouchableOpacity>
-    );
+        );
+    }
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
-            {/* HEADER */}
-            <View style={styles.headerRow}>
-                <Text style={styles.header}>Derniers posts 🎧</Text>
+        <View style={styles.container}>
+            <Text style={styles.title}>Accueil</Text>
 
-                <TouchableOpacity
-                    style={styles.newPostButton}
-                    onPress={() => navigation.navigate("Search")}
-                >
-                    <Text style={styles.newPostText}>+ Poster</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* FEED */}
-            {loading ? (
-                <Text style={{ color: "#aaa" }}>Chargement...</Text>
-            ) : (
-                <FlatList
-                    data={posts}
-                    keyExtractor={(item) => item._id}
-                    renderItem={renderPost}
-                    contentContainerStyle={{ paddingBottom: 120 }}
-                />
-            )}
+            <FlatList
+                data={posts}
+                keyExtractor={(item) => item._id}
+                renderItem={({ item }) => <PostCard post={item} />}
+                contentContainerStyle={{ paddingBottom: 40 }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#9B5CFF"
+                    />
+                }
+                onEndReached={loadMore}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={
+                    loadingMore ? (
+                        <ActivityIndicator
+                            size="small"
+                            color="#9B5CFF"
+                            style={{ marginVertical: 14 }}
+                        />
+                    ) : null
+                }
+            />
         </View>
     );
 }
@@ -105,74 +152,19 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#000",
+        paddingTop: 50,
         paddingHorizontal: 16,
     },
-
-    headerRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-    },
-
-    header: {
-        color: "#fff",
-        fontSize: 22,
-        fontWeight: "800",
-    },
-
-    newPostButton: {
-        backgroundColor: "#5E17EB",
-        paddingVertical: 8,
-        paddingHorizontal: 14,
-        borderRadius: 10,
-    },
-
-    newPostText: {
-        color: "#fff",
-        fontWeight: "700",
-    },
-
-    post: {
-        backgroundColor: "#111",
-        borderRadius: 14,
-        padding: 12,
-        marginBottom: 14,
-        flexDirection: "row",
-    },
-
-    cover: {
-        width: 70,
-        height: 70,
-        borderRadius: 8,
-    },
-
     title: {
         color: "#fff",
-        fontSize: 16,
+        fontSize: 22,
         fontWeight: "700",
+        marginBottom: 16,
     },
-
-    artist: {
-        color: "#aaa",
-        fontSize: 14,
-        marginTop: 3,
-    },
-
-    row: {
-        flexDirection: "row",
+    loader: {
+        flex: 1,
+        backgroundColor: "#000",
+        justifyContent: "center",
         alignItems: "center",
-        marginTop: 8,
-    },
-
-    rating: {
-        color: "#9B5CFF",
-        fontWeight: "700",
-        marginRight: 10,
-    },
-
-    user: {
-        color: "#5E17EB",
-        fontWeight: "600",
     },
 });
