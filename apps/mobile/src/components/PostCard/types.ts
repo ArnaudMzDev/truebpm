@@ -8,7 +8,6 @@ export type PostUser = {
 
 export type PostType = {
     _id: string;
-
     userId?: PostUser;
 
     createdAt: string;
@@ -23,15 +22,19 @@ export type PostType = {
     coverUrl?: string | null;
     previewUrl?: string | null;
 
-    rating?: number | null; // simple /5
-
-    // new dynamic multi
+    rating?: number | null;
     ratings?: Record<string, number> | null;
 
-    // legacy multi (old schema)
     prod?: number | null;
     lyrics?: number | null;
     emotion?: number | null;
 
     comment?: string;
+
+    likesCount?: number;
+    repostsCount?: number;
+    commentsCount?: number;
+
+    likedByMe?: boolean;
+    repostedByMe?: boolean;
 };

@@ -10,11 +10,29 @@ async function verifyJwtEdge(token: string) {
     if (!secret) throw new Error("JWT_SECRET missing");
 
     const key = new TextEncoder().encode(secret);
-    const { payload } = await jwtVerify(token, key); // HS256 OK
+    const { payload } = await jwtVerify(token, key);
     const id = payload?.id;
 
     if (typeof id !== "string" || !isObjectId(id)) return null;
     return id;
+}
+
+/**
+ * Si Bearer présent et valide -> inject x-user-id
+ * Sinon -> null
+ */
+async function getUserIdFromAuth(req: NextRequest): Promise<string | null> {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) return null;
+
+    const token = authHeader.replace("Bearer ", "").trim();
+    if (!token) return null;
+
+    try {
+        return await verifyJwtEdge(token);
+    } catch {
+        return null;
+    }
 }
 
 export async function middleware(req: NextRequest) {
@@ -22,22 +40,46 @@ export async function middleware(req: NextRequest) {
     const method = req.method;
 
     // -----------------------------
-    // ✅ PUBLIC
+    // ✅ PUBLIC (no auth required)
     // -----------------------------
     if (pathname.startsWith("/api/auth")) return NextResponse.next();
     if (pathname.startsWith("/api/health")) return NextResponse.next();
 
-    // Posts feed public
-    if (method === "GET" && pathname === "/api/posts") return NextResponse.next();
+    // ✅ Posts feed: PUBLIC mais token-aware
+    if (method === "GET" && pathname === "/api/posts") {
+        const userId = await getUserIdFromAuth(req);
+        if (!userId) return NextResponse.next();
 
-    // Posts by user public: /api/posts/user/:id
+        const headers = new Headers(req.headers);
+        headers.set("x-user-id", userId);
+        return NextResponse.next({ request: { headers } });
+    }
+
+    // ✅ Post detail: PUBLIC mais token-aware (pour coeur rouge en détail)
+    if (method === "GET" && /^\/api\/posts\/[0-9a-fA-F]{24}$/.test(pathname)) {
+        const userId = await getUserIdFromAuth(req);
+        if (!userId) return NextResponse.next();
+
+        const headers = new Headers(req.headers);
+        headers.set("x-user-id", userId);
+        return NextResponse.next({ request: { headers } });
+    }
+
+    // ✅ Posts by user: PUBLIC mais token-aware
     if (method === "GET" && pathname.startsWith("/api/posts/user/")) {
         const parts = pathname.split("/").filter(Boolean); // ["api","posts","user",":id"]
         const id = parts[3];
-        if (id && isObjectId(id)) return NextResponse.next();
+        if (id && isObjectId(id)) {
+            const userId = await getUserIdFromAuth(req);
+            if (!userId) return NextResponse.next();
+
+            const headers = new Headers(req.headers);
+            headers.set("x-user-id", userId);
+            return NextResponse.next({ request: { headers } });
+        }
     }
 
-    // Search public (toutes tes routes de search)
+    // Search public
     if (method === "GET" && pathname.startsWith("/api/search")) {
         return NextResponse.next();
     }
@@ -47,7 +89,7 @@ export async function middleware(req: NextRequest) {
         const parts = pathname.split("/").filter(Boolean); // ["api","user",":id",...]
         const third = parts[2];
 
-        // ❌ privé
+        // privé
         if (third === "me" || third === "profile") {
             // continue -> auth required
         } else if (third && isObjectId(third)) {
@@ -59,7 +101,7 @@ export async function middleware(req: NextRequest) {
     }
 
     // -----------------------------
-    // 🔐 PRIVATE
+    // 🔐 PRIVATE (auth required)
     // -----------------------------
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {

@@ -1,3 +1,5 @@
+// apps/mobile/src/screens/CreatePostScreen.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
     View,
@@ -7,6 +9,7 @@ import {
     TouchableOpacity,
     TextInput,
     ScrollView,
+    Alert,
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -65,8 +68,9 @@ export default function CreatePostScreen({ route, navigation }: Props) {
     const [rating, setRating] = useState(3);
     const [ratings, setRatings] = useState<Record<string, number>>({});
     const [comment, setComment] = useState("");
+    const [publishing, setPublishing] = useState(false);
 
-    const { playPreview, pause, isPlaying, currentTrack } = usePlayer();
+    const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const criteria = CRITERIA_BY_TYPE[entityType];
 
@@ -77,9 +81,7 @@ export default function CreatePostScreen({ route, navigation }: Props) {
         setRatings((prev) => {
             const next = { ...prev };
             for (const c of criteria) {
-                if (typeof next[c.key] !== "number") {
-                    next[c.key] = 3;
-                }
+                if (typeof next[c.key] !== "number") next[c.key] = 3;
             }
             return next;
         });
@@ -100,55 +102,81 @@ export default function CreatePostScreen({ route, navigation }: Props) {
     }, [ratings, mode, criteria]);
 
     const isCurrentTrack =
-        currentTrack?.title === track.title &&
-        currentTrack?.artist === track.artist;
+        !!currentTrack &&
+        currentTrack.title === track.title &&
+        currentTrack.artist === track.artist &&
+        currentTrack.url === (track.previewUrl || "");
 
     const handlePublish = async () => {
+        if (publishing) return;
+
         const token = await AsyncStorage.getItem("token");
-        if (!token) return;
-
-        const payload: any = {
-            entityType,
-            entityId,
-            trackTitle: track.title,
-            artist: track.artist,
-            coverUrl: track.cover,
-            mode,
-            comment: comment.trim(),
-        };
-
-        if (mode === "general") {
-            payload.rating = rating;
-        } else {
-            // ✅ garantit 3/3 même si l’utilisateur n’a pas touché un slider
-            const finalRatings: Record<string, number> = {};
-            for (const c of criteria) {
-                finalRatings[c.key] =
-                    typeof ratings[c.key] === "number" ? ratings[c.key] : 3;
-            }
-            payload.ratings = finalRatings;
-        }
-
-        const res = await fetch(`${API_URL}/api/posts/create`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-            const txt = await res.text();
-            console.log("Create post error:", txt);
+        if (!token) {
+            Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
         }
 
-        navigation.replace("Main");
+        setPublishing(true);
+
+        try {
+            const payload: any = {
+                entityType,
+                entityId,
+
+                trackTitle: track.title,
+                artist: track.artist,
+
+                coverUrl: track.cover || null,
+
+                // ✅ IMPORTANT : sinon la preview n’existera jamais sur les posts
+                previewUrl: track.previewUrl || null,
+
+                mode,
+                comment: comment.trim(),
+            };
+
+            if (mode === "general") {
+                payload.rating = rating;
+            } else {
+                const finalRatings: Record<string, number> = {};
+                for (const c of criteria) {
+                    finalRatings[c.key] =
+                        typeof ratings[c.key] === "number" ? ratings[c.key] : 3;
+                }
+                payload.ratings = finalRatings;
+            }
+
+            // ✅ IMPORTANT : adapte l'URL si ta route est vraiment /api/posts/create
+            const res = await fetch(`${API_URL}/api/posts/create`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!res.ok) {
+                const txt = await res.text().catch(() => "");
+                console.log("Create post error:", res.status, txt);
+                Alert.alert("Erreur", "Impossible de publier le post.");
+                return;
+            }
+
+            // Optionnel: reset player si tu veux éviter un bug de preview restée ouverte
+            // await close();
+
+            navigation.replace("Main");
+        } catch (e) {
+            console.log("Publish error:", e);
+            Alert.alert("Erreur", "Impossible de publier le post.");
+        } finally {
+            setPublishing(false);
+        }
     };
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
             <TouchableOpacity onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={26} color="#fff" />
             </TouchableOpacity>
@@ -167,16 +195,19 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                     {entityType === "song" && track.previewUrl ? (
                         <TouchableOpacity
                             style={styles.previewRow}
-                            onPress={() =>
-                                isCurrentTrack && isPlaying
-                                    ? pause()
-                                    : playPreview({
+                            onPress={() => {
+                                if (isCurrentTrack) {
+                                    togglePlay();
+                                } else {
+                                    playPreview({
                                         title: track.title,
                                         artist: track.artist,
                                         cover: track.cover || "",
                                         url: track.previewUrl!,
-                                    })
-                            }
+                                    });
+                                }
+                            }}
+                            activeOpacity={0.85}
                         >
                             <Ionicons
                                 name={isCurrentTrack && isPlaying ? "pause" : "play"}
@@ -184,9 +215,7 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                                 color="#fff"
                             />
                             <Text style={styles.previewText}>
-                                {isCurrentTrack && isPlaying
-                                    ? "Pause"
-                                    : "Écouter l'extrait"}
+                                {isCurrentTrack && isPlaying ? "Pause" : "Écouter l'extrait"}
                             </Text>
                         </TouchableOpacity>
                     ) : null}
@@ -211,9 +240,7 @@ export default function CreatePostScreen({ route, navigation }: Props) {
 
             {mode === "general" ? (
                 <>
-                    <Text style={styles.sectionTitle}>
-                        Note : {rating.toFixed(1)} / 5
-                    </Text>
+                    <Text style={styles.sectionTitle}>Note : {rating.toFixed(1)} / 5</Text>
                     <Slider
                         minimumValue={1}
                         maximumValue={5}
@@ -236,9 +263,7 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                                 maximumValue={5}
                                 step={0.5}
                                 value={ratings[c.key] ?? 3}
-                                onValueChange={(v) =>
-                                    setRatings((r) => ({ ...r, [c.key]: v }))
-                                }
+                                onValueChange={(v) => setRatings((r) => ({ ...r, [c.key]: v }))}
                                 minimumTrackTintColor="#9B5CFF"
                                 maximumTrackTintColor="#333"
                             />
@@ -260,8 +285,15 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                 onChangeText={setComment}
             />
 
-            <TouchableOpacity style={styles.publishBtn} onPress={handlePublish}>
-                <Text style={styles.publishText}>Publier</Text>
+            <TouchableOpacity
+                style={[styles.publishBtn, publishing && { opacity: 0.6 }]}
+                onPress={handlePublish}
+                disabled={publishing}
+                activeOpacity={0.85}
+            >
+                <Text style={styles.publishText}>
+                    {publishing ? "Publication..." : "Publier"}
+                </Text>
             </TouchableOpacity>
         </ScrollView>
     );
@@ -286,6 +318,8 @@ const styles = StyleSheet.create({
         padding: 14,
         borderRadius: 14,
         marginBottom: 20,
+        borderWidth: 1,
+        borderColor: "#222",
     },
     cover: {
         width: 70,
@@ -317,6 +351,8 @@ const styles = StyleSheet.create({
         backgroundColor: "#111",
         borderRadius: 10,
         marginBottom: 20,
+        borderWidth: 1,
+        borderColor: "#222",
     },
     switchBtn: {
         flex: 1,

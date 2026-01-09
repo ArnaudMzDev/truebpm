@@ -1,11 +1,11 @@
 // apps/api/app/api/posts/route.ts
-
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import mongoose from "mongoose";
 
+/* -------------------- GET /api/posts -------------------- */
 export async function GET(req: Request) {
     try {
         await connectDB();
@@ -20,17 +20,22 @@ export async function GET(req: Request) {
 
         const query: any = {};
 
-        // ✅ userId défensif
         if (userId && mongoose.Types.ObjectId.isValid(userId)) {
             query.userId = userId;
         }
 
-        // ✅ cursor défensif
         if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
             query._id = { $lt: cursor };
         }
 
-        const posts = await Post.find(query)
+        // ✅ IMPORTANT : on récupère le "me" injecté par le middleware
+        const meId = req.headers.get("x-user-id");
+        const me =
+            meId && mongoose.Types.ObjectId.isValid(meId)
+                ? new mongoose.Types.ObjectId(meId)
+                : null;
+
+        const docs: any[] = await Post.find(query)
             .sort({ _id: -1 })
             .limit(limit + 1)
             .populate("userId", "pseudo avatarUrl")
@@ -38,23 +43,44 @@ export async function GET(req: Request) {
 
         let nextCursor: string | null = null;
 
-        if (posts.length > limit) {
-            const nextItem = posts.pop();
+        if (docs.length > limit) {
+            const nextItem = docs.pop();
             nextCursor = nextItem?._id?.toString() ?? null;
         }
 
-        return NextResponse.json(
-            {
-                posts,
-                nextCursor,
-            },
-            { status: 200 }
-        );
+        // ✅ Ajout likedByMe / repostedByMe + counts FIABLES (arrays = source de vérité)
+        const posts = docs.map((p) => {
+            const likesArr = Array.isArray(p.likes) ? p.likes : [];
+            const repostsArr = Array.isArray(p.reposts) ? p.reposts : [];
+
+            const likedByMe =
+                !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
+
+            const repostedByMe =
+                !!me && repostsArr.some((id: any) => id?.toString?.() === me.toString());
+
+            // ✅ FIX: toujours basé sur la longueur des arrays (évite likesCount incohérent)
+            const likesCount = likesArr.length;
+            const repostsCount = repostsArr.length;
+
+            const commentsCount = typeof p.commentsCount === "number" ? p.commentsCount : 0;
+
+            // ✅ optionnel : on vire likes/reposts du payload (plus léger)
+            const { likes, reposts, ...rest } = p;
+
+            return {
+                ...rest,
+                likesCount,
+                repostsCount,
+                commentsCount,
+                likedByMe,
+                repostedByMe,
+            };
+        });
+
+        return NextResponse.json({ posts, nextCursor }, { status: 200 });
     } catch (err) {
         console.error("❌ GET /api/posts error:", err);
-        return NextResponse.json(
-            { error: "Erreur interne serveur." },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });
     }
 }

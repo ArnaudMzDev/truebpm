@@ -9,6 +9,7 @@ import {
     RefreshControl,
 } from "react-native";
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 
@@ -37,8 +38,6 @@ export default function HomeScreen() {
     const [hasMore, setHasMore] = useState(true);
 
     const LIMIT = 15;
-
-    // évite les double fetch (React 18 strict mode / remount)
     const didInit = useRef(false);
 
     const fetchInitial = useCallback(async () => {
@@ -47,7 +46,11 @@ export default function HomeScreen() {
             setCursor(null);
             setHasMore(true);
 
-            const res = await fetch(`${API_URL}/api/posts?limit=${LIMIT}`);
+            const token = await AsyncStorage.getItem("token");
+
+            const res = await fetch(`${API_URL}/api/posts?limit=${LIMIT}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
             const json = await safeJson(res);
 
             if (!res.ok) {
@@ -74,8 +77,11 @@ export default function HomeScreen() {
         try {
             setLoadingMore(true);
 
+            const token = await AsyncStorage.getItem("token");
+
             const res = await fetch(
-                `${API_URL}/api/posts?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`
+                `${API_URL}/api/posts?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
             );
             const json = await safeJson(res);
 

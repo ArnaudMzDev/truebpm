@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+// apps/mobile/src/components/PostCard/AudioPreview.tsx
+import React, { useMemo, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayer } from "../../context/PlayerContext";
@@ -11,36 +12,49 @@ type Props = {
 };
 
 export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
-    const { currentTrack, isPlaying, playPreview, pause } = usePlayer();
+    const player = usePlayer();
 
+    // ✅ si pas de preview => rien
     if (!previewUrl) return null;
 
-    // Détecter si CE post utilise la même preview que le player global
-    const isCurrentTrack = useMemo(() => {
-        return (
-            currentTrack &&
-            currentTrack.url === previewUrl &&
-            currentTrack.title === title &&
-            currentTrack.artist === artist
-        );
-    }, [currentTrack, previewUrl, title, artist]);
+    const currentTrack = player?.currentTrack ?? null;
+    const isPlaying = !!player?.isPlaying;
 
-    const togglePlay = () => {
-        if (isCurrentTrack && isPlaying) {
-            pause();
-        } else {
-            playPreview({
-                title,
-                artist,
-                cover: coverUrl || "",
-                url: previewUrl,
-            });
+    // ✅ IMPORTANT : match uniquement par URL
+    const isCurrentTrack = useMemo(() => {
+        return !!currentTrack && currentTrack.url === previewUrl;
+    }, [currentTrack, previewUrl]);
+
+    const togglePlay = useCallback(async () => {
+        try {
+            // Si c'est déjà ce track et qu'on joue => pause
+            if (isCurrentTrack && isPlaying) {
+                // pause() si dispo, sinon togglePlay() si tu l’as dans ton context
+                if (typeof (player as any)?.pause === "function") {
+                    await (player as any).pause();
+                } else if (typeof (player as any)?.togglePlay === "function") {
+                    await (player as any).togglePlay();
+                }
+                return;
+            }
+
+            // Sinon => playPreview
+            if (typeof (player as any)?.playPreview === "function") {
+                await (player as any).playPreview({
+                    title,
+                    artist,
+                    cover: coverUrl || "",
+                    url: previewUrl,
+                });
+            }
+        } catch (e) {
+            console.log("AudioPreview togglePlay error:", e);
         }
-    };
+    }, [player, isCurrentTrack, isPlaying, title, artist, coverUrl, previewUrl]);
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity style={styles.button} onPress={togglePlay}>
+            <TouchableOpacity style={styles.button} onPress={togglePlay} activeOpacity={0.85}>
                 <Ionicons
                     name={isCurrentTrack && isPlaying ? "pause" : "play"}
                     size={18}
@@ -69,7 +83,6 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         marginRight: 10,
-
         shadowColor: "#9B5CFF",
         shadowOpacity: 0.35,
         shadowRadius: 8,

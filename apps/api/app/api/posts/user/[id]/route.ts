@@ -5,68 +5,75 @@ import Post from "@/models/Post";
 import User from "@/models/User";
 import mongoose from "mongoose";
 
-export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
     try {
         await connectDB();
 
         const userId = params.id;
 
-        // Vérifier que l'ID est valide
         if (!mongoose.Types.ObjectId.isValid(userId)) {
-            return NextResponse.json(
-                { error: "ID utilisateur invalide." },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "ID utilisateur invalide." }, { status: 400 });
         }
 
-        // Vérifier que le user existe
         const exists = await User.exists({ _id: userId });
         if (!exists) {
-            return NextResponse.json(
-                { error: "Utilisateur introuvable." },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
         }
 
         const { searchParams } = new URL(req.url);
-
         const limitParam = searchParams.get("limit");
         const cursorParam = searchParams.get("cursor");
-
         const limit = Math.min(Number(limitParam) || 15, 50);
 
-        const query: any = { userId };
-
+        const query: any = { userId: new mongoose.Types.ObjectId(userId) };
         if (cursorParam && mongoose.Types.ObjectId.isValid(cursorParam)) {
-            query._id = { $lt: cursorParam };
+            query._id = { $lt: new mongoose.Types.ObjectId(cursorParam) };
         }
 
-        const posts = await Post.find(query)
+        // ✅ me injecté par middleware (optionnel)
+        const meId = req.headers.get("x-user-id");
+        const me =
+            meId && mongoose.Types.ObjectId.isValid(meId) ? new mongoose.Types.ObjectId(meId) : null;
+
+        const docs: any[] = await Post.find(query)
             .sort({ _id: -1 })
             .limit(limit + 1)
             .populate("userId", "pseudo avatarUrl")
             .lean();
 
         let nextCursor: string | null = null;
-
-        if (posts.length > limit) {
-            const nextItem = posts.pop();
-            nextCursor = nextItem?._id.toString() ?? null;
+        if (docs.length > limit) {
+            const nextItem = docs.pop();
+            nextCursor = nextItem?._id?.toString() ?? null;
         }
 
-        return NextResponse.json(
-            { posts, nextCursor },
-            { status: 200 }
-        );
+        const posts = docs.map((p) => {
+            const likesArr = Array.isArray(p.likes) ? p.likes : [];
+            const repostsArr = Array.isArray(p.reposts) ? p.reposts : [];
 
+            const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
+            const repostedByMe =
+                !!me && repostsArr.some((id: any) => id?.toString?.() === me.toString());
+
+            const likesCount = likesArr.length;
+            const repostsCount = repostsArr.length;
+            const commentsCount = typeof p.commentsCount === "number" ? p.commentsCount : 0;
+
+            const { likes, reposts, ...rest } = p; // payload léger
+
+            return {
+                ...rest,
+                likesCount,
+                repostsCount,
+                commentsCount,
+                likedByMe,
+                repostedByMe,
+            };
+        });
+
+        return NextResponse.json({ posts, nextCursor }, { status: 200 });
     } catch (err) {
         console.error("❌ GET /posts/user/[id] error:", err);
-        return NextResponse.json(
-            { error: "Erreur interne serveur." },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });
     }
 }

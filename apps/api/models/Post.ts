@@ -1,72 +1,35 @@
+// apps/api/models/Post.ts
 import { Schema, model, models } from "mongoose";
 
 const PostSchema = new Schema(
     {
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: "User",
-            required: true,
-        },
+            userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
-        /* -------------------- ENTITY -------------------- */
-        entityType: {
-            type: String,
-            enum: ["song", "album", "artist"],
-            default: "song",
-        },
+            entityType: { type: String, enum: ["song", "album", "artist"], default: "song" },
+            entityId: { type: String, default: null },
 
-        entityId: {
-            type: String,
-            default: null, // Apple Music / iTunes id
-        },
+            trackTitle: { type: String, required: true },
+            artist: { type: String, required: true },
 
-        /* -------------------- DISPLAY INFO -------------------- */
-        trackTitle: {
-            type: String,
-            required: true,
-        },
+            coverUrl: { type: String, default: null },
+            previewUrl: { type: String, default: null },
 
-        artist: {
-            type: String,
-            required: true,
-        },
+            mode: { type: String, enum: ["general", "multi"], required: true },
+            rating: { type: Number, min: 1, max: 5, default: null },
+            ratings: { type: Map, of: Number, default: {} },
 
-        coverUrl: {
-            type: String,
-            default: null,
-        },
+            comment: { type: String, default: "" },
 
-        /* -------------------- RATING MODE -------------------- */
-        mode: {
-            type: String,
-            enum: ["general", "multi"],
-            required: true,
-        },
+            // ✅ SOCIAL
+            likes: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
+            likesCount: { type: Number, default: 0 },
 
-        // Note simple /5
-        rating: {
-            type: Number,
-            min: 1,
-            max: 5,
-            default: null,
-        },
+            reposts: { type: [{ type: Schema.Types.ObjectId, ref: "User" }], default: [] },
+            repostsCount: { type: Number, default: 0 },
 
-        // Multi-critères dynamique
-        ratings: {
-            type: Map,
-            of: Number,
-            default: {},
-        },
-
-        /* -------------------- CONTENT -------------------- */
-        comment: {
-            type: String,
-            default: "",
-        },
+            commentsCount: { type: Number, default: 0 },
     },
-    {
-        timestamps: true,
-    }
+    { timestamps: true }
 );
 
 export default models.Post || model("Post", PostSchema);

@@ -1,3 +1,4 @@
+// App.tsx
 import React from "react";
 import { View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
@@ -22,10 +23,11 @@ import ExploreSearchScreen from "./src/screens/ExploreSearchScreen"; // GLOBAL
 import UserProfileScreen from "./src/screens/UserProfileScreen";
 import FollowersListScreen from "./src/screens/FollowersListScreen";
 import FollowingListScreen from "./src/screens/FollowingListScreen";
+import PostScreen from "./src/screens/PostScreen";
 
 import PlayerBar from "./src/components/PlayerBar";
 import { PlayerProvider } from "./src/context/PlayerContext";
-import {UserProvider} from "./src/context/UserContext";
+import { UserProvider } from "./src/context/UserContext";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -55,7 +57,7 @@ function MainTabs() {
                 tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
 
                 tabBarIcon: ({ color }) => {
-                    let icon: any = "home";
+                    let icon: keyof typeof Ionicons.glyphMap = "home";
 
                     if (route.name === "Home") icon = "home";
                     if (route.name === "ExploreSearch") icon = "search";
@@ -67,11 +69,7 @@ function MainTabs() {
                 },
             })}
         >
-            <Tabs.Screen
-                name="Home"
-                component={HomeScreen}
-                options={{ title: "Accueil" }}
-            />
+            <Tabs.Screen name="Home" component={HomeScreen} options={{ title: "Accueil" }} />
 
             {/* Recherche globale */}
             <Tabs.Screen
@@ -80,7 +78,7 @@ function MainTabs() {
                 options={{ title: "Recherche" }}
             />
 
-            {/* Créer : ouvre la recherche MUSIQUE en pickTrack */}
+            {/* Créer : ouvre la recherche MUSIQUE */}
             <Tabs.Screen
                 name="CreatePostTab"
                 component={EmptyScreen}
@@ -88,7 +86,7 @@ function MainTabs() {
                 listeners={({ navigation }) => ({
                     tabPress: (e) => {
                         e.preventDefault();
-                        navigation.navigate("MusicSearch", { mode: "pickTrack" });
+                        navigation.navigate("MusicSearch" as never, { mode: "pickTrack" } as never);
                     },
                 })}
             />
@@ -115,37 +113,40 @@ function MainTabs() {
 export default function App() {
     return (
         <SafeAreaProvider>
-            <PlayerProvider>
-                <UserProvider>
-                <NavigationContainer>
-                    <Stack.Navigator screenOptions={{ headerShown: false }}>
-                        {/* Auth */}
-                        <Stack.Screen name="Splash" component={SplashScreen} />
-                        <Stack.Screen name="Login" component={LoginScreen} />
-                        <Stack.Screen name="Register" component={RegisterScreen} />
-                        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+            <UserProvider>
+                <PlayerProvider>
+                    <NavigationContainer>
+                        <Stack.Navigator screenOptions={{ headerShown: false }}>
+                            {/* Auth */}
+                            <Stack.Screen name="Splash" component={SplashScreen} />
+                            <Stack.Screen name="Login" component={LoginScreen} />
+                            <Stack.Screen name="Register" component={RegisterScreen} />
+                            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
 
-                        {/* Lists */}
-                        <Stack.Screen name="FollowersList" component={FollowersListScreen} />
-                        <Stack.Screen name="FollowingList" component={FollowingListScreen} />
+                            {/* Lists */}
+                            <Stack.Screen name="FollowersList" component={FollowersListScreen} />
+                            <Stack.Screen name="FollowingList" component={FollowingListScreen} />
 
-                        {/* Main */}
-                        <Stack.Screen name="Main" component={MainTabs} />
+                            {/* Main */}
+                            <Stack.Screen name="Main" component={MainTabs} />
 
-                        {/* Recherche MUSIQUE (hors tab) */}
-                        <Stack.Screen name="MusicSearch" component={SearchScreen} />
+                            {/* Recherche MUSIQUE (hors tab) */}
+                            <Stack.Screen name="MusicSearch" component={SearchScreen} />
 
-                        {/* Create post (ouvert après sélection d’un track depuis Search musique) */}
-                        <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+                            {/* Create post */}
+                            <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+                            <Stack.Screen name="PostDetail" component={PostScreen} />
 
-                        {/* Profil */}
-                        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-                        <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-                    </Stack.Navigator>
-                </NavigationContainer>
-                </UserProvider>
-                <PlayerBar />
-            </PlayerProvider>
+                            {/* Profil */}
+                            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+                        </Stack.Navigator>
+                    </NavigationContainer>
+
+                    {/* Toujours au-dessus de l'app */}
+                    <PlayerBar />
+                </PlayerProvider>
+            </UserProvider>
         </SafeAreaProvider>
     );
 }
