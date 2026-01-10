@@ -139,13 +139,8 @@ export default function EditProfileScreen({ navigation }: any) {
     const bioChanged = useMemo(() => bio.trim() !== initialBio, [bio, initialBio]);
 
     const avatarChanged = useMemo(() => {
-        // si avatarUri = file:// => changé
         if (avatarUri?.startsWith("file")) return true;
-
-        // si avatarUri null alors changed uniquement si initialAvatar existait
         if (avatarUri === null) return initialAvatar.length > 0;
-
-        // sinon http(s): compare
         return (avatarUri || "").trim() !== initialAvatar;
     }, [avatarUri, initialAvatar]);
 
@@ -174,13 +169,11 @@ export default function EditProfileScreen({ navigation }: any) {
             // AVATAR
             if (avatarChanged) {
                 if (avatarUri === null) {
-                    // ✅ suppression volontaire => null (backend = efface)
-                    payload.avatarUrl = null;
+                    payload.avatarUrl = null; // backend = efface
                 } else if (avatarUri.startsWith("file")) {
                     const url = await uploadToCloudinary(avatarUri, "truebpm/profile/avatar");
                     payload.avatarUrl = url;
                 } else {
-                    // http(s) choisi/retourné -> set
                     payload.avatarUrl = avatarUri.trim();
                 }
             }
@@ -197,7 +190,6 @@ export default function EditProfileScreen({ navigation }: any) {
                 }
             }
 
-            // Rien à sauvegarder
             if (Object.keys(payload).length === 0) {
                 setLoading(false);
                 return Alert.alert("Info", "Aucune modification à enregistrer.");
@@ -225,12 +217,9 @@ export default function EditProfileScreen({ navigation }: any) {
                 return Alert.alert("Erreur", "Réponse serveur invalide.");
             }
 
-            // ✅ Cache local = user backend (source de vérité)
             await AsyncStorage.setItem("user", JSON.stringify(data.user));
 
-            // ✅ On met à jour les “initial” pour éviter des faux “changed”
             const next = data.user as User;
-
             const a = (next.avatarUrl || "").trim();
             const b = (next.bannerUrl || "").trim();
             const bi = (next.bio || "").trim();
@@ -246,7 +235,11 @@ export default function EditProfileScreen({ navigation }: any) {
 
             setLoading(false);
             Alert.alert("Succès", "Ton profil a été mis à jour.");
-            navigation.replace("Profile");
+
+            // ✅ FIX NAVIGATION : "Profile" n'existe pas
+            // Retourne sur l'onglet profil
+            navigation.navigate("Main", { screen: "ProfileTab" });
+            // (Alternative si tu viens toujours du profil : navigation.goBack();)
         } catch (err) {
             console.log("Profile update error:", err);
             setLoading(false);
@@ -262,7 +255,6 @@ export default function EditProfileScreen({ navigation }: any) {
         );
     }
 
-    /* -------------------- RENDER -------------------- */
     return (
         <KeyboardAvoidingView
             style={{ flex: 1, backgroundColor: "#000" }}
@@ -274,7 +266,6 @@ export default function EditProfileScreen({ navigation }: any) {
                     <Text style={styles.title}>Modifier mon profil</Text>
                 </View>
 
-                {/* BANNIÈRE */}
                 <Text style={styles.sectionTitle}>Bannière</Text>
                 <TouchableOpacity style={styles.bannerPlaceholder} onPress={() => pickImage("banner")}>
                     {bannerUri ? (
@@ -284,7 +275,6 @@ export default function EditProfileScreen({ navigation }: any) {
                     )}
                 </TouchableOpacity>
 
-                {/* AVATAR */}
                 <Text style={styles.sectionTitle}>Photo de profil</Text>
                 <View style={styles.avatarRow}>
                     <TouchableOpacity style={styles.avatarPlaceholder} onPress={() => pickImage("avatar")}>
@@ -295,10 +285,11 @@ export default function EditProfileScreen({ navigation }: any) {
                         )}
                     </TouchableOpacity>
 
-                    <Text style={styles.avatarHint}>Conseil : une image claire & reconnaissable fonctionne mieux.</Text>
+                    <Text style={styles.avatarHint}>
+                        Conseil : une image claire & reconnaissable fonctionne mieux.
+                    </Text>
                 </View>
 
-                {/* BIO */}
                 <Text style={styles.sectionTitle}>Bio</Text>
                 <TextInput
                     style={styles.bioInput}
@@ -311,7 +302,6 @@ export default function EditProfileScreen({ navigation }: any) {
                 />
                 <Text style={styles.bioCount}>{bio.length}/280</Text>
 
-                {/* BUTTON */}
                 <TouchableOpacity
                     style={[styles.button, loading && styles.buttonDisabled]}
                     disabled={loading}

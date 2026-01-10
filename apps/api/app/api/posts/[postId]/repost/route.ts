@@ -1,3 +1,4 @@
+// apps/api/app/api/posts/[postId]/repost/route.ts
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
@@ -18,25 +19,75 @@ export async function POST(req: Request, { params }: { params: { postId: string 
 
         const me = new mongoose.Types.ObjectId(meId);
 
-        const post: any = await Post.findById(postId).select("reposts").lean();
-        if (!post) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+        // On récupère le post visé
+        const target: any = await Post.findById(postId).select("_id type repostOf repostedBy").lean();
+        if (!target) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
 
-        const repostsArr = Array.isArray(post.reposts) ? post.reposts : [];
-        const already = repostsArr.some((id: any) => id?.toString?.() === me.toString());
+        // ✅ Si on appuie sur un repost, on toggle sur le post ORIGINAL
+        const baseId =
+            target.type === "repost" && target.repostOf
+                ? new mongoose.Types.ObjectId(target.repostOf)
+                : new mongoose.Types.ObjectId(postId);
 
-        if (already) {
-            await Post.updateOne({ _id: postId }, { $pull: { reposts: me } });
-        } else {
-            await Post.updateOne({ _id: postId }, { $addToSet: { reposts: me } });
+        const base: any = await Post.findById(baseId).select("_id type").lean();
+        if (!base) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+
+        // Interdit de repost un repost comme "base"
+        if (base.type === "repost") {
+            return NextResponse.json({ error: "Impossible de repost un repost." }, { status: 400 });
         }
 
-        const fresh: any = await Post.findById(postId).select("reposts").lean();
-        const freshReposts = Array.isArray(fresh?.reposts) ? fresh.reposts : [];
-        const repostsCount = freshReposts.length;
+        // Existe déjà ?
+        const existing: any = await Post.findOne({ type: "repost", repostOf: baseId, repostedBy: meId })
+            .select("_id")
+            .lean();
+
+        if (existing?._id) {
+            // ✅ UNREPOST
+            await Post.deleteOne({ _id: existing._id });
+
+            await Post.updateOne(
+                { _id: baseId },
+                { $pull: { reposts: me }, $inc: { repostsCount: -1 } }
+            );
+
+            const fresh: any = await Post.findById(baseId).select("reposts repostsCount").lean();
+            const arr = Array.isArray(fresh?.reposts) ? fresh.reposts : [];
+            const repostsCount = typeof fresh?.repostsCount === "number" ? fresh.repostsCount : arr.length;
+
+            return NextResponse.json(
+                { status: "unreposted", repostedByMe: false, repostsCount: Math.max(0, repostsCount) },
+                { status: 200 }
+            );
+        }
+
+        // ✅ REPOST
+        const body = await req.json().catch(() => null);
+        const repostComment = typeof body?.comment === "string" ? body.comment.trim() : "";
+
+        const created = await Post.create({
+            type: "repost",
+            repostOf: baseId,
+            repostedBy: meId,
+
+            // ✅ IMPORTANT: pour que ça apparaisse sur le profil via query userId
+            userId: meId,
+
+            repostComment,
+        });
+
+        await Post.updateOne(
+            { _id: baseId },
+            { $addToSet: { reposts: me }, $inc: { repostsCount: 1 } }
+        );
+
+        const fresh: any = await Post.findById(baseId).select("reposts repostsCount").lean();
+        const arr = Array.isArray(fresh?.reposts) ? fresh.reposts : [];
+        const repostsCount = typeof fresh?.repostsCount === "number" ? fresh.repostsCount : arr.length;
 
         return NextResponse.json(
-            { status: already ? "unreposted" : "reposted", repostsCount },
-            { status: 200 }
+            { status: "reposted", repostedByMe: true, repostsCount, repostId: created._id.toString() },
+            { status: 201 }
         );
     } catch (e) {
         console.error("❌ POST /api/posts/[postId]/repost error:", e);

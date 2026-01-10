@@ -18,24 +18,45 @@ export async function POST(req: Request, { params }: { params: { postId: string 
 
         const me = new mongoose.Types.ObjectId(meId);
 
-        const post: any = await Post.findById(postId).select("likes").lean();
+        // ⚠️ IMPORTANT: on a besoin de type + repostOf pour savoir si on like un repost ou un post normal
+        const post: any = await Post.findById(postId).select("type repostOf").lean();
         if (!post) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
 
-        const likesArr = Array.isArray(post.likes) ? post.likes : [];
+        const baseId =
+            post?.type === "repost" && post?.repostOf ? String(post.repostOf) : String(postId);
+
+        // On like/unlike TOUJOURS sur le base post
+        const base: any = await Post.findById(baseId).select("likes likesCount").lean();
+        if (!base) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+
+        const likesArr = Array.isArray(base.likes) ? base.likes : [];
         const already = likesArr.some((id: any) => id?.toString?.() === me.toString());
 
         if (already) {
-            await Post.updateOne({ _id: postId }, { $pull: { likes: me } });
+            await Post.updateOne(
+                { _id: baseId },
+                { $pull: { likes: me }, $inc: { likesCount: -1 } }
+            );
         } else {
-            await Post.updateOne({ _id: postId }, { $addToSet: { likes: me } });
+            await Post.updateOne(
+                { _id: baseId },
+                { $addToSet: { likes: me }, $inc: { likesCount: 1 } }
+            );
         }
 
-        const fresh: any = await Post.findById(postId).select("likes").lean();
-        const freshLikes = Array.isArray(fresh?.likes) ? fresh.likes : [];
-        const likesCount = freshLikes.length;
+        // ✅ Re-fetch pour renvoyer une vérité serveur (et éviter les compteurs négatifs/incohérents)
+        const fresh: any = await Post.findById(baseId).select("likes").lean();
+        const freshArr = Array.isArray(fresh?.likes) ? fresh.likes : [];
+
+        const likedByMe = freshArr.some((id: any) => id?.toString?.() === me.toString());
+        const likesCount = freshArr.length;
+
+        // ✅ Optionnel mais conseillé: remettre likesCount exactement au length pour être 100% cohérent
+        // (si tu veux éviter toute dérive suite à des anciens bugs)
+        await Post.updateOne({ _id: baseId }, { $set: { likesCount } });
 
         return NextResponse.json(
-            { status: already ? "unliked" : "liked", likesCount },
+            { status: likedByMe ? "liked" : "unliked", likesCount, likedByMe },
             { status: 200 }
         );
     } catch (e) {

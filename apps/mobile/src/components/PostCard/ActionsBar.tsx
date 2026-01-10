@@ -14,6 +14,17 @@ type Props = {
     onOpenComments?: () => void;
 };
 
+async function safeJson(res: Response) {
+    const txt = await res.text().catch(() => "");
+    if (!txt) return null;
+    try {
+        return JSON.parse(txt);
+    } catch {
+        console.log("Non-JSON response:", txt.slice(0, 200));
+        return null;
+    }
+}
+
 export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Props) {
     const [loadingLike, setLoadingLike] = useState(false);
     const [loadingRepost, setLoadingRepost] = useState(false);
@@ -26,16 +37,24 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Prop
 
     const toggleLike = async () => {
         if (loadingLike) return;
+
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
+
+        // snapshot au clic (évite les valeurs “qui bougent” pendant l’attente)
+        const wasLiked = !!post.likedByMe;
+        const wasCount = post.likesCount ?? 0;
+
+        const optimisticLiked = !wasLiked;
+        const optimisticCount = Math.max(0, wasCount + (optimisticLiked ? 1 : -1));
 
         try {
             setLoadingLike(true);
 
             // optimistic
             onLocalUpdate?.({
-                likedByMe: !liked,
-                likesCount: Math.max(0, (post.likesCount || 0) + (!liked ? 1 : -1)),
+                likedByMe: optimisticLiked,
+                likesCount: optimisticCount,
             });
 
             const res = await fetch(`${API_URL}/api/posts/${post._id}/like`, {
@@ -43,20 +62,22 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Prop
                 headers: { Authorization: `Bearer ${token}` },
             });
 
-            const json = await res.json().catch(() => null);
+            const json = await safeJson(res);
+
             if (!res.ok) {
-                // rollback (simple)
-                onLocalUpdate?.({
-                    likedByMe: liked,
-                    likesCount: post.likesCount || 0,
-                });
+                // rollback
+                onLocalUpdate?.({ likedByMe: wasLiked, likesCount: wasCount });
                 return;
             }
 
-            onLocalUpdate?.({
-                likedByMe: json?.status === "liked",
-                likesCount: typeof json?.likesCount === "number" ? json.likesCount : post.likesCount,
-            });
+            // ✅ robuste: si le serveur renvoie status/likesCount on prend, sinon on garde l'optimiste
+            const serverLiked =
+                json?.status === "liked" ? true : json?.status === "unliked" ? false : optimisticLiked;
+
+            const serverCount =
+                typeof json?.likesCount === "number" ? json.likesCount : optimisticCount;
+
+            onLocalUpdate?.({ likedByMe: serverLiked, likesCount: serverCount });
         } finally {
             setLoadingLike(false);
         }
@@ -64,15 +85,22 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Prop
 
     const toggleRepost = async () => {
         if (loadingRepost) return;
+
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
+
+        const wasReposted = !!post.repostedByMe;
+        const wasCount = post.repostsCount ?? 0;
+
+        const optimisticReposted = !wasReposted;
+        const optimisticCount = Math.max(0, wasCount + (optimisticReposted ? 1 : -1));
 
         try {
             setLoadingRepost(true);
 
             onLocalUpdate?.({
-                repostedByMe: !reposted,
-                repostsCount: Math.max(0, (post.repostsCount || 0) + (!reposted ? 1 : -1)),
+                repostedByMe: optimisticReposted,
+                repostsCount: optimisticCount,
             });
 
             const res = await fetch(`${API_URL}/api/posts/${post._id}/repost`, {
@@ -80,18 +108,33 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Prop
                 headers: { Authorization: `Bearer ${token}` },
             });
 
-            const json = await res.json().catch(() => null);
+            const json = await safeJson(res);
+
             if (!res.ok) {
-                onLocalUpdate?.({
-                    repostedByMe: reposted,
-                    repostsCount: post.repostsCount || 0,
-                });
+                onLocalUpdate?.({ repostedByMe: wasReposted, repostsCount: wasCount });
                 return;
             }
 
+            // ✅ TON API peut renvoyer:
+            // - { status: "reposted" | "unreposted", repostsCount }
+            // - ou { success: true, post: {...} } (pas de status)
+            const serverReposted =
+                json?.status === "reposted"
+                    ? true
+                    : json?.status === "unreposted"
+                        ? false
+                        : optimisticReposted;
+
+            const serverCount =
+                typeof json?.repostsCount === "number"
+                    ? json.repostsCount
+                    : typeof json?.post?.repostsCount === "number"
+                        ? json.post.repostsCount
+                        : optimisticCount;
+
             onLocalUpdate?.({
-                repostedByMe: json?.status === "reposted",
-                repostsCount: typeof json?.repostsCount === "number" ? json.repostsCount : post.repostsCount,
+                repostedByMe: serverReposted,
+                repostsCount: serverCount,
             });
         } finally {
             setLoadingRepost(false);
@@ -100,12 +143,22 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Prop
 
     return (
         <View style={styles.row}>
-            <TouchableOpacity style={styles.btn} onPress={toggleLike} activeOpacity={0.8}>
+            <TouchableOpacity
+                style={styles.btn}
+                onPress={toggleLike}
+                activeOpacity={0.8}
+                disabled={loadingLike}
+            >
                 <Ionicons name={likeIcon as any} size={18} color={liked ? "#ff4d6d" : "#bbb"} />
                 <Text style={styles.count}>{post.likesCount ?? 0}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.btn} onPress={toggleRepost} activeOpacity={0.8}>
+            <TouchableOpacity
+                style={styles.btn}
+                onPress={toggleRepost}
+                activeOpacity={0.8}
+                disabled={loadingRepost}
+            >
                 <Ionicons name={repostIcon as any} size={18} color={reposted ? "#9B5CFF" : "#bbb"} />
                 <Text style={styles.count}>{post.repostsCount ?? 0}</Text>
             </TouchableOpacity>

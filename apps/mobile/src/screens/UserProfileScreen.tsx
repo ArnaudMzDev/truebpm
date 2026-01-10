@@ -11,6 +11,7 @@ import {
     RefreshControl,
 } from "react-native";
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
@@ -58,7 +59,13 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
     /* -------------------- FETCH USER -------------------- */
     const fetchUser = useCallback(async () => {
-        const res = await fetch(`${API_URL}/api/user/${userId}`);
+        const token = await AsyncStorage.getItem("token");
+
+        const res = await fetch(`${API_URL}/api/user/${userId}`, {
+            // ✅ optionnel mais safe (si tu ajoutes un jour des champs "me-aware")
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
         const json = await safeJson(res);
 
         if (!res.ok) {
@@ -71,7 +78,13 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
     /* -------------------- FETCH POSTS -------------------- */
     const fetchPosts = useCallback(async () => {
-        const res = await fetch(`${API_URL}/api/posts/user/${userId}?limit=${LIMIT}`);
+        const token = await AsyncStorage.getItem("token");
+
+        const res = await fetch(`${API_URL}/api/posts/user/${userId}?limit=${LIMIT}`, {
+            // ✅ IMPORTANT: sinon likedByMe/repostedByMe = false
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
         const json = await safeJson(res);
 
         if (!res.ok) {
@@ -95,8 +108,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
     /* -------------------- REALTIME SYNC (EVENT BUS) -------------------- */
     useEffect(() => {
-        // Quand on follow/unfollow CE profil depuis n'importe où (liste, autre écran)
-        // -> update le compteur followers ici
         const unsub = subscribe((event) => {
             if (event.type !== "FOLLOW_TOGGLED") return;
             if (event.targetId?.toString?.() !== userId?.toString?.()) return;
@@ -121,9 +132,15 @@ export default function UserProfileScreen({ route, navigation }: any) {
         try {
             setLoadingMore(true);
 
+            const token = await AsyncStorage.getItem("token");
+
             const res = await fetch(
-                `${API_URL}/api/posts/user/${userId}?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`
+                `${API_URL}/api/posts/user/${userId}?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
+                {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}, // ✅ IMPORTANT
+                }
             );
+
             const json = await safeJson(res);
 
             if (!res.ok) return;
@@ -149,9 +166,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
         const r = await toggleFollow(userId);
         if (!r.ok) return;
-
-        // ✅ Le "me" global se met à jour via UserContext
-        // ✅ Le compteur followers du profil courant est mis à jour via l'event bus ci-dessus
     }, [isSelf, toggleFollow, userId]);
 
     if (loadingInitial || !user) {

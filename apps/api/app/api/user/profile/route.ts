@@ -4,6 +4,9 @@ import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 
+const SELECT_USER =
+    "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt";
+
 export async function PATCH(req: Request) {
     try {
         await connectDB();
@@ -63,15 +66,15 @@ export async function PATCH(req: Request) {
             if (b.length > 0) update.bannerUrl = b;
         }
 
-        // Si aucun champ valide -> on renvoie l'user actuel (évite un update vide)
-        const user = (Object.keys(update).length > 0
-                ? await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
-                : await User.findById(userId)
-        )
-            ?.select(
-                "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt"
-            )
-            .lean();
+        let user: any = null;
+
+        if (Object.keys(update).length > 0) {
+            user = await User.findByIdAndUpdate(userId, { $set: update }, { new: true })
+                .select(SELECT_USER)
+                .lean();
+        } else {
+            user = await User.findById(userId).select(SELECT_USER).lean();
+        }
 
         if (!user) {
             return NextResponse.json(

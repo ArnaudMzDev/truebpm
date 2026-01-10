@@ -25,15 +25,33 @@ import FollowersListScreen from "./src/screens/FollowersListScreen";
 import FollowingListScreen from "./src/screens/FollowingListScreen";
 import PostScreen from "./src/screens/PostScreen";
 
+// ✅ MESSAGERIE
+import ConversationsScreen from "./src/screens/ConversationsScreen";
+import ChatScreen from "./src/screens/ChatScreen";
+
 import PlayerBar from "./src/components/PlayerBar";
 import { PlayerProvider } from "./src/context/PlayerContext";
 import { UserProvider } from "./src/context/UserContext";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+const MessagesStack = createNativeStackNavigator();
 
 function EmptyScreen() {
     return <View style={{ flex: 1, backgroundColor: "#000" }} />;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                MESSAGES STACK                              */
+/* -------------------------------------------------------------------------- */
+
+function MessagesNavigator() {
+    return (
+        <MessagesStack.Navigator screenOptions={{ headerShown: false }}>
+            <MessagesStack.Screen name="Conversations" component={ConversationsScreen} />
+            <MessagesStack.Screen name="Chat" component={ChatScreen} />
+        </MessagesStack.Navigator>
+    );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -62,7 +80,7 @@ function MainTabs() {
                     if (route.name === "Home") icon = "home";
                     if (route.name === "ExploreSearch") icon = "search";
                     if (route.name === "CreatePostTab") icon = "add-circle";
-                    if (route.name === "Notifications") icon = "notifications";
+                    if (route.name === "Notifications") icon = "chatbubbles";
                     if (route.name === "ProfileTab") icon = "person";
 
                     return <Ionicons name={icon} size={26} color={color} />;
@@ -71,14 +89,12 @@ function MainTabs() {
         >
             <Tabs.Screen name="Home" component={HomeScreen} options={{ title: "Accueil" }} />
 
-            {/* Recherche globale */}
             <Tabs.Screen
                 name="ExploreSearch"
                 component={ExploreSearchScreen}
                 options={{ title: "Recherche" }}
             />
 
-            {/* Créer : ouvre la recherche MUSIQUE */}
             <Tabs.Screen
                 name="CreatePostTab"
                 component={EmptyScreen}
@@ -91,17 +107,14 @@ function MainTabs() {
                 })}
             />
 
+            {/* ✅ Messages (remplace Notif) */}
             <Tabs.Screen
                 name="Notifications"
-                component={() => null}
-                options={{ title: "Notif" }}
+                component={MessagesNavigator}
+                options={{ title: "Messages" }}
             />
 
-            <Tabs.Screen
-                name="ProfileTab"
-                component={ProfileScreen}
-                options={{ title: "Profil" }}
-            />
+            <Tabs.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Profil" }} />
         </Tabs.Navigator>
     );
 }
@@ -143,7 +156,6 @@ export default function App() {
                         </Stack.Navigator>
                     </NavigationContainer>
 
-                    {/* Toujours au-dessus de l'app */}
                     <PlayerBar />
                 </PlayerProvider>
             </UserProvider>

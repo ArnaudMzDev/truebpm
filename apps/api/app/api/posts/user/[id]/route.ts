@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import User from "@/models/User";
 import mongoose from "mongoose";
+import { verifyToken } from "@/lib/auth";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
     try {
@@ -30,15 +31,27 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             query._id = { $lt: new mongoose.Types.ObjectId(cursorParam) };
         }
 
-        // ✅ me injecté par middleware (optionnel)
-        const meId = req.headers.get("x-user-id");
+        // ✅ me : middleware x-user-id OU fallback Authorization Bearer via verifyToken
+        let meId = req.headers.get("x-user-id");
+        if (!meId) {
+            // verifyToken doit renvoyer l'id (string) ou null
+            meId = await verifyToken(req).catch(() => null);
+        }
+
         const me =
-            meId && mongoose.Types.ObjectId.isValid(meId) ? new mongoose.Types.ObjectId(meId) : null;
+            meId && mongoose.Types.ObjectId.isValid(meId)
+                ? new mongoose.Types.ObjectId(meId)
+                : null;
 
         const docs: any[] = await Post.find(query)
             .sort({ _id: -1 })
             .limit(limit + 1)
             .populate("userId", "pseudo avatarUrl")
+            .populate("repostedBy", "pseudo avatarUrl")
+            .populate({
+                path: "repostOf",
+                populate: { path: "userId", select: "pseudo avatarUrl" },
+            })
             .lean();
 
         let nextCursor: string | null = null;
@@ -47,20 +60,52 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             nextCursor = nextItem?._id?.toString() ?? null;
         }
 
-        const posts = docs.map((p) => {
-            const likesArr = Array.isArray(p.likes) ? p.likes : [];
-            const repostsArr = Array.isArray(p.reposts) ? p.reposts : [];
+        const stripLikesReposts = (obj: any) => {
+            if (!obj || typeof obj !== "object") return obj;
+            const { likes, reposts, ...rest } = obj;
+            return rest;
+        };
+
+        const posts = docs.map((p: any) => {
+            const isRepost = p.type === "repost" && p.repostOf;
+
+            // ✅ base = original si repost, sinon lui-même
+            const base = isRepost ? p.repostOf : p;
+
+            const likesArr = Array.isArray(base?.likes) ? base.likes : [];
+            const repostsArr = Array.isArray(base?.reposts) ? base.reposts : [];
 
             const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
-            const repostedByMe =
-                !!me && repostsArr.some((id: any) => id?.toString?.() === me.toString());
+            const repostedByMe = !!me && repostsArr.some((id: any) => id?.toString?.() === me.toString());
 
-            const likesCount = likesArr.length;
-            const repostsCount = repostsArr.length;
-            const commentsCount = typeof p.commentsCount === "number" ? p.commentsCount : 0;
+            const likesCount = typeof base?.likesCount === "number" ? base.likesCount : likesArr.length;
+            const repostsCount = typeof base?.repostsCount === "number" ? base.repostsCount : repostsArr.length;
+            const commentsCount = typeof base?.commentsCount === "number" ? base.commentsCount : 0;
 
-            const { likes, reposts, ...rest } = p; // payload léger
+            if (isRepost) {
+                // wrapper sans arrays
+                const wrapper = stripLikesReposts(p);
 
+                // original sans arrays
+                const cleanBase = stripLikesReposts(base);
+
+                return {
+                    ...wrapper,
+
+                    // ✅ on garde l’original pour l’UI (badge + auteur original)
+                    repostOf: cleanBase,
+
+                    // ✅ flags & counts (TOUJOURS au top-level pour ActionsBar)
+                    likesCount,
+                    repostsCount,
+                    commentsCount,
+                    likedByMe,
+                    repostedByMe,
+                };
+            }
+
+            // post normal
+            const rest = stripLikesReposts(p);
             return {
                 ...rest,
                 likesCount,

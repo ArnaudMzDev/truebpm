@@ -79,11 +79,17 @@ export default function ProfileScreen({ navigation }: any) {
             setCursor(null);
             setHasMore(true);
 
-            const res = await fetch(
-                `${API_URL}/api/posts?userId=${encodeURIComponent(uid)}&limit=${LIMIT}`
-            );
-            const json = await safeJson(res);
+            const token = await AsyncStorage.getItem("token");
+            if (!token) return;
 
+            const res = await fetch(
+                `${API_URL}/api/posts?userId=${encodeURIComponent(uid)}&limit=${LIMIT}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` }, // ✅ IMPORTANT
+                }
+            );
+
+            const json = await safeJson(res);
             if (!res.ok) return;
 
             setPosts(json?.posts || []);
@@ -103,13 +109,19 @@ export default function ProfileScreen({ navigation }: any) {
         try {
             setLoadingMore(true);
 
+            const token = await AsyncStorage.getItem("token");
+            if (!token) return;
+
             const res = await fetch(
                 `${API_URL}/api/posts?userId=${encodeURIComponent(
                     user._id
-                )}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`
+                )}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` }, // ✅ IMPORTANT
+                }
             );
-            const json = await safeJson(res);
 
+            const json = await safeJson(res);
             if (!res.ok) return;
 
             const newPosts = json?.posts || [];
@@ -198,7 +210,6 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={styles.pseudo}>{user.pseudo}</Text>
             <Text style={styles.bio}>{user.bio || "Aucune bio."}</Text>
 
-            {/* ✅ STATS CLIQUABLES (zones larges) */}
             <View style={styles.stats}>
                 <TouchableOpacity
                     style={styles.statBtn}
@@ -319,7 +330,6 @@ const styles = StyleSheet.create({
         borderColor: "#222",
     },
 
-    // ✅ vraie zone tappable
     statBtn: {
         flex: 1,
         alignItems: "center",

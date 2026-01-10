@@ -91,7 +91,16 @@ export default function HomeScreen() {
             }
 
             const newPosts: PostType[] = json?.posts || [];
-            setPosts((prev) => [...prev, ...newPosts]);
+
+            // ✅ évite les doublons (au cas où un refresh / event produit des overlaps)
+            setPosts((prev) => {
+                const seen = new Set(prev.map((p) => p._id));
+                const merged = [...prev];
+                for (const p of newPosts) {
+                    if (!seen.has(p._id)) merged.push(p);
+                }
+                return merged;
+            });
 
             setCursor(json?.nextCursor || null);
             setHasMore(!!json?.nextCursor);
@@ -114,6 +123,23 @@ export default function HomeScreen() {
         fetchInitial();
     }, [fetchInitial]);
 
+    // ✅ appelé quand Header -> delete confirme
+    const handleDeleted = useCallback((deletedId: string) => {
+        setPosts((prev) =>
+            prev.filter((p: any) => {
+                // 1) retire le post lui-même
+                if (p._id === deletedId) return false;
+
+                // 2) BONUS: retire aussi les reposts qui pointent vers le post supprimé
+                // (si ton API renvoie repostOf avec _id)
+                const repostOfId = p?.repostOf?._id;
+                if (repostOfId && String(repostOfId) === String(deletedId)) return false;
+
+                return true;
+            })
+        );
+    }, []);
+
     if (initialLoading && posts.length === 0) {
         return (
             <View style={styles.loader}>
@@ -129,7 +155,9 @@ export default function HomeScreen() {
             <FlatList
                 data={posts}
                 keyExtractor={(item) => item._id}
-                renderItem={({ item }) => <PostCard post={item} />}
+                renderItem={({ item }) => (
+                    <PostCard post={item} onDeleted={handleDeleted} />
+                )}
                 contentContainerStyle={{ paddingBottom: 40 }}
                 refreshControl={
                     <RefreshControl

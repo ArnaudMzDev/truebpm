@@ -23,33 +23,33 @@ const API_URL = `http://${localIP}:3000`;
 
 type CommentUser = { pseudo: string; avatarUrl?: string; _id: string };
 
-type CommentType = {
+type BaseNode = {
     _id: string;
     text: string;
     createdAt: string;
     userId: CommentUser;
-    repliesCount?: number;
-    directRepliesCount?: number;
 
-    // ✅ likes
+    // replies
+    repliesCount?: number;        // total descendants (optionnel)
+    directRepliesCount?: number;  // ✅ pour "Voir X réponses" sur chaque node
+
+    // likes
     likesCount?: number;
     likedByMe?: boolean;
 };
 
-type ReplyType = {
-    _id: string;
-    text: string;
-    createdAt: string;
-    userId: CommentUser;
+type CommentType = BaseNode;
+
+type ReplyType = BaseNode & {
     parentId: string;
     rootId: string;
     depth: number;
     replyToUserId?: { pseudo: string } | null;
-
-    // ✅ likes
-    likesCount?: number;
-    likedByMe?: boolean;
 };
+
+function isObject(x: any) {
+    return x !== null && typeof x === "object";
+}
 
 async function safeJson(res: Response) {
     const txt = await res.text();
@@ -80,21 +80,20 @@ export default function PostScreen({ route, navigation }: any) {
         [replyTo]
     );
 
-    // threads state
-    const [threadOpen, setThreadOpen] = useState<Record<string, boolean>>({});
-    const [threadReplies, setThreadReplies] = useState<Record<string, ReplyType[]>>({});
-    const [threadCursor, setThreadCursor] = useState<Record<string, string | null>>({});
-    const [threadHasMore, setThreadHasMore] = useState<Record<string, boolean>>({});
-    const [threadLoading, setThreadLoading] = useState<Record<string, boolean>>({});
+    // ✅ Cascade state (par parentId)
+    const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
+    const [childrenMap, setChildrenMap] = useState<Record<string, ReplyType[]>>({});
+    const [cursorMap, setCursorMap] = useState<Record<string, string | null>>({});
+    const [hasMoreMap, setHasMoreMap] = useState<Record<string, boolean>>({});
+    const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
+
+    const cursorRef = useRef<Record<string, string | null>>({});
+    useEffect(() => {
+        cursorRef.current = cursorMap;
+    }, [cursorMap]);
 
     // anti double tap likes
     const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({});
-
-    // refs pour éviter stale state dans fetchThread
-    const threadCursorRef = useRef<Record<string, string | null>>({});
-    useEffect(() => {
-        threadCursorRef.current = threadCursor;
-    }, [threadCursor]);
 
     const openUserProfile = useCallback(
         (userId?: string) => {
@@ -135,17 +134,17 @@ export default function PostScreen({ route, navigation }: any) {
         fetchComments();
     }, [fetchPost, fetchComments]);
 
-    // fetch 10 replies (thread)
-    const fetchThread = useCallback(
-        async (rootId: string, mode: "initial" | "more" = "initial") => {
-            if (threadLoading[rootId]) return;
+    // ✅ Fetch direct replies d’un parent (comment OU reply)
+    const fetchReplies = useCallback(
+        async (parentId: string, mode: "initial" | "more" = "initial") => {
+            if (loadingMap[parentId]) return;
 
-            setThreadLoading((m) => ({ ...m, [rootId]: true }));
+            setLoadingMap((m) => ({ ...m, [parentId]: true }));
             try {
-                const cursor = mode === "more" ? threadCursorRef.current[rootId] : null;
+                const cursor = mode === "more" ? cursorRef.current[parentId] : null;
 
                 const url =
-                    `${API_URL}/api/comments/${rootId}/thread?limit=10` +
+                    `${API_URL}/api/comments/${parentId}/replies?limit=10` +
                     (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
 
                 const token = await AsyncStorage.getItem("token");
@@ -155,62 +154,75 @@ export default function PostScreen({ route, navigation }: any) {
 
                 const json = await safeJson(res);
                 if (!res.ok) {
-                    console.log("fetchThread error:", res.status, json);
+                    console.log("fetchReplies error:", res.status, json);
                     return;
                 }
 
                 const newItems: ReplyType[] = json?.replies ?? [];
                 const next: string | null = json?.nextCursor ?? null;
 
-                setThreadReplies((m) => ({
-                    ...m,
-                    [rootId]: mode === "more" ? [...(m[rootId] ?? []), ...newItems] : newItems,
-                }));
+                // ✅ merge stable en évitant les doublons
+                setChildrenMap((m) => {
+                    const prev = m[parentId] ?? [];
+                    const merged = mode === "more" ? [...prev, ...newItems] : newItems;
 
-                setThreadCursor((m) => {
-                    const nextMap = { ...m, [rootId]: next };
-                    threadCursorRef.current = nextMap;
+                    const seen = new Set<string>();
+                    const unique: ReplyType[] = [];
+                    for (const it of merged) {
+                        const id = String(it?._id);
+                        if (!id || seen.has(id)) continue;
+                        seen.add(id);
+                        unique.push(it);
+                    }
+
+                    // Tri ASC naturel : ObjectId (ou createdAt)
+                    unique.sort((a, b) => String(a._id).localeCompare(String(b._id)));
+
+                    return { ...m, [parentId]: unique };
+                });
+
+                setCursorMap((m) => {
+                    const nextMap = { ...m, [parentId]: next };
+                    cursorRef.current = nextMap;
                     return nextMap;
                 });
 
-                setThreadHasMore((m) => ({ ...m, [rootId]: !!next }));
+                setHasMoreMap((m) => ({ ...m, [parentId]: !!next }));
             } finally {
-                setThreadLoading((m) => ({ ...m, [rootId]: false }));
+                setLoadingMap((m) => ({ ...m, [parentId]: false }));
             }
         },
-        [threadLoading]
+        [loadingMap]
     );
 
-    const toggleThread = useCallback(
-        async (rootId: string) => {
-            const willOpen = !threadOpen[rootId];
+    const toggleOpen = useCallback(
+        async (parentId: string) => {
+            const willOpen = !openMap[parentId];
+            setOpenMap((m) => ({ ...m, [parentId]: willOpen }));
 
-            setThreadOpen((m) => ({ ...m, [rootId]: willOpen }));
-
-            if (willOpen && !threadReplies[rootId]) {
-                await fetchThread(rootId, "initial");
+            if (willOpen && !childrenMap[parentId]) {
+                await fetchReplies(parentId, "initial");
             }
         },
-        [threadOpen, threadReplies, fetchThread]
+        [openMap, childrenMap, fetchReplies]
     );
 
-    // ✅ like comment/reply (optimiste + rollback)
+    // ✅ Like (comment ou reply) : on ne dépend pas du rootId ici
     const toggleLike = useCallback(
-        async (commentId: string, where: { type: "comment" } | { type: "reply"; rootId: string }) => {
-            if (likeLoading[commentId]) return;
+        async (nodeId: string, where: { type: "comment" } | { type: "reply"; parentId: string }) => {
+            if (likeLoading[nodeId]) return;
 
             const token = await AsyncStorage.getItem("token");
             if (!token) return;
 
-            setLikeLoading((m) => ({ ...m, [commentId]: true }));
+            setLikeLoading((m) => ({ ...m, [nodeId]: true }));
 
-            // snapshot + optimistic
             let prevLiked = false;
             let prevCount = 0;
 
-            const applyOptimistic = () => {
+            const optimistic = () => {
                 if (where.type === "comment") {
-                    const t = comments.find((c) => c._id === commentId);
+                    const t = comments.find((c) => c._id === nodeId);
                     prevLiked = !!t?.likedByMe;
                     prevCount = t?.likesCount ?? 0;
 
@@ -218,21 +230,21 @@ export default function PostScreen({ route, navigation }: any) {
                     const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
 
                     setComments((prev) =>
-                        prev.map((c) => (c._id === commentId ? { ...c, likedByMe: nextLiked, likesCount: nextCount } : c))
+                        prev.map((c) => (c._id === nodeId ? { ...c, likedByMe: nextLiked, likesCount: nextCount } : c))
                     );
                 } else {
-                    const arr = threadReplies[where.rootId] ?? [];
-                    const t = arr.find((r) => r._id === commentId);
+                    const arr = childrenMap[where.parentId] ?? [];
+                    const t = arr.find((r) => r._id === nodeId);
                     prevLiked = !!t?.likedByMe;
                     prevCount = t?.likesCount ?? 0;
 
                     const nextLiked = !prevLiked;
                     const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
 
-                    setThreadReplies((prev) => ({
+                    setChildrenMap((prev) => ({
                         ...prev,
-                        [where.rootId]: (prev[where.rootId] ?? []).map((r) =>
-                            r._id === commentId ? { ...r, likedByMe: nextLiked, likesCount: nextCount } : r
+                        [where.parentId]: (prev[where.parentId] ?? []).map((r) =>
+                            r._id === nodeId ? { ...r, likedByMe: nextLiked, likesCount: nextCount } : r
                         ),
                     }));
                 }
@@ -241,22 +253,22 @@ export default function PostScreen({ route, navigation }: any) {
             const rollback = () => {
                 if (where.type === "comment") {
                     setComments((prev) =>
-                        prev.map((c) => (c._id === commentId ? { ...c, likedByMe: prevLiked, likesCount: prevCount } : c))
+                        prev.map((c) => (c._id === nodeId ? { ...c, likedByMe: prevLiked, likesCount: prevCount } : c))
                     );
                 } else {
-                    setThreadReplies((prev) => ({
+                    setChildrenMap((prev) => ({
                         ...prev,
-                        [where.rootId]: (prev[where.rootId] ?? []).map((r) =>
-                            r._id === commentId ? { ...r, likedByMe: prevLiked, likesCount: prevCount } : r
+                        [where.parentId]: (prev[where.parentId] ?? []).map((r) =>
+                            r._id === nodeId ? { ...r, likedByMe: prevLiked, likesCount: prevCount } : r
                         ),
                     }));
                 }
             };
 
-            applyOptimistic();
+            optimistic();
 
             try {
-                const res = await fetch(`${API_URL}/api/comments/${commentId}/like`, {
+                const res = await fetch(`${API_URL}/api/comments/${nodeId}/like`, {
                     method: "POST",
                     headers: { Authorization: `Bearer ${token}` },
                 });
@@ -267,35 +279,35 @@ export default function PostScreen({ route, navigation }: any) {
                     return;
                 }
 
-                const serverLiked = !!json?.likedByMe; // grâce à la réponse améliorée
                 const serverCount = typeof json?.likesCount === "number" ? json.likesCount : undefined;
+                const serverLiked = json?.status ? json.status === "liked" : undefined;
 
                 if (where.type === "comment") {
                     setComments((prev) =>
                         prev.map((c) =>
-                            c._id === commentId
-                                ? { ...c, likedByMe: serverLiked, likesCount: serverCount ?? c.likesCount }
+                            c._id === nodeId
+                                ? { ...c, likedByMe: serverLiked ?? c.likedByMe, likesCount: serverCount ?? c.likesCount }
                                 : c
                         )
                     );
                 } else {
-                    setThreadReplies((prev) => ({
+                    setChildrenMap((prev) => ({
                         ...prev,
-                        [where.rootId]: (prev[where.rootId] ?? []).map((r) =>
-                            r._id === commentId
-                                ? { ...r, likedByMe: serverLiked, likesCount: serverCount ?? r.likesCount }
+                        [where.parentId]: (prev[where.parentId] ?? []).map((r) =>
+                            r._id === nodeId
+                                ? { ...r, likedByMe: serverLiked ?? r.likedByMe, likesCount: serverCount ?? r.likesCount }
                                 : r
                         ),
                     }));
                 }
             } finally {
-                setLikeLoading((m) => ({ ...m, [commentId]: false }));
+                setLikeLoading((m) => ({ ...m, [nodeId]: false }));
             }
         },
-        [comments, likeLoading, threadReplies]
+        [comments, childrenMap, likeLoading]
     );
 
-    // submit comment/reply
+    // ✅ submit : la reply est ajoutée DANS childrenMap[parentId] (donc sous le parent)
     const submit = useCallback(async () => {
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
@@ -303,11 +315,14 @@ export default function PostScreen({ route, navigation }: any) {
         const clean = text.trim();
         if (!clean) return;
 
+        const target = replyTo; // snapshot
         setText("");
 
-        // reply cascade
-        if (replyTo) {
-            const res = await fetch(`${API_URL}/api/comments/${replyTo._id}/replies`, {
+        // Reply (à un commentaire OU à une reply)
+        if (target && isObject(target) && target._id) {
+            const parentId = String(target._id);
+
+            const res = await fetch(`${API_URL}/api/comments/${parentId}/replies`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ text: clean }),
@@ -321,29 +336,63 @@ export default function PostScreen({ route, navigation }: any) {
 
             const created: ReplyType | undefined = json?.reply;
             if (created?._id) {
-                const rootId =
-                    created.rootId ||
-                    (("rootId" in replyTo && (replyTo as any).rootId) ? (replyTo as any).rootId : null) ||
-                    ("_id" in replyTo ? replyTo._id : "");
+                // ✅ ouvrir le parent
+                setOpenMap((m) => ({ ...m, [parentId]: true }));
 
-                setThreadOpen((m) => ({ ...m, [rootId]: true }));
+                // ✅ insert sous le parent (en bas)
+                setChildrenMap((m) => {
+                    const prev = m[parentId] ?? [];
+                    const next = [...prev, created];
 
-                setThreadReplies((m) => ({
-                    ...m,
-                    [rootId]: [created, ...(m[rootId] ?? [])],
-                }));
+                    // uniq + tri ASC
+                    const seen = new Set<string>();
+                    const unique: ReplyType[] = [];
+                    for (const it of next) {
+                        const id = String(it?._id);
+                        if (!id || seen.has(id)) continue;
+                        seen.add(id);
+                        unique.push(it);
+                    }
+                    unique.sort((a, b) => String(a._id).localeCompare(String(b._id)));
 
+                    return { ...m, [parentId]: unique };
+                });
+
+                // ✅ incrémenter directRepliesCount du parent localement (si présent)
+                // parent dans comments ?
                 setComments((prev) =>
-                    prev.map((c) => (c._id === rootId ? { ...c, repliesCount: (c.repliesCount || 0) + 1 } : c))
+                    prev.map((c) =>
+                        c._id === parentId
+                            ? { ...c, directRepliesCount: (c.directRepliesCount || 0) + 1, repliesCount: (c.repliesCount || 0) + 1 }
+                            : c
+                    )
                 );
+                // parent dans childrenMap ? (si c’est une reply)
+                setChildrenMap((prev) => {
+                    const out = { ...prev };
+                    for (const key of Object.keys(out)) {
+                        out[key] = (out[key] ?? []).map((r) =>
+                            r._id === parentId
+                                ? {
+                                    ...r,
+                                    directRepliesCount: (r.directRepliesCount || 0) + 1,
+                                    repliesCount: (r.repliesCount || 0) + 1,
+                                }
+                                : r
+                        );
+                    }
+                    return out;
+                });
 
+                // ✅ post counter
                 setPost((p) => (p ? { ...p, commentsCount: (p.commentsCount || 0) + 1 } : p));
+
                 setReplyTo(null);
             }
             return;
         }
 
-        // top-level comment
+        // Top-level comment
         const res = await fetch(`${API_URL}/api/posts/${postId}/comments`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -384,96 +433,104 @@ export default function PostScreen({ route, navigation }: any) {
         </TouchableOpacity>
     );
 
-    const renderReply = (r: ReplyType) => {
-        const left = Math.min(48, Math.max(12, (r.depth || 1) * 12));
-        const liked = !!r.likedByMe;
-        const count = r.likesCount ?? 0;
+    // ✅ rendu récursif des replies d’un parent
+    const renderChildren = (parentId: string, depthBase: number) => {
+        const open = !!openMap[parentId];
+        if (!open) return null;
+
+        const loading = !!loadingMap[parentId];
+        const list = childrenMap[parentId] ?? [];
+        const hasMore = !!hasMoreMap[parentId];
 
         return (
-            <View key={r._id} style={[styles.replyRow, { marginLeft: left }]}>
-                <UserLine u={r.userId} />
+            <View style={styles.threadBox}>
+                {loading ? (
+                    <ActivityIndicator color="#9B5CFF" style={{ paddingVertical: 10 }} />
+                ) : (
+                    <>
+                        {list.map((r) => (
+                            <View key={r._id} style={[styles.replyRow, { marginLeft: Math.min(60, 12 + (depthBase + 1) * 12) }]}>
+                                <UserLine u={r.userId} />
 
-                {r.replyToUserId?.pseudo ? (
-                    <Text style={styles.replyTo}>{"en réponse à "}@{r.replyToUserId.pseudo}</Text>
-                ) : null}
+                                {r.replyToUserId?.pseudo ? (
+                                    <Text style={styles.replyTo}>{"en réponse à "}@{r.replyToUserId.pseudo}</Text>
+                                ) : null}
 
-                <TouchableOpacity onPress={() => openUserProfile(r.userId?._id)} activeOpacity={0.9}>
-                    <Text style={styles.replyText}>{r.text}</Text>
-                </TouchableOpacity>
+                                <Text style={styles.replyText}>{r.text}</Text>
 
-                <View style={styles.rowActions}>
-                    <TouchableOpacity onPress={() => setReplyTo(r)} activeOpacity={0.8}>
-                        <Text style={styles.replyBtn}>Répondre</Text>
-                    </TouchableOpacity>
+                                <View style={styles.rowActions}>
+                                    <TouchableOpacity onPress={() => setReplyTo(r)} activeOpacity={0.8}>
+                                        <Text style={styles.replyBtn}>Répondre</Text>
+                                    </TouchableOpacity>
 
-                    <LikeChip
-                        liked={liked}
-                        count={count}
-                        disabled={!!likeLoading[r._id]}
-                        onPress={() => toggleLike(r._id, { type: "reply", rootId: r.rootId })}
-                    />
-                </View>
+                                    {(r.directRepliesCount || 0) > 0 ? (
+                                        <TouchableOpacity onPress={() => toggleOpen(r._id)} activeOpacity={0.8}>
+                                            <Text style={styles.threadBtn}>
+                                                {openMap[r._id] ? "Masquer" : `Voir ${r.directRepliesCount} réponse(s)`}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ) : null}
+
+                                    <LikeChip
+                                        liked={!!r.likedByMe}
+                                        count={r.likesCount ?? 0}
+                                        disabled={!!likeLoading[r._id]}
+                                        onPress={() => toggleLike(r._id, { type: "reply", parentId })}
+                                    />
+                                </View>
+
+                                {/* ✅ replies des replies */}
+                                {renderChildren(r._id, depthBase + 1)}
+                            </View>
+                        ))}
+
+                        {hasMore ? (
+                            <TouchableOpacity
+                                onPress={() => fetchReplies(parentId, "more")}
+                                activeOpacity={0.85}
+                                style={styles.moreBtn}
+                            >
+                                <Text style={styles.moreText}>Voir plus</Text>
+                            </TouchableOpacity>
+                        ) : null}
+                    </>
+                )}
             </View>
         );
     };
 
     const renderComment = ({ item }: { item: CommentType }) => {
-        const open = !!threadOpen[item._id];
-        const loading = !!threadLoading[item._id];
-        const replies = threadReplies[item._id] ?? [];
-        const hasMore = !!threadHasMore[item._id];
-
-        const liked = !!item.likedByMe;
-        const count = item.likesCount ?? 0;
+        const open = !!openMap[item._id];
 
         return (
             <View style={styles.commentRow}>
                 <UserLine u={item.userId} />
 
-                <TouchableOpacity onPress={() => openUserProfile(item.userId?._id)} activeOpacity={0.9}>
-                    <Text style={styles.commentText}>{item.text}</Text>
-                </TouchableOpacity>
+                <Text style={styles.commentText}>{item.text}</Text>
 
                 <View style={styles.rowActions}>
                     <TouchableOpacity onPress={() => setReplyTo(item)} activeOpacity={0.8}>
                         <Text style={styles.replyBtn}>Répondre</Text>
                     </TouchableOpacity>
 
-                    {(item.repliesCount || 0) > 0 ? (
-                        <TouchableOpacity onPress={() => toggleThread(item._id)} activeOpacity={0.8}>
-                            <Text style={styles.threadBtn}>{open ? "Masquer" : `Voir ${item.repliesCount} réponse(s)`}</Text>
+                    {(item.directRepliesCount || item.repliesCount || 0) > 0 ? (
+                        <TouchableOpacity onPress={() => toggleOpen(item._id)} activeOpacity={0.8}>
+                            <Text style={styles.threadBtn}>
+                                {open ? "Masquer" : `Voir ${(item.directRepliesCount ?? item.repliesCount) || 0} réponse(s)`}
+                            </Text>
                         </TouchableOpacity>
                     ) : null}
 
                     <LikeChip
-                        liked={liked}
-                        count={count}
+                        liked={!!item.likedByMe}
+                        count={item.likesCount ?? 0}
                         disabled={!!likeLoading[item._id]}
                         onPress={() => toggleLike(item._id, { type: "comment" })}
                     />
                 </View>
 
-                {open ? (
-                    <View style={styles.threadBox}>
-                        {loading ? (
-                            <ActivityIndicator color="#9B5CFF" style={{ paddingVertical: 10 }} />
-                        ) : (
-                            <>
-                                {replies.map(renderReply)}
-
-                                {hasMore ? (
-                                    <TouchableOpacity
-                                        onPress={() => fetchThread(item._id, "more")}
-                                        activeOpacity={0.85}
-                                        style={styles.moreBtn}
-                                    >
-                                        <Text style={styles.moreText}>Voir plus</Text>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </>
-                        )}
-                    </View>
-                ) : null}
+                {/* ✅ replies du commentaire */}
+                {renderChildren(item._id, 0)}
             </View>
         );
     };
