@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     FlatList,
     RefreshControl,
+    Alert,
 } from "react-native";
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -46,6 +47,8 @@ export default function UserProfileScreen({ route, navigation }: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [hasMore, setHasMore] = useState(true);
 
+    const [openingChat, setOpeningChat] = useState(false);
+
     const LIMIT = 15;
 
     const isSelf = useMemo(() => {
@@ -62,7 +65,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
         const token = await AsyncStorage.getItem("token");
 
         const res = await fetch(`${API_URL}/api/user/${userId}`, {
-            // ✅ optionnel mais safe (si tu ajoutes un jour des champs "me-aware")
             headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
@@ -81,7 +83,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
         const token = await AsyncStorage.getItem("token");
 
         const res = await fetch(`${API_URL}/api/posts/user/${userId}?limit=${LIMIT}`, {
-            // ✅ IMPORTANT: sinon likedByMe/repostedByMe = false
             headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
 
@@ -136,9 +137,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
             const res = await fetch(
                 `${API_URL}/api/posts/user/${userId}?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
-                {
-                    headers: token ? { Authorization: `Bearer ${token}` } : {}, // ✅ IMPORTANT
-                }
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
             );
 
             const json = await safeJson(res);
@@ -163,10 +162,67 @@ export default function UserProfileScreen({ route, navigation }: any) {
     /* -------------------- FOLLOW / UNFOLLOW -------------------- */
     const handleFollowToggle = useCallback(async () => {
         if (isSelf) return;
-
         const r = await toggleFollow(userId);
         if (!r.ok) return;
     }, [isSelf, toggleFollow, userId]);
+
+    /* -------------------- OPEN CHAT -------------------- */
+    const openChat = useCallback(async () => {
+        if (isSelf) return;
+        if (!user?._id) return;
+        if (openingChat) return;
+
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+            Alert.alert("Erreur", "Tu n'es pas connecté.");
+            return;
+        }
+
+        setOpeningChat(true);
+        try {
+            const res = await fetch(`${API_URL}/api/conversations`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ otherUserId: user._id }),
+            });
+
+            const json = await safeJson(res);
+            if (!res.ok) {
+                console.log("openChat error:", res.status, json);
+                Alert.alert("Erreur", json?.error || "Impossible d'ouvrir la conversation.");
+                return;
+            }
+
+            const conversationId =
+                json?.conversation?._id || json?.conversationId || json?._id || null;
+
+            if (!conversationId) {
+                Alert.alert("Erreur", "Conversation introuvable.");
+                return;
+            }
+
+            // ✅ Root -> Main -> Tab(Messages=Notifications) -> Chat
+            navigation.navigate("Main", {
+                screen: "Notifications",
+                params: {
+                    screen: "Chat",
+                    params: {
+                        conversationId,
+                        otherUser: {
+                            _id: user._id,
+                            pseudo: user.pseudo,
+                            avatarUrl: user.avatarUrl || "",
+                        },
+                    },
+                },
+            });
+        } finally {
+            setOpeningChat(false);
+        }
+    }, [isSelf, user, openingChat, navigation]);
 
     if (loadingInitial || !user) {
         return (
@@ -217,13 +273,33 @@ export default function UserProfileScreen({ route, navigation }: any) {
             </View>
 
             {!isSelf && (
-                <TouchableOpacity
-                    onPress={handleFollowToggle}
-                    style={[styles.followBtn, isFollowing ? styles.following : styles.notFollowing]}
-                    activeOpacity={0.85}
-                >
-                    <Text style={styles.followText}>{isFollowing ? "Ne plus suivre" : "Suivre"}</Text>
-                </TouchableOpacity>
+                <View style={styles.actionsRow}>
+                    {/* ✅ Message */}
+                    <TouchableOpacity
+                        onPress={openChat}
+                        style={[styles.msgBtn, openingChat && { opacity: 0.7 }]}
+                        activeOpacity={0.85}
+                        disabled={openingChat}
+                    >
+                        <Text style={styles.msgText}>
+                            {openingChat ? "Ouverture..." : "Message"}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* ✅ Follow */}
+                    <TouchableOpacity
+                        onPress={handleFollowToggle}
+                        style={[
+                            styles.followBtn,
+                            isFollowing ? styles.following : styles.notFollowing,
+                        ]}
+                        activeOpacity={0.85}
+                    >
+                        <Text style={styles.followText}>
+                            {isFollowing ? "Ne plus suivre" : "Suivre"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             )}
 
             <Text style={styles.sectionTitle}>Posts</Text>
@@ -241,17 +317,28 @@ export default function UserProfileScreen({ route, navigation }: any) {
             onEndReached={loadMore}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
-                loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginVertical: 12 }} /> : null
+                loadingMore ? (
+                    <ActivityIndicator color="#9B5CFF" style={{ marginVertical: 12 }} />
+                ) : null
             }
             refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9B5CFF" />
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor="#9B5CFF"
+                />
             }
         />
     );
 }
 
 const styles = StyleSheet.create({
-    loading: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
+    loading: {
+        flex: 1,
+        backgroundColor: "#000",
+        justifyContent: "center",
+        alignItems: "center",
+    },
     banner: { width: "100%", height: 160 },
     avatar: {
         width: 90,
@@ -262,7 +349,13 @@ const styles = StyleSheet.create({
         marginTop: -50,
         marginLeft: 20,
     },
-    pseudo: { fontSize: 24, color: "#fff", fontWeight: "800", marginLeft: 20, marginTop: 10 },
+    pseudo: {
+        fontSize: 24,
+        color: "#fff",
+        fontWeight: "800",
+        marginLeft: 20,
+        marginTop: 10,
+    },
     bio: { color: "#ccc", marginLeft: 20, marginRight: 20, marginTop: 8 },
     statsRow: {
         flexDirection: "row",
@@ -277,17 +370,36 @@ const styles = StyleSheet.create({
     statNumber: { color: "#fff", fontSize: 18, fontWeight: "700" },
     statLabel: { color: "#aaa", fontSize: 13, marginTop: 2 },
 
-    followBtn: {
-        alignSelf: "flex-start",
-        paddingVertical: 8,
-        paddingHorizontal: 20,
-        borderRadius: 10,
+    actionsRow: {
+        flexDirection: "row",
+        gap: 12,
         marginLeft: 20,
         marginTop: 14,
+        marginRight: 20,
+    },
+
+    msgBtn: {
+        flex: 1,
+        backgroundColor: "#222",
+        borderWidth: 1,
+        borderColor: "#2a2a2a",
+        paddingVertical: 10,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    msgText: { color: "#fff", fontWeight: "800" },
+
+    followBtn: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
     },
     following: { backgroundColor: "#330000", borderWidth: 1, borderColor: "#FF4444" },
     notFollowing: { backgroundColor: "#5E17EB" },
-    followText: { color: "#fff", fontWeight: "700" },
+    followText: { color: "#fff", fontWeight: "800" },
 
     sectionTitle: {
         color: "#fff",

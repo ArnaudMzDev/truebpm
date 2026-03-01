@@ -1,29 +1,49 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     View,
     Text,
-    Image,
-    TouchableOpacity,
+    TextInput,
     StyleSheet,
+    TouchableOpacity,
     ActivityIndicator,
-    Alert,
+    FlatList,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import { useUser } from "../context/UserContext";
+import { Ionicons } from "@expo/vector-icons";
+
+import PostCard from "../components/PostCard";
+import { PostType } from "../components/PostCard/types";
+import UserListItem from "../components/UserListItem";
 
 const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
 const API_URL = `http://${localIP}:3000`;
 
-type Props = {
-    user: {
-        _id: string;
-        pseudo: string;
-        avatarUrl?: string;
-    };
-    navigation: any;
+type Filter = "all" | "posts" | "users";
+
+type SearchUser = {
+    _id: string;
+    pseudo: string;
+    avatarUrl?: string;
+    bio?: string;
+    followers?: number;
+    following?: number;
 };
+
+type SearchItem =
+    | { type: "post"; post: PostType }
+    | { type: "user"; user: SearchUser };
+
+type Props = { navigation: any };
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(value), delayMs);
+        return () => clearTimeout(t);
+    }, [value, delayMs]);
+    return debounced;
+}
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -36,241 +56,241 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
-export default function UserListItem({ user, navigation }: Props) {
-    const { me, toggleFollow } = useUser();
+export default function ExploreSearchScreen({ navigation }: Props) {
+    const [connectedUser, setConnectedUser] = useState<any>(null);
 
-    const [loadingFollow, setLoadingFollow] = useState(false);
-    const [loadingMsg, setLoadingMsg] = useState(false);
+    const [query, setQuery] = useState("");
+    const debouncedQuery = useDebouncedValue(query, 300);
 
-    const isSelf = me?._id?.toString() === user._id?.toString();
+    const [filter, setFilter] = useState<Filter>("all");
 
-    const isFollowing = useMemo(() => {
-        const list = me?.followingList || [];
-        return list.some(
-            (id: any) => id?.toString?.() === user._id?.toString?.()
-        );
-    }, [me, user._id]);
+    const [items, setItems] = useState<SearchItem[]>([]);
+    const [cursor, setCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(true);
 
-    /* ----------------------------- */
-    /*          ACTIONS              */
-    /* ----------------------------- */
+    const [loadingInitial, setLoadingInitial] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
 
-    const goToProfile = () => {
-        navigation.push("UserProfile", { userId: user._id });
-    };
+    const lastRequestKey = useRef<string>("");
 
-    const handleToggleFollow = async () => {
-        if (loadingFollow) return;
-        setLoadingFollow(true);
-        try {
-            await toggleFollow(user._id);
-        } finally {
-            setLoadingFollow(false);
-        }
-    };
+    useEffect(() => {
+        (async () => {
+            const raw = await AsyncStorage.getItem("user");
+            if (raw) {
+                try {
+                    setConnectedUser(JSON.parse(raw));
+                } catch {}
+            }
+        })();
+    }, []);
 
-    const openChat = async () => {
-        if (loadingMsg || isSelf) return;
+    const buildUrl = useCallback(
+        (q: string, nextCursor: string | null) => {
+            const params = new URLSearchParams();
+            params.set("q", q);
+            params.set("type", filter);
+            params.set("limit", "20");
+            if (nextCursor) params.set("cursor", nextCursor);
+            return `${API_URL}/api/search/global?${params.toString()}`;
+        },
+        [filter]
+    );
 
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
-            Alert.alert("Erreur", "Tu n'es pas connecté.");
+    const fetchInitial = useCallback(async () => {
+        const q = debouncedQuery.trim().replace(/\s+/g, " ");
+        if (q.length < 2) {
+            setItems([]);
+            setCursor(null);
+            setHasMore(true);
             return;
         }
 
-        setLoadingMsg(true);
+        const key = `${filter}:${q}`;
+        lastRequestKey.current = key;
+
+        setLoadingInitial(true);
+        setCursor(null);
+        setHasMore(true);
 
         try {
-            // ✅ créer ou récupérer la conversation
-            const res = await fetch(`${API_URL}/api/conversations`, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ otherUserId: user._id }),
-            });
-
+            const res = await fetch(buildUrl(q, null));
             const json = await safeJson(res);
+
+            if (lastRequestKey.current !== key) return;
+
             if (!res.ok) {
-                console.log("create/open conversation error:", res.status, json);
-                Alert.alert(
-                    "Erreur",
-                    json?.error || "Impossible d'ouvrir la conversation."
-                );
+                console.log("Search global error:", res.status, json);
+                setItems([]);
+                setCursor(null);
+                setHasMore(false);
                 return;
             }
 
-            const conversationId =
-                json?.conversation?._id || json?.conversationId || json?._id;
-
-            if (!conversationId) {
-                Alert.alert("Erreur", "Conversation introuvable.");
-                return;
-            }
-
-            // ✅ navigation vers le TAB Messages puis Chat
-            const tabsNav = navigation.getParent?.();
-            (tabsNav || navigation).navigate("Notifications", {
-                screen: "Chat",
-                params: {
-                    conversationId,
-                    otherUser: {
-                        _id: user._id,
-                        pseudo: user.pseudo,
-                        avatarUrl: user.avatarUrl || "",
-                    },
-                },
-            });
+            const nextItems = (json?.items || []) as SearchItem[];
+            setItems(Array.isArray(nextItems) ? nextItems : []);
+            setCursor(json?.nextCursor || null);
+            setHasMore(!!json?.nextCursor);
+        } catch (e) {
+            console.log("Search global fetch error:", e);
+            setItems([]);
+            setCursor(null);
+            setHasMore(false);
         } finally {
-            setLoadingMsg(false);
+            if (lastRequestKey.current === key) setLoadingInitial(false);
         }
-    };
+    }, [debouncedQuery, filter, buildUrl]);
 
-    /* ----------------------------- */
-    /*              UI               */
-    /* ----------------------------- */
+    const loadMore = useCallback(async () => {
+        const q = debouncedQuery.trim().replace(/\s+/g, " ");
+        if (q.length < 2) return;
+        if (!cursor || loadingMore || !hasMore) return;
+
+        setLoadingMore(true);
+        try {
+            const res = await fetch(buildUrl(q, cursor));
+            const json = await safeJson(res);
+
+            if (!res.ok) {
+                setHasMore(false);
+                return;
+            }
+
+            const nextItems = (json?.items || []) as SearchItem[];
+            setItems((prev) => [...prev, ...(Array.isArray(nextItems) ? nextItems : [])]);
+            setCursor(json?.nextCursor || null);
+            setHasMore(!!json?.nextCursor);
+        } catch (e) {
+            console.log("Search global loadMore error:", e);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [debouncedQuery, cursor, hasMore, loadingMore, buildUrl]);
+
+    useEffect(() => {
+        fetchInitial();
+    }, [fetchInitial]);
+
+    const FilterButton = useMemo(
+        () =>
+            function Btn({ value, label }: { value: Filter; label: string }) {
+                const active = filter === value;
+                return (
+                    <TouchableOpacity
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => setFilter(value)}
+                    >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                );
+            },
+        [filter]
+    );
+
+    const renderItem = ({ item }: { item: SearchItem }) => {
+        if (!item) return null;
+
+        if (item.type === "post") {
+            // ✅ guard
+            if (!item.post?._id) return null;
+            return <PostCard post={item.post} />;
+        }
+
+        // ✅ guard
+        if (!item.user?._id) return null;
+
+        return (
+            <UserListItem
+                user={item.user}
+                navigation={navigation}
+            />
+        );
+    };
 
     return (
         <View style={styles.container}>
-            <TouchableOpacity
-                style={styles.userInfo}
-                onPress={goToProfile}
-                activeOpacity={0.85}
-            >
-                <Image
-                    source={{
-                        uri: user.avatarUrl || "https://picsum.photos/200",
-                    }}
-                    style={styles.avatar}
+            <Text style={styles.title}>Recherche</Text>
+
+            <View style={styles.searchRow}>
+                <Ionicons name="search" size={18} color="#777" />
+                <TextInput
+                    style={styles.input}
+                    placeholder="Rechercher posts et utilisateurs..."
+                    placeholderTextColor="#666"
+                    value={query}
+                    onChangeText={setQuery}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    returnKeyType="search"
                 />
-                <Text style={styles.pseudo} numberOfLines={1}>
-                    {user.pseudo}
-                </Text>
-            </TouchableOpacity>
+            </View>
 
-            {!isSelf && (
-                <View style={styles.actions}>
-                    {/* 💬 Message */}
-                    <TouchableOpacity
-                        style={[
-                            styles.msgBtn,
-                            loadingMsg && { opacity: 0.6 },
-                        ]}
-                        onPress={openChat}
-                        disabled={loadingMsg}
-                        activeOpacity={0.85}
-                    >
-                        {loadingMsg ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                            <Ionicons
-                                name="chatbubble-ellipses"
-                                size={16}
-                                color="#fff"
-                            />
-                        )}
-                    </TouchableOpacity>
+            <View style={styles.chipsRow}>
+                <FilterButton value="all" label="Tout" />
+                <FilterButton value="posts" label="Posts" />
+                <FilterButton value="users" label="Utilisateurs" />
+            </View>
 
-                    {/* ➕ Follow */}
-                    <TouchableOpacity
-                        style={[
-                            styles.followBtn,
-                            isFollowing && styles.following,
-                            loadingFollow && { opacity: 0.6 },
-                        ]}
-                        onPress={handleToggleFollow}
-                        disabled={loadingFollow}
-                        activeOpacity={0.85}
-                    >
-                        {loadingFollow ? (
-                            <ActivityIndicator size="small" color="#fff" />
+            {loadingInitial ? (
+                <ActivityIndicator color="#9B5CFF" style={{ marginTop: 20 }} />
+            ) : (
+                <FlatList
+                    data={items}
+                    keyExtractor={(it, idx) => {
+                        // ✅ super safe
+                        if (!it) return `x:${idx}`;
+
+                        if (it.type === "post") {
+                            return it.post?._id ? `p:${it.post._id}` : `p:${idx}`;
+                        }
+
+                        return it.user?._id ? `u:${it.user._id}` : `u:${idx}`;
+                    }}
+                    renderItem={renderItem}
+                    contentContainerStyle={{ paddingBottom: 160 }}
+                    onEndReached={loadMore}
+                    onEndReachedThreshold={0.5}
+                    ListEmptyComponent={
+                        debouncedQuery.trim().length >= 2 ? (
+                            <Text style={styles.empty}>Aucun résultat</Text>
                         ) : (
-                            <Text style={styles.followText}>
-                                {isFollowing ? "Ne plus suivre" : "Suivre"}
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
+                            <Text style={styles.empty}>Tape au moins 2 caractères</Text>
+                        )
+                    }
+                    ListFooterComponent={
+                        loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginVertical: 14 }} /> : null
+                    }
+                    keyboardShouldPersistTaps="handled"
+                />
             )}
         </View>
     );
 }
 
-/* ----------------------------- */
-/*             STYLES            */
-/* ----------------------------- */
-
 const styles = StyleSheet.create({
-    container: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderColor: "#222",
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        backgroundColor: "#000",
-    },
-
-    userInfo: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-        paddingRight: 12,
-    },
-
-    avatar: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        marginRight: 12,
-        backgroundColor: "#111",
-    },
-
-    pseudo: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "600",
-        flexShrink: 1,
-    },
-
-    actions: {
+    container: { flex: 1, backgroundColor: "#000", paddingTop: 50, paddingHorizontal: 16 },
+    title: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 14 },
+    searchRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-    },
-
-    msgBtn: {
-        width: 42,
-        height: 38,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 10,
-        backgroundColor: "#222",
+        backgroundColor: "#111",
+        borderRadius: 12,
+        paddingHorizontal: 12,
         borderWidth: 1,
-        borderColor: "#2a2a2a",
+        borderColor: "#222",
     },
-
-    followBtn: {
-        minWidth: 120,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#5E17EB",
+    input: { flex: 1, height: 46, color: "#fff", fontSize: 15 },
+    chipsRow: { flexDirection: "row", gap: 10, marginTop: 12, marginBottom: 10 },
+    chip: {
         paddingVertical: 8,
-        paddingHorizontal: 14,
-        borderRadius: 10,
-    },
-
-    following: {
-        backgroundColor: "#330000",
+        paddingHorizontal: 12,
+        borderRadius: 999,
+        backgroundColor: "#111",
         borderWidth: 1,
-        borderColor: "#FF4444",
+        borderColor: "#222",
     },
-
-    followText: {
-        color: "#fff",
-        fontSize: 14,
-        fontWeight: "700",
-    },
+    chipActive: { backgroundColor: "#5E17EB", borderColor: "#5E17EB" },
+    chipText: { color: "#bbb", fontWeight: "700", fontSize: 13 },
+    chipTextActive: { color: "#fff" },
+    empty: { color: "#777", textAlign: "center", marginTop: 30 },
 });

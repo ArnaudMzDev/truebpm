@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+// apps/mobile/src/components/PostCard/index.tsx
+import React, { useMemo, useState, useCallback } from "react";
 import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -27,9 +28,7 @@ export default function PostCard({ post, onDeleted }: Props) {
     const isRepost = localPost.type === "repost" && !!localPost.repostOf;
 
     // ✅ le post de référence (likes / reposts / commentaires)
-    const basePost: PostType = (
-        isRepost ? localPost.repostOf : localPost
-    ) as PostType;
+    const basePost: PostType = (isRepost ? localPost.repostOf : localPost) as PostType;
 
     // ✅ reposter (pour le bandeau)
     const reposter = localPost.repostedBy ?? null;
@@ -48,9 +47,7 @@ export default function PostCard({ post, onDeleted }: Props) {
         if (basePost.ratings && typeof basePost.ratings === "object") {
             const values = Object.values(basePost.ratings);
             if (!values.length) return null;
-            return Number(
-                (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)
-            );
+            return Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1));
         }
 
         const legacy = [basePost.prod, basePost.lyrics, basePost.emotion].filter(
@@ -59,13 +56,10 @@ export default function PostCard({ post, onDeleted }: Props) {
 
         if (!legacy.length) return null;
 
-        return Number(
-            (legacy.reduce((a, b) => a + b, 0) / legacy.length).toFixed(1)
-        );
+        return Number((legacy.reduce((a, b) => a + b, 0) / legacy.length).toFixed(1));
     }, [basePost, isSimple]);
 
-    const openDetail = () =>
-        navigation.push("PostDetail", { postId: basePost._id });
+    const openDetail = () => navigation.push("PostDetail", { postId: basePost._id });
 
     // ✅ patch local (likes / reposts)
     const onLocalUpdate = (patch: Partial<PostType>) => {
@@ -77,6 +71,19 @@ export default function PostCard({ post, onDeleted }: Props) {
         });
     };
 
+    // ✅ Share: ouvre Messages -> Conversations avec sharePostId
+    const onShare = useCallback(() => {
+        if (!basePost?._id) return;
+
+        navigation.navigate("Main", {
+            screen: "Notifications", // tab Messages
+            params: {
+                screen: "Conversations",
+                params: { sharePostId: basePost._id },
+            },
+        });
+    }, [navigation, basePost?._id]);
+
     return (
         <TouchableOpacity activeOpacity={0.95} onPress={openDetail}>
             <View style={styles.card}>
@@ -85,9 +92,7 @@ export default function PostCard({ post, onDeleted }: Props) {
                     <View style={styles.repostBanner}>
                         <Ionicons name="repeat" size={16} color="#9B5CFF" />
                         <Text style={styles.repostText}>
-                            <Text style={styles.reposterName}>
-                                {reposter.pseudo}
-                            </Text>{" "}
+                            <Text style={styles.reposterName}>{reposter.pseudo}</Text>{" "}
                             a reposté
                         </Text>
                     </View>
@@ -133,9 +138,7 @@ export default function PostCard({ post, onDeleted }: Props) {
                         />
                     )}
 
-                    {basePost.comment?.trim().length ? (
-                        <CommentBox text={basePost.comment} />
-                    ) : null}
+                    {basePost.comment?.trim().length ? <CommentBox text={basePost.comment} /> : null}
 
                     <AudioPreview
                         previewUrl={basePost.previewUrl}
@@ -148,6 +151,7 @@ export default function PostCard({ post, onDeleted }: Props) {
                         post={basePost}
                         onLocalUpdate={onLocalUpdate}
                         onOpenComments={openDetail}
+                        onShare={onShare} // ✅ NEW
                     />
                 </View>
             </View>

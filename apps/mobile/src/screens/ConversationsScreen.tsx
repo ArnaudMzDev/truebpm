@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+// apps/mobile/src/screens/ConversationsScreen.tsx
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     View,
     Text,
@@ -27,16 +28,30 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
+type Participant = { _id: string; pseudo: string; avatarUrl?: string };
+
 type Conversation = {
     _id: string;
-    participants: Array<{ _id: string; pseudo: string; avatarUrl?: string }>;
+    participants: Participant[];
     lastMessageAt?: string | null;
     lastMessageText?: string;
-    lastMessageType?: "text" | "post";
+    lastMessageType?: "text" | "post" | "image" | "";
     updatedAt?: string;
+
+    // ✅ système de "lu" (si ton API l’envoie)
+    unreadCount?: number;
 };
 
-export default function ConversationsScreen({ navigation }: any) {
+function formatPreview(c: Conversation) {
+    if (c.lastMessageType === "post") return c.lastMessageText || "📌 Post partagé";
+    if (c.lastMessageType === "image") return c.lastMessageText || "📷 Photo";
+    return c.lastMessageText || "—";
+}
+
+export default function ConversationsScreen({ navigation, route }: any) {
+    // ✅ si on arrive depuis "Partager", on reçoit sharePostId
+    const sharePostId: string | null = route?.params?.sharePostId ?? null;
+
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -90,42 +105,57 @@ export default function ConversationsScreen({ navigation }: any) {
         setRefreshing(false);
     }, [fetchConversations]);
 
-    const openConversation = (c: Conversation) => {
-        // autre participant (DM)
-        const other =
-            c.participants?.find((p) => p._id?.toString?.() !== meId?.toString?.()) ??
-            c.participants?.[0];
+    const openConversation = useCallback(
+        (c: Conversation) => {
+            const other =
+                c.participants?.find((p) => p?._id?.toString?.() !== meId?.toString?.()) ??
+                c.participants?.[0] ??
+                null;
 
-        navigation.navigate("Chat", {
-            conversationId: c._id,
-            otherUser: other ? { _id: other._id, pseudo: other.pseudo, avatarUrl: other.avatarUrl } : null,
-        });
-    };
+            navigation.navigate("Chat", {
+                conversationId: c._id,
+                otherUser: other
+                    ? { _id: other._id, pseudo: other.pseudo, avatarUrl: other.avatarUrl }
+                    : null,
+                // ✅ si présent, ChatScreen auto-enverra le post
+                sharePostId: sharePostId || null,
+            });
+        },
+        [meId, navigation, sharePostId]
+    );
+
+    const title = useMemo(() => (sharePostId ? "Partager à..." : "Messages"), [sharePostId]);
 
     const renderItem = ({ item }: { item: Conversation }) => {
         const other =
-            item.participants?.find((p) => p._id?.toString?.() !== meId?.toString?.()) ??
-            item.participants?.[0];
+            item.participants?.find((p) => p?._id?.toString?.() !== meId?.toString?.()) ??
+            item.participants?.[0] ??
+            null;
 
-        const last =
-            item.lastMessageType === "post"
-                ? item.lastMessageText || "📌 Post partagé"
-                : item.lastMessageText || "—";
+        const unread = (item.unreadCount ?? 0) > 0;
 
         return (
             <TouchableOpacity style={styles.row} onPress={() => openConversation(item)} activeOpacity={0.85}>
-                <Image
-                    source={{ uri: other?.avatarUrl || "https://picsum.photos/200" }}
-                    style={styles.avatar}
-                />
+                <Image source={{ uri: other?.avatarUrl || "https://picsum.photos/200" }} style={styles.avatar} />
+
                 <View style={{ flex: 1 }}>
-                    <Text style={styles.name} numberOfLines={1}>
-                        {other?.pseudo || "Conversation"}
-                    </Text>
-                    <Text style={styles.preview} numberOfLines={1}>
-                        {last}
+                    <View style={styles.topLine}>
+                        <Text style={[styles.name, unread && styles.nameUnread]} numberOfLines={1}>
+                            {other?.pseudo || "Conversation"}
+                        </Text>
+
+                        {(item.unreadCount ?? 0) > 0 ? (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{item.unreadCount}</Text>
+                            </View>
+                        ) : null}
+                    </View>
+
+                    <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
+                        {formatPreview(item)}
                     </Text>
                 </View>
+
                 <Ionicons name="chevron-forward" size={18} color="#666" />
             </TouchableOpacity>
         );
@@ -141,7 +171,7 @@ export default function ConversationsScreen({ navigation }: any) {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Messages</Text>
+            <Text style={styles.title}>{title}</Text>
 
             <FlatList
                 data={conversations}
@@ -149,9 +179,7 @@ export default function ConversationsScreen({ navigation }: any) {
                 renderItem={renderItem}
                 contentContainerStyle={{ paddingBottom: 120 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9B5CFF" />}
-                ListEmptyComponent={
-                    <Text style={styles.empty}>Aucune conversation pour l’instant.</Text>
-                }
+                ListEmptyComponent={<Text style={styles.empty}>Aucune conversation pour l’instant.</Text>}
             />
         </View>
     );
@@ -172,6 +200,22 @@ const styles = StyleSheet.create({
         borderBottomColor: "#111",
     },
     avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#111" },
-    name: { color: "#fff", fontWeight: "800", fontSize: 15 },
+
+    topLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+    name: { color: "#fff", fontWeight: "800", fontSize: 15, flex: 1 },
     preview: { color: "#888", marginTop: 2, fontSize: 13 },
+
+    nameUnread: { color: "#fff" },
+    previewUnread: { color: "#ddd" },
+
+    badge: {
+        minWidth: 20,
+        paddingHorizontal: 6,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: "#9B5CFF",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    badgeText: { color: "#000", fontSize: 11, fontWeight: "900" },
 });

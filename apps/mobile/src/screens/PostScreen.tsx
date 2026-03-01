@@ -103,6 +103,18 @@ export default function PostScreen({ route, navigation }: any) {
         [navigation]
     );
 
+    const openShare = useCallback(() => {
+        if (!post?._id) return;
+
+        navigation.navigate("Main", {
+            screen: "Notifications",
+            params: {
+                screen: "Conversations",
+                params: { sharePostId: post._id },
+            },
+        });
+    }, [navigation, post?._id]);
+
     const fetchPost = useCallback(async () => {
         setLoadingPost(true);
         const token = await AsyncStorage.getItem("token");
@@ -554,8 +566,12 @@ export default function PostScreen({ route, navigation }: any) {
                     <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 8 }}>
                         <Ionicons name="arrow-back" size={22} color="#fff" />
                     </TouchableOpacity>
+
                     <Text style={styles.topTitle}>Post</Text>
-                    <View style={{ width: 38 }} />
+
+                    <TouchableOpacity onPress={openShare} style={{ padding: 8 }} activeOpacity={0.85}>
+                        <Ionicons name="paper-plane-outline" size={22} color="#fff" />
+                    </TouchableOpacity>
                 </View>
 
                 {post ? <PostCard post={post} /> : null}

@@ -1,25 +1,22 @@
+// apps/api/models/Message.ts
 import { Schema, model, models } from "mongoose";
 
 const MessageSchema = new Schema(
     {
-        conversationId: {
-            type: Schema.Types.ObjectId,
-            ref: "Conversation",
-            required: true,
-            index: true,
-        },
+        conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true, index: true },
+        senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
-        senderId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-
-        type: { type: String, enum: ["text", "post"], default: "text", index: true },
-
-        // si type=text
+        type: { type: String, enum: ["text", "post", "image"], default: "text" },
         text: { type: String, default: "" },
 
-        // si type=post
         postId: { type: Schema.Types.ObjectId, ref: "Post", default: null },
 
-        // pour gérer l’ordre si besoin (sinon timestamps suffisent)
+        imageUrl: { type: String, default: "" },
+        imageWidth: { type: Number, default: null },
+        imageHeight: { type: Number, default: null },
+
+        // ✅ statut simple
+        status: { type: String, enum: ["sent", "delivered"], default: "sent" },
     },
     { timestamps: true }
 );

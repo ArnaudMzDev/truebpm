@@ -1,178 +1,188 @@
-import React, { useMemo, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+// apps/mobile/src/components/PostCard/ActionsBar.tsx
+import React from "react";
+import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+
 import { PostType } from "./types";
 
 const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
 const API_URL = `http://${localIP}:3000`;
 
-type Props = {
-    post: PostType;
-    onLocalUpdate?: (patch: Partial<PostType>) => void;
-    onOpenComments?: () => void;
-};
-
-async function safeJson(res: Response) {
-    const txt = await res.text().catch(() => "");
-    if (!txt) return null;
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text();
+    if (!text) return null;
     try {
-        return JSON.parse(txt);
+        return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", txt.slice(0, 200));
+        console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
 
-export default function ActionsBar({ post, onLocalUpdate, onOpenComments }: Props) {
-    const [loadingLike, setLoadingLike] = useState(false);
-    const [loadingRepost, setLoadingRepost] = useState(false);
+type Props = {
+    post: PostType;
+    onLocalUpdate: (patch: Partial<PostType>) => void;
+    onOpenComments: () => void;
 
-    const liked = !!post.likedByMe;
-    const reposted = !!post.repostedByMe;
+    // ✅ NEW
+    onShare?: () => void;
+};
 
-    const likeIcon = useMemo(() => (liked ? "heart" : "heart-outline"), [liked]);
-    const repostIcon = useMemo(() => (reposted ? "repeat" : "repeat-outline"), [reposted]);
+export default function ActionsBar({ post, onLocalUpdate, onOpenComments, onShare }: Props) {
+    const [liking, setLiking] = React.useState(false);
+    const [reposting, setReposting] = React.useState(false);
 
     const toggleLike = async () => {
-        if (loadingLike) return;
-
+        if (liking) return;
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
 
-        // snapshot au clic (évite les valeurs “qui bougent” pendant l’attente)
-        const wasLiked = !!post.likedByMe;
-        const wasCount = post.likesCount ?? 0;
+        setLiking(true);
+        const prevLiked = !!post.likedByMe;
+        const prevCount = post.likesCount ?? 0;
 
-        const optimisticLiked = !wasLiked;
-        const optimisticCount = Math.max(0, wasCount + (optimisticLiked ? 1 : -1));
+        // optimistic
+        onLocalUpdate({
+            likedByMe: !prevLiked,
+            likesCount: Math.max(0, prevCount + (!prevLiked ? 1 : -1)),
+        });
 
         try {
-            setLoadingLike(true);
-
-            // optimistic
-            onLocalUpdate?.({
-                likedByMe: optimisticLiked,
-                likesCount: optimisticCount,
-            });
-
             const res = await fetch(`${API_URL}/api/posts/${post._id}/like`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}` },
             });
 
             const json = await safeJson(res);
-
             if (!res.ok) {
                 // rollback
-                onLocalUpdate?.({ likedByMe: wasLiked, likesCount: wasCount });
+                onLocalUpdate({ likedByMe: prevLiked, likesCount: prevCount });
                 return;
             }
 
-            // ✅ robuste: si le serveur renvoie status/likesCount on prend, sinon on garde l'optimiste
-            const serverLiked =
-                json?.status === "liked" ? true : json?.status === "unliked" ? false : optimisticLiked;
-
-            const serverCount =
-                typeof json?.likesCount === "number" ? json.likesCount : optimisticCount;
-
-            onLocalUpdate?.({ likedByMe: serverLiked, likesCount: serverCount });
+            if (typeof json?.likesCount === "number") {
+                onLocalUpdate({ likesCount: json.likesCount, likedByMe: json?.status === "liked" });
+            }
         } finally {
-            setLoadingLike(false);
+            setLiking(false);
         }
     };
 
     const toggleRepost = async () => {
-        if (loadingRepost) return;
-
+        if (reposting) return;
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
 
-        const wasReposted = !!post.repostedByMe;
-        const wasCount = post.repostsCount ?? 0;
+        setReposting(true);
 
-        const optimisticReposted = !wasReposted;
-        const optimisticCount = Math.max(0, wasCount + (optimisticReposted ? 1 : -1));
+        const prev = !!post.repostedByMe;
+        const prevCount = post.repostsCount ?? 0;
+
+        // optimistic
+        onLocalUpdate({
+            repostedByMe: !prev,
+            repostsCount: Math.max(0, prevCount + (!prev ? 1 : -1)),
+        });
 
         try {
-            setLoadingRepost(true);
-
-            onLocalUpdate?.({
-                repostedByMe: optimisticReposted,
-                repostsCount: optimisticCount,
-            });
-
             const res = await fetch(`${API_URL}/api/posts/${post._id}/repost`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}` },
             });
 
             const json = await safeJson(res);
-
             if (!res.ok) {
-                onLocalUpdate?.({ repostedByMe: wasReposted, repostsCount: wasCount });
+                onLocalUpdate({ repostedByMe: prev, repostsCount: prevCount });
                 return;
             }
 
-            // ✅ TON API peut renvoyer:
-            // - { status: "reposted" | "unreposted", repostsCount }
-            // - ou { success: true, post: {...} } (pas de status)
-            const serverReposted =
-                json?.status === "reposted"
-                    ? true
-                    : json?.status === "unreposted"
-                        ? false
-                        : optimisticReposted;
-
-            const serverCount =
-                typeof json?.repostsCount === "number"
-                    ? json.repostsCount
-                    : typeof json?.post?.repostsCount === "number"
-                        ? json.post.repostsCount
-                        : optimisticCount;
-
-            onLocalUpdate?.({
-                repostedByMe: serverReposted,
-                repostsCount: serverCount,
-            });
+            if (typeof json?.repostsCount === "number") {
+                onLocalUpdate({
+                    repostsCount: json.repostsCount,
+                    repostedByMe: json?.status === "reposted",
+                });
+            }
         } finally {
-            setLoadingRepost(false);
+            setReposting(false);
         }
     };
 
     return (
         <View style={styles.row}>
-            <TouchableOpacity
-                style={styles.btn}
-                onPress={toggleLike}
-                activeOpacity={0.8}
-                disabled={loadingLike}
-            >
-                <Ionicons name={likeIcon as any} size={18} color={liked ? "#ff4d6d" : "#bbb"} />
+            {/* ❤️ Like */}
+            <TouchableOpacity style={styles.btn} onPress={toggleLike} activeOpacity={0.85}>
+                {liking ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                    <Ionicons name={post.likedByMe ? "heart" : "heart-outline"} size={18} color={post.likedByMe ? "#ff4d6d" : "#fff"} />
+                )}
                 <Text style={styles.count}>{post.likesCount ?? 0}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-                style={styles.btn}
-                onPress={toggleRepost}
-                activeOpacity={0.8}
-                disabled={loadingRepost}
-            >
-                <Ionicons name={repostIcon as any} size={18} color={reposted ? "#9B5CFF" : "#bbb"} />
+            {/* 💬 Comments */}
+            <TouchableOpacity style={styles.btn} onPress={onOpenComments} activeOpacity={0.85}>
+                <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+                <Text style={styles.count}>{post.commentsCount ?? 0}</Text>
+            </TouchableOpacity>
+
+            {/* 🔁 Repost */}
+            <TouchableOpacity style={styles.btn} onPress={toggleRepost} activeOpacity={0.85}>
+                {reposting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                    <Ionicons name={post.repostedByMe ? "repeat" : "repeat-outline"} size={18} color={post.repostedByMe ? "#9B5CFF" : "#fff"} />
+                )}
                 <Text style={styles.count}>{post.repostsCount ?? 0}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.btn} onPress={onOpenComments} activeOpacity={0.8}>
-                <Ionicons name={"chatbubble-outline"} size={18} color={"#bbb"} />
-                <Text style={styles.count}>{post.commentsCount ?? 0}</Text>
+            {/* ✈️ Share (NEW) */}
+            <TouchableOpacity
+                style={[styles.btn, styles.shareBtn]}
+                onPress={onShare}
+                activeOpacity={0.85}
+                disabled={!onShare}
+            >
+                <Ionicons name="paper-plane-outline" size={18} color="#fff" />
+                <Text style={styles.shareText}>Partager</Text>
             </TouchableOpacity>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    row: { flexDirection: "row", alignItems: "center", marginTop: 12 },
-    btn: { flexDirection: "row", alignItems: "center", marginRight: 18 },
-    count: { color: "#bbb", marginLeft: 6, fontSize: 13, fontWeight: "600" },
+    row: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 14,
+        marginTop: 12,
+    },
+    btn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderRadius: 12,
+        backgroundColor: "#161616",
+        borderWidth: 1,
+        borderColor: "#222",
+    },
+    count: {
+        color: "#fff",
+        fontWeight: "800",
+        fontSize: 12,
+    },
+    shareBtn: {
+        marginLeft: "auto",
+        backgroundColor: "#222",
+        borderColor: "#2a2a2a",
+        paddingHorizontal: 12,
+    },
+    shareText: {
+        color: "#fff",
+        fontWeight: "900",
+        fontSize: 12,
+    },
 });

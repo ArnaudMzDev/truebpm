@@ -37,7 +37,7 @@ async function safeJson(res: Response): Promise<any | null> {
 }
 
 export default function UserListItem({ user, navigation }: Props) {
-    const { me, toggleFollow } = useUser();
+    if (!user || !user._id) return null;    const { me, toggleFollow } = useUser();
 
     const [loadingFollow, setLoadingFollow] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState(false);
