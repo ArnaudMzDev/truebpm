@@ -17,10 +17,6 @@ async function verifyJwtEdge(token: string) {
     return id;
 }
 
-/**
- * Si Bearer présent et valide -> inject x-user-id
- * Sinon -> null
- */
 async function getUserIdFromAuth(req: NextRequest): Promise<string | null> {
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) return null;
@@ -35,61 +31,79 @@ async function getUserIdFromAuth(req: NextRequest): Promise<string | null> {
     }
 }
 
+function withInjectedUserId(req: NextRequest, userId: string) {
+    const headers = new Headers(req.headers);
+    headers.set("x-user-id", userId);
+
+    return NextResponse.next({
+        request: { headers },
+    });
+}
+
 export async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
     const method = req.method;
 
     // -----------------------------
-    // ✅ PUBLIC (no auth required)
+    // ✅ PUBLIC
     // -----------------------------
     if (pathname.startsWith("/api/auth")) return NextResponse.next();
     if (pathname.startsWith("/api/health")) return NextResponse.next();
 
-    // ✅ Posts feed: PUBLIC mais token-aware
+    if (pathname.startsWith("/api/apple")) return NextResponse.next();
+    if (pathname.startsWith("/api/music")) return NextResponse.next();
+    if (method === "GET" && pathname.startsWith("/api/search")) return NextResponse.next();
+
+    // -----------------------------
+    // ✅ PUBLIC but token-aware
+    // -----------------------------
+
+    // Feed
     if (method === "GET" && pathname === "/api/posts") {
         const userId = await getUserIdFromAuth(req);
-        if (!userId) return NextResponse.next();
-
-        const headers = new Headers(req.headers);
-        headers.set("x-user-id", userId);
-        return NextResponse.next({ request: { headers } });
+        return userId ? withInjectedUserId(req, userId) : NextResponse.next();
     }
 
-    // ✅ Post detail: PUBLIC mais token-aware (pour coeur rouge en détail)
+    // Post detail
     if (method === "GET" && /^\/api\/posts\/[0-9a-fA-F]{24}$/.test(pathname)) {
         const userId = await getUserIdFromAuth(req);
-        if (!userId) return NextResponse.next();
-
-        const headers = new Headers(req.headers);
-        headers.set("x-user-id", userId);
-        return NextResponse.next({ request: { headers } });
+        return userId ? withInjectedUserId(req, userId) : NextResponse.next();
     }
 
-    // ✅ Posts by user: PUBLIC mais token-aware
+    // Post comments list
+    if (method === "GET" && /^\/api\/posts\/[0-9a-fA-F]{24}\/comments$/.test(pathname)) {
+        const userId = await getUserIdFromAuth(req);
+        return userId ? withInjectedUserId(req, userId) : NextResponse.next();
+    }
+
+    // Comment replies / thread
+    if (
+        method === "GET" &&
+        (
+            /^\/api\/comments\/[0-9a-fA-F]{24}\/replies$/.test(pathname) ||
+            /^\/api\/comments\/[0-9a-fA-F]{24}\/thread$/.test(pathname)
+        )
+    ) {
+        const userId = await getUserIdFromAuth(req);
+        return userId ? withInjectedUserId(req, userId) : NextResponse.next();
+    }
+
+    // Posts by user
     if (method === "GET" && pathname.startsWith("/api/posts/user/")) {
-        const parts = pathname.split("/").filter(Boolean); // ["api","posts","user",":id"]
+        const parts = pathname.split("/").filter(Boolean);
         const id = parts[3];
+
         if (id && isObjectId(id)) {
             const userId = await getUserIdFromAuth(req);
-            if (!userId) return NextResponse.next();
-
-            const headers = new Headers(req.headers);
-            headers.set("x-user-id", userId);
-            return NextResponse.next({ request: { headers } });
+            return userId ? withInjectedUserId(req, userId) : NextResponse.next();
         }
     }
 
-    // Search public
-    if (method === "GET" && pathname.startsWith("/api/search")) {
-        return NextResponse.next();
-    }
-
-    // User public: /api/user/:id (+ followers/following)
+    // Public user routes
     if (method === "GET" && pathname.startsWith("/api/user/")) {
-        const parts = pathname.split("/").filter(Boolean); // ["api","user",":id",...]
+        const parts = pathname.split("/").filter(Boolean);
         const third = parts[2];
 
-        // privé
         if (third === "me" || third === "profile") {
             // continue -> auth required
         } else if (third && isObjectId(third)) {
@@ -101,32 +115,15 @@ export async function middleware(req: NextRequest) {
     }
 
     // -----------------------------
-    // 🔐 PRIVATE (auth required)
+    // 🔐 PRIVATE
     // -----------------------------
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const userId = await getUserIdFromAuth(req);
+
+    if (!userId) {
         return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
     }
 
-    const token = authHeader.replace("Bearer ", "").trim();
-    if (!token) {
-        return NextResponse.json({ error: "Token manquant." }, { status: 401 });
-    }
-
-    try {
-        const userId = await verifyJwtEdge(token);
-        if (!userId) {
-            return NextResponse.json({ error: "Token invalide ou expiré." }, { status: 401 });
-        }
-
-        const headers = new Headers(req.headers);
-        headers.set("x-user-id", userId);
-
-        return NextResponse.next({ request: { headers } });
-    } catch (err) {
-        console.error("❌ Middleware JWT error:", err);
-        return NextResponse.json({ error: "Token invalide ou expiré." }, { status: 401 });
-    }
+    return withInjectedUserId(req, userId);
 }
 
 export const config = {

@@ -9,12 +9,10 @@ import {
     Text,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import { API_URL } from "../lib/config";
 import { useFocusEffect } from "@react-navigation/native";
 import UserListItem from "../components/UserListItem";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();

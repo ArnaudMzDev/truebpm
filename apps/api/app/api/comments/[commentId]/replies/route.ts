@@ -1,14 +1,15 @@
-// apps/api/app/api/comments/[commentId]/replies/route.ts
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Comment from "@/models/Comment";
 import Post from "@/models/Post";
 import mongoose from "mongoose";
+import { getOptionalUserId, requireUserId } from "@/lib/requestAuth";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * GET /api/comments/:commentId/replies?limit=10&cursor=<objectId>
- * -> renvoie UNIQUEMENT les réponses DIRECTES (parentId = commentId)
+ * -> renvoie UNIQUEMENT les réponses directes (parentId = commentId)
  * Tri ASC (ancien -> récent)
  */
 export async function GET(req: Request, { params }: { params: { commentId: string } }) {
@@ -20,30 +21,29 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
             return NextResponse.json({ error: "commentId invalide." }, { status: 400 });
         }
 
+        const meId = await getOptionalUserId(req);
+        const me =
+            meId && mongoose.Types.ObjectId.isValid(meId)
+                ? new mongoose.Types.ObjectId(meId)
+                : null;
+
         const { searchParams } = new URL(req.url);
         const limit = Math.min(Number(searchParams.get("limit") || 10), 50);
         const cursor = searchParams.get("cursor");
 
-        // ✅ "me" optionnel si token présent (middleware injecte x-user-id)
-        const meId = req.headers.get("x-user-id");
-        const me =
-            meId && mongoose.Types.ObjectId.isValid(meId) ? new mongoose.Types.ObjectId(meId) : null;
-
         const query: any = { parentId: commentId };
 
-        // Pagination ASC: on charge "après" un cursor
         if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
             query._id = { $gt: cursor };
         }
 
         const items: any[] = await Comment.find(query)
-            .sort({ _id: 1 }) // ✅ ancien -> récent
+            .sort({ _id: 1 })
             .limit(limit + 1)
             .populate("userId", "pseudo avatarUrl")
             .populate("replyToUserId", "pseudo")
             .lean();
 
-        // ✅ nextCursor = DERNIER ÉLÉMENT RETOURNÉ (pas l'extra)
         let nextCursor: string | null = null;
         const hasMore = items.length > limit;
 
@@ -55,13 +55,9 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
         const replies = slice.map((c: any) => {
             const likesArr = Array.isArray(c.likes) ? c.likes : [];
             const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
+            const likesCount = likesArr.length;
 
-            const likesCount = typeof c.likesCount === "number" ? c.likesCount : likesArr.length;
-
-            // on enlève le tableau likes (lourd)
             const { likes, ...rest } = c;
-
-            // rest contient déjà directRepliesCount, repliesCount, rootId, depth, etc.
             return { ...rest, likesCount, likedByMe };
         });
 
@@ -74,14 +70,16 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
 
 /**
  * POST /api/comments/:commentId/replies
- * -> crée une réponse à CE commentaire (qu'il soit racine ou reply)
+ * -> crée une réponse à CE commentaire (racine ou reply)
  */
 export async function POST(req: Request, { params }: { params: { commentId: string } }) {
     try {
         await connectDB();
 
-        const meId = req.headers.get("x-user-id");
-        if (!meId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        const meId = await requireUserId(req);
+        if (!meId) {
+            return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        }
 
         const { commentId } = params;
         if (!mongoose.Types.ObjectId.isValid(commentId) || !mongoose.Types.ObjectId.isValid(meId)) {
@@ -89,13 +87,16 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
         }
 
         const parent: any = await Comment.findById(commentId).lean();
-        if (!parent) return NextResponse.json({ error: "Commentaire introuvable." }, { status: 404 });
+        if (!parent) {
+            return NextResponse.json({ error: "Commentaire introuvable." }, { status: 404 });
+        }
 
         const body = await req.json().catch(() => null);
         const text = typeof body?.text === "string" ? body.text.trim() : "";
-        if (!text) return NextResponse.json({ error: "Réponse vide." }, { status: 400 });
+        if (!text) {
+            return NextResponse.json({ error: "Réponse vide." }, { status: 400 });
+        }
 
-        // ✅ rootId / depth
         const rootId = parent.rootId ? parent.rootId : parent._id;
         const depth = (parent.depth || 0) + 1;
 
@@ -109,17 +110,36 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
             replyToUserId: parent.userId ?? null,
         });
 
-        // ✅ compteurs
-        await Comment.updateOne({ _id: parent._id }, { $inc: { directRepliesCount: 1 } });
-        await Comment.updateOne({ _id: rootId }, { $inc: { repliesCount: 1 } });
-        await Post.updateOne({ _id: parent.postId }, { $inc: { commentsCount: 1 } });
+        await Comment.updateOne(
+            { _id: parent._id },
+            { $inc: { directRepliesCount: 1 } }
+        );
+
+        await Comment.updateOne(
+            { _id: rootId },
+            { $inc: { repliesCount: 1 } }
+        );
+
+        await Post.updateOne(
+            { _id: parent.postId },
+            { $inc: { commentsCount: 1 } }
+        );
+
+        if (parent.userId) {
+            await createNotification({
+                recipientId: String(parent.userId),
+                actorId: String(meId),
+                type: "reply_comment",
+                postId: String(parent.postId),
+                commentId: String(parent._id),
+            });
+        }
 
         const populated: any = await Comment.findById(created._id)
             .populate("userId", "pseudo avatarUrl")
             .populate("replyToUserId", "pseudo")
             .lean();
 
-        const likesArr = Array.isArray(populated?.likes) ? populated.likes : [];
         const { likes, ...rest } = populated || {};
 
         return NextResponse.json(
@@ -127,11 +147,12 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
                 success: true,
                 reply: {
                     ...rest,
-                    // ✅ important pour UI
-                    likesCount: typeof populated?.likesCount === "number" ? populated.likesCount : likesArr.length,
+                    likesCount: 0,
                     likedByMe: false,
-                    directRepliesCount: typeof rest?.directRepliesCount === "number" ? rest.directRepliesCount : 0,
-                    repliesCount: typeof rest?.repliesCount === "number" ? rest.repliesCount : 0,
+                    directRepliesCount:
+                        typeof rest?.directRepliesCount === "number" ? rest.directRepliesCount : 0,
+                    repliesCount:
+                        typeof rest?.repliesCount === "number" ? rest.repliesCount : 0,
                 },
             },
             { status: 201 }

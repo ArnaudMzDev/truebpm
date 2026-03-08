@@ -5,7 +5,35 @@ import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 
 const SELECT_USER =
-    "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt";
+    "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks";
+
+function normalizeMusicRef(input: any, expectedType?: "song" | "album" | "artist") {
+    if (!input || typeof input !== "object") return null;
+
+    const entityType = String(input.entityType || "").trim() as "song" | "album" | "artist";
+    if (!["song", "album", "artist"].includes(entityType)) return null;
+    if (expectedType && entityType !== expectedType) return null;
+
+    return {
+        entityId: String(input.entityId || "").trim(),
+        entityType,
+        title: String(input.title || "").trim(),
+        artist: String(input.artist || "").trim(),
+        coverUrl: String(input.coverUrl || "").trim(),
+        previewUrl: String(input.previewUrl || "").trim(),
+    };
+}
+
+function normalizeMusicArray(input: any, expectedType?: "song" | "album" | "artist") {
+    if (!Array.isArray(input)) return null;
+
+    const clean = input
+        .map((item) => normalizeMusicRef(item, expectedType))
+        .filter(Boolean)
+        .slice(0, 3);
+
+    return clean;
+}
 
 export async function PATCH(req: Request) {
     try {
@@ -27,30 +55,37 @@ export async function PATCH(req: Request) {
             );
         }
 
-        const { pseudo, bio, avatarUrl, bannerUrl } = body as {
+        const {
+            pseudo,
+            bio,
+            avatarUrl,
+            bannerUrl,
+            pinnedTrack,
+            favoriteArtists,
+            favoriteAlbums,
+            favoriteTracks,
+        } = body as {
             pseudo?: unknown;
             bio?: unknown;
-            avatarUrl?: unknown; // string | null
-            bannerUrl?: unknown; // string | null
+            avatarUrl?: unknown;
+            bannerUrl?: unknown;
+            pinnedTrack?: unknown;
+            favoriteArtists?: unknown;
+            favoriteAlbums?: unknown;
+            favoriteTracks?: unknown;
         };
 
         const update: Record<string, any> = {};
 
-        // pseudo: string non vide
         if (typeof pseudo === "string") {
             const p = pseudo.trim();
             if (p.length > 0) update.pseudo = p;
         }
 
-        // bio: string (peut être vide si tu veux autoriser une bio vide)
         if (typeof bio === "string") {
             update.bio = bio.trim();
         }
 
-        // avatarUrl:
-        // - null => effacer
-        // - "" => ignorer (anti-reset)
-        // - "https://..." => set
         if (avatarUrl === null) {
             update.avatarUrl = "";
         } else if (typeof avatarUrl === "string") {
@@ -58,12 +93,35 @@ export async function PATCH(req: Request) {
             if (a.length > 0) update.avatarUrl = a;
         }
 
-        // bannerUrl: même logique
         if (bannerUrl === null) {
             update.bannerUrl = "";
         } else if (typeof bannerUrl === "string") {
             const b = bannerUrl.trim();
             if (b.length > 0) update.bannerUrl = b;
+        }
+
+        // ✅ pinned track
+        if (pinnedTrack === null) {
+            update.pinnedTrack = null;
+        } else if (typeof pinnedTrack === "object") {
+            const normalized = normalizeMusicRef(pinnedTrack, "song");
+            if (normalized) update.pinnedTrack = normalized;
+        }
+
+        // ✅ favorites
+        if (favoriteArtists !== undefined) {
+            const normalized = normalizeMusicArray(favoriteArtists, "artist");
+            if (normalized) update.favoriteArtists = normalized;
+        }
+
+        if (favoriteAlbums !== undefined) {
+            const normalized = normalizeMusicArray(favoriteAlbums, "album");
+            if (normalized) update.favoriteAlbums = normalized;
+        }
+
+        if (favoriteTracks !== undefined) {
+            const normalized = normalizeMusicArray(favoriteTracks, "song");
+            if (normalized) update.favoriteTracks = normalized;
         }
 
         let user: any = null;

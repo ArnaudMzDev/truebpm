@@ -1,4 +1,3 @@
-// apps/mobile/src/screens/ChatScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     View,
@@ -14,16 +13,18 @@ import {
     Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import { API_URL, SOCKET_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { io, Socket } from "socket.io-client";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
-const SOCKET_URL = API_URL.replace(":3000", ":3001");
-
-type OtherUser = { _id: string; pseudo: string; avatarUrl?: string } | null;
+type OtherUser = {
+    _id: string;
+    pseudo: string;
+    avatarUrl?: string;
+    isOnline?: boolean;
+    lastSeenAt?: string | null;
+} | null;
 
 type Msg = {
     _id: string;
@@ -56,15 +57,31 @@ function formatTimeHHMM(dateString: string) {
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+function formatLastSeen(dateString?: string | null) {
+    if (!dateString) return "Hors ligne";
+
+    const d = new Date(dateString);
+    const now = new Date();
+
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffH = Math.floor(diffMin / 60);
+    const diffD = Math.floor(diffH / 24);
+
+    if (diffMin < 1) return "Vu à l'instant";
+    if (diffMin < 60) return `Vu il y a ${diffMin} min`;
+    if (diffH < 24) return `Vu à ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if (diffD < 7) return `Vu il y a ${diffD} j`;
+    return `Vu le ${d.toLocaleDateString("fr-FR")}`;
+}
+
 function stripToken(raw: string | null) {
     if (!raw) return null;
     let t = raw.trim();
     if (!t) return null;
 
-    // enlève "Bearer "
     if (t.toLowerCase().startsWith("bearer ")) t = t.slice(7).trim();
 
-    // enlève guillemets si token stocké via JSON.stringify
     if (
         (t.startsWith('"') && t.endsWith('"')) ||
         (t.startsWith("'") && t.endsWith("'"))
@@ -81,7 +98,7 @@ function toBearer(raw: string | null) {
 }
 
 function toRawToken(raw: string | null) {
-    return stripToken(raw); // ✅ raw propre pour socket
+    return stripToken(raw);
 }
 
 function uniqById(list: Msg[]) {
@@ -95,8 +112,6 @@ function uniqById(list: Msg[]) {
     }
     return out;
 }
-
-
 
 async function uploadMessageImage(uri: string, bearerToken: string) {
     const form = new FormData();
@@ -122,8 +137,10 @@ async function uploadMessageImage(uri: string, bearerToken: string) {
 
 export default function ChatScreen({ route, navigation }: any) {
     const conversationId: string = route?.params?.conversationId;
-    const otherUser: OtherUser = route?.params?.otherUser ?? null;
+    const initialOtherUser: OtherUser = route?.params?.otherUser ?? null;
     const sharePostId: string | null = route?.params?.sharePostId ?? null;
+
+    const [otherUser, setOtherUser] = useState<OtherUser>(initialOtherUser);
 
     const otherUserId = useMemo(
         () => (otherUser?._id ? String(otherUser._id) : null),
@@ -132,11 +149,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
     const [meId, setMeId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-
-    // messages en ASC (ancien -> récent)
     const [messages, setMessages] = useState<Msg[]>([]);
 
-    // pagination
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -144,10 +158,8 @@ export default function ChatScreen({ route, navigation }: any) {
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
 
-    // read receipts
     const [readAtOther, setReadAtOther] = useState<string | null>(null);
 
-    // typing
     const [otherTyping, setOtherTyping] = useState(false);
     const typingTimeoutRef = useRef<any>(null);
     const lastTypingSentRef = useRef(0);
@@ -155,18 +167,16 @@ export default function ChatScreen({ route, navigation }: any) {
     const LIMIT = 30;
     const listRef = useRef<FlatList<Msg> | null>(null);
 
-    // share (éviter double envoi)
     const shareSentRef = useRef(false);
-
-    // socket
     const socketRef = useRef<Socket | null>(null);
 
-    // refs pour callbacks socket (évite deps / reconnect)
     const meIdRef = useRef<string | null>(null);
     const otherIdRef = useRef<string | null>(null);
+
     useEffect(() => {
         meIdRef.current = meId;
     }, [meId]);
+
     useEffect(() => {
         otherIdRef.current = otherUserId;
     }, [otherUserId]);
@@ -185,6 +195,23 @@ export default function ChatScreen({ route, navigation }: any) {
             return null;
         }
     }, []);
+
+    const fetchOtherUserPresence = useCallback(async () => {
+        if (!otherUserId) return;
+
+        const token = await AsyncStorage.getItem("token");
+        const res = await fetch(`${API_URL}/api/user/${otherUserId}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        const json = await safeJson(res);
+        if (!res.ok || !json?.user) return;
+
+        setOtherUser((prev) => ({
+            ...(prev || {}),
+            ...json.user,
+        }));
+    }, [otherUserId]);
 
     const scrollBottom = useCallback((animated = true) => {
         requestAnimationFrame(() => {
@@ -238,8 +265,8 @@ export default function ChatScreen({ route, navigation }: any) {
             return;
         }
 
-        const desc = (json?.messages || []) as Msg[]; // newest -> oldest
-        const asc = [...desc].reverse(); // oldest -> newest
+        const desc = (json?.messages || []) as Msg[];
+        const asc = [...desc].reverse();
         setMessages(uniqById(asc));
 
         setCursor(json?.nextCursor || null);
@@ -247,11 +274,14 @@ export default function ChatScreen({ route, navigation }: any) {
 
         setLoading(false);
 
-        await markAsRead();
-        await fetchReadState();
+        await Promise.all([
+            markAsRead(),
+            fetchReadState(),
+            fetchOtherUserPresence(),
+        ]);
 
         requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: false }));
-    }, [conversationId, fetchReadState, markAsRead]);
+    }, [conversationId, fetchOtherUserPresence, fetchReadState, markAsRead]);
 
     const loadMore = useCallback(async () => {
         if (!cursor || loadingMore || !hasMore) return;
@@ -295,6 +325,11 @@ export default function ChatScreen({ route, navigation }: any) {
 
     const title = useMemo(() => otherUser?.pseudo || "Chat", [otherUser]);
 
+    const presenceLabel = useMemo(() => {
+        if (otherUser?.isOnline) return "En ligne";
+        return formatLastSeen(otherUser?.lastSeenAt || null);
+    }, [otherUser?.isOnline, otherUser?.lastSeenAt]);
+
     const myLastMsg = useMemo(() => {
         if (!meId) return null;
         for (let i = messages.length - 1; i >= 0; i--) {
@@ -335,11 +370,7 @@ export default function ChatScreen({ route, navigation }: any) {
                     return;
                 }
 
-                console.log("SOCKET_URL", SOCKET_URL);
-                console.log("socket token head", rawToken.slice(0, 16) + "...");
-
                 const s = io(SOCKET_URL, {
-                    // ✅ Recommandé: plus robuste (websocket si possible, sinon polling)
                     transports: ["websocket", "polling"],
                     auth: { token: rawToken },
                     reconnection: true,
@@ -354,7 +385,7 @@ export default function ChatScreen({ route, navigation }: any) {
                     if (!alive) return;
                     console.log("socket connected", s.id);
                     s.emit("conversation:join", { conversationId });
-                    s.emit("read:mark", { conversationId }); // ✅ pour sync immédiate du "Vu"
+                    s.emit("read:mark", { conversationId });
                 });
 
                 s.on("connect_error", (e: any) => {
@@ -371,7 +402,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
                     const sender = String(message?.senderId?._id || "");
                     const myId = meIdRef.current;
-                    if (myId && sender === String(myId)) return; // ignore self
+                    if (myId && sender === String(myId)) return;
 
                     setOtherTyping(false);
 
@@ -413,6 +444,24 @@ export default function ChatScreen({ route, navigation }: any) {
 
                     setReadAtOther(readAt || null);
                 });
+
+                // ✅ présence uniquement ici
+                s.on("presence:update", ({ userId, isOnline, lastSeenAt }: any) => {
+                    if (!alive) return;
+                    const otherId = otherIdRef.current;
+                    if (!otherId) return;
+                    if (String(userId) !== String(otherId)) return;
+
+                    setOtherUser((prev) =>
+                        prev
+                            ? {
+                                ...prev,
+                                isOnline: !!isOnline,
+                                lastSeenAt: lastSeenAt || null,
+                            }
+                            : prev
+                    );
+                });
             } catch (e: any) {
                 console.log("socket init error:", e?.message || e);
             }
@@ -434,7 +483,8 @@ export default function ChatScreen({ route, navigation }: any) {
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             typingTimeoutRef.current = null;
         };
-    }, [conversationId]); // ✅ deps MINIMALES -> pas de reconnect infini
+    }, [conversationId]);
+
     const sendTyping = useCallback(
         (typing: boolean) => {
             const s = socketRef.current;
@@ -462,7 +512,6 @@ export default function ChatScreen({ route, navigation }: any) {
         [sendTyping]
     );
 
-    // ---------------- SEND TEXT ----------------
     const sendText = useCallback(async () => {
         const t = text.trim();
         if (!t || sending) return;
@@ -514,7 +563,6 @@ export default function ChatScreen({ route, navigation }: any) {
         }
     }, [conversationId, fetchReadState, meId, scrollBottom, sending, sendTyping, text]);
 
-    // ---------------- SEND IMAGE ----------------
     const sendImage = useCallback(async () => {
         if (sending) return;
 
@@ -585,7 +633,6 @@ export default function ChatScreen({ route, navigation }: any) {
         }
     }, [conversationId, fetchReadState, meId, scrollBottom, sending, sendTyping]);
 
-    // ---------------- SEND POST (auto share) ----------------
     const sendPost = useCallback(
         async (postId: string) => {
             if (!postId || sending) return;
@@ -636,6 +683,14 @@ export default function ChatScreen({ route, navigation }: any) {
         },
         [conversationId, fetchReadState, meId, scrollBottom, sending, sendTyping]
     );
+
+    useEffect(() => {
+        if (!sharePostId || shareSentRef.current) return;
+        shareSentRef.current = true;
+        sendPost(sharePostId).catch(() => {
+            shareSentRef.current = false;
+        });
+    }, [sendPost, sharePostId]);
 
     const renderItem = ({ item }: { item: Msg }) => {
         const mine = String(item?.senderId?._id) === String(meId);
@@ -696,6 +751,11 @@ export default function ChatScreen({ route, navigation }: any) {
                 return Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1));
             })();
             const ratingToShow = isGeneral ? ratingSimple : ratingAvg;
+
+            const openPost = (postId: string) => {
+                if (!postId) return;
+                navigation.navigate("PostDetail", { postId });
+            };
 
             return (
                 <View style={[styles.row, mine ? styles.rowMine : styles.rowOther]}>
@@ -778,7 +838,6 @@ export default function ChatScreen({ route, navigation }: any) {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} activeOpacity={0.85}>
                     <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -790,14 +849,20 @@ export default function ChatScreen({ route, navigation }: any) {
                         <Text style={styles.headerTitle} numberOfLines={1}>
                             {title}
                         </Text>
-                        {otherTyping ? <Text style={styles.typing}>écrit…</Text> : null}
+
+                        {otherTyping ? (
+                            <Text style={styles.typing}>écrit…</Text>
+                        ) : (
+                            <Text style={[styles.presence, otherUser?.isOnline ? styles.presenceOnline : styles.presenceOffline]}>
+                                {presenceLabel}
+                            </Text>
+                        )}
                     </View>
                 </View>
 
                 <View style={{ width: 36 }} />
             </View>
 
-            {/* Messages */}
             <FlatList
                 ref={(r) => (listRef.current = r)}
                 data={messages}
@@ -815,7 +880,6 @@ export default function ChatScreen({ route, navigation }: any) {
                 }}
             />
 
-            {/* Input */}
             <View style={styles.inputRow}>
                 <TouchableOpacity
                     onPress={sendImage}
@@ -867,6 +931,9 @@ const styles = StyleSheet.create({
     headerAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#111" },
     headerTitle: { color: "#fff", fontWeight: "900", fontSize: 16, flexShrink: 1 },
     typing: { color: "#9B5CFF", fontWeight: "800", fontSize: 12, marginTop: 2 },
+    presence: { fontWeight: "700", fontSize: 12, marginTop: 2 },
+    presenceOnline: { color: "#2dd36f" },
+    presenceOffline: { color: "#888" },
 
     row: { marginVertical: 6 },
     rowMine: { alignItems: "flex-end" },

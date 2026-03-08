@@ -6,9 +6,53 @@ import { verifyToken } from "@/lib/auth";
 import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
 import Post from "@/models/Post";
+import User from "@/models/User";
+import { sendPushToUser } from "@/lib/push";
 
 function isObjectId(id: string) {
     return mongoose.Types.ObjectId.isValid(id);
+}
+
+async function sendMessagePush(params: {
+    conversation: any;
+    senderId: string;
+    type: "text" | "post" | "image";
+    text?: string;
+    conversationId: string;
+}) {
+    const { conversation, senderId, type, text = "", conversationId } = params;
+
+    try {
+        const sender: any = await User.findById(senderId).select("pseudo").lean();
+
+        const participants = Array.isArray(conversation?.participants)
+            ? conversation.participants.map((p: any) => String(p))
+            : [];
+
+        const recipients = participants.filter((id: string) => id !== String(senderId));
+
+        let body = "Nouveau message";
+        if (type === "text") body = text.slice(0, 120) || "Nouveau message";
+        if (type === "image") body = text ? `📷 ${text.slice(0, 120)}` : "📷 Photo";
+        if (type === "post") body = text ? `📌 ${text.slice(0, 120)}` : "📌 Post partagé";
+
+        await Promise.all(
+            recipients.map((recipientId) =>
+                sendPushToUser({
+                    recipientId,
+                    title: sender?.pseudo || "TrueBPM",
+                    body,
+                    data: {
+                        type: "message",
+                        conversationId: String(conversationId),
+                        senderId: String(senderId),
+                    },
+                })
+            )
+        );
+    } catch (e: any) {
+        console.log("message push error:", e?.message || e);
+    }
 }
 
 // GET /api/conversations/:id/messages?limit=30&cursor=...
@@ -17,7 +61,9 @@ export async function GET(req: Request, { params }: any) {
         await connectDB();
 
         const meId = await verifyToken(req).catch(() => null);
-        if (!meId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        if (!meId) {
+            return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        }
 
         const conversationId = params?.id;
         if (!conversationId || !isObjectId(conversationId)) {
@@ -25,20 +71,28 @@ export async function GET(req: Request, { params }: any) {
         }
 
         const convo = await Conversation.findById(conversationId).lean();
-        if (!convo) return NextResponse.json({ error: "Conversation introuvable." }, { status: 404 });
+        if (!convo) {
+            return NextResponse.json({ error: "Conversation introuvable." }, { status: 404 });
+        }
 
-        const isMember = (convo.participants || []).some((p: any) => p?.toString?.() === meId?.toString?.());
-        if (!isMember) return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
+        const isMember = (convo.participants || []).some(
+            (p: any) => p?.toString?.() === meId?.toString?.()
+        );
+        if (!isMember) {
+            return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
+        }
 
         const url = new URL(req.url);
         const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 30)));
         const cursor = url.searchParams.get("cursor");
 
         const query: any = { conversationId };
-        if (cursor && isObjectId(cursor)) query._id = { $lt: cursor };
+        if (cursor && isObjectId(cursor)) {
+            query._id = { $lt: cursor };
+        }
 
         const messages = await Message.find(query)
-            .sort({ _id: -1 }) // newest -> oldest
+            .sort({ _id: -1 })
             .limit(limit + 1)
             .populate("senderId", "_id pseudo avatarUrl")
             .populate({
@@ -64,7 +118,9 @@ export async function POST(req: Request, { params }: any) {
         await connectDB();
 
         const meId = await verifyToken(req).catch(() => null);
-        if (!meId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        if (!meId) {
+            return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        }
 
         const conversationId = params?.id;
         if (!conversationId || !isObjectId(conversationId)) {
@@ -72,10 +128,16 @@ export async function POST(req: Request, { params }: any) {
         }
 
         const convo = await Conversation.findById(conversationId);
-        if (!convo) return NextResponse.json({ error: "Conversation introuvable." }, { status: 404 });
+        if (!convo) {
+            return NextResponse.json({ error: "Conversation introuvable." }, { status: 404 });
+        }
 
-        const isMember = (convo.participants || []).some((p: any) => p?.toString?.() === meId?.toString?.());
-        if (!isMember) return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
+        const isMember = (convo.participants || []).some(
+            (p: any) => p?.toString?.() === meId?.toString?.()
+        );
+        if (!isMember) {
+            return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
+        }
 
         const body = await req.json().catch(() => null);
         const type = body?.type;
@@ -87,7 +149,9 @@ export async function POST(req: Request, { params }: any) {
         // TEXT
         if (type === "text") {
             const text = String(body?.text || "").trim();
-            if (!text) return NextResponse.json({ error: "Message vide." }, { status: 400 });
+            if (!text) {
+                return NextResponse.json({ error: "Message vide." }, { status: 400 });
+            }
 
             const msg = await Message.create({
                 conversationId,
@@ -102,7 +166,18 @@ export async function POST(req: Request, { params }: any) {
                 lastMessageType: "text",
             });
 
-            const populated = await Message.findById(msg._id).populate("senderId", "_id pseudo avatarUrl").lean();
+            await sendMessagePush({
+                conversation: convo,
+                senderId: meId,
+                type: "text",
+                text,
+                conversationId,
+            });
+
+            const populated = await Message.findById(msg._id)
+                .populate("senderId", "_id pseudo avatarUrl")
+                .lean();
+
             return NextResponse.json({ message: populated }, { status: 201 });
         }
 
@@ -114,7 +189,9 @@ export async function POST(req: Request, { params }: any) {
             }
 
             const post = await Post.findById(postId).lean();
-            if (!post) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+            if (!post) {
+                return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+            }
 
             const text = String(body?.text || "").trim();
 
@@ -132,6 +209,14 @@ export async function POST(req: Request, { params }: any) {
                 lastMessageType: "post",
             });
 
+            await sendMessagePush({
+                conversation: convo,
+                senderId: meId,
+                type: "post",
+                text,
+                conversationId,
+            });
+
             const populated = await Message.findById(msg._id)
                 .populate("senderId", "_id pseudo avatarUrl")
                 .populate("postId")
@@ -143,7 +228,11 @@ export async function POST(req: Request, { params }: any) {
         // IMAGE
         if (type === "image") {
             const imageUrl = String(body?.imageUrl || "").trim();
-            if (!imageUrl) return NextResponse.json({ error: "imageUrl manquant." }, { status: 400 });
+            if (!imageUrl) {
+                return NextResponse.json({ error: "imageUrl manquant." }, { status: 400 });
+            }
+
+            const text = String(body?.text || "").trim();
 
             const msg = await Message.create({
                 conversationId,
@@ -152,7 +241,7 @@ export async function POST(req: Request, { params }: any) {
                 imageUrl,
                 imageWidth: body?.imageWidth ?? null,
                 imageHeight: body?.imageHeight ?? null,
-                text: String(body?.text || "").trim(),
+                text,
             });
 
             await Conversation.findByIdAndUpdate(conversationId, {
@@ -161,7 +250,18 @@ export async function POST(req: Request, { params }: any) {
                 lastMessageType: "image",
             });
 
-            const populated = await Message.findById(msg._id).populate("senderId", "_id pseudo avatarUrl").lean();
+            await sendMessagePush({
+                conversation: convo,
+                senderId: meId,
+                type: "image",
+                text,
+                conversationId,
+            });
+
+            const populated = await Message.findById(msg._id)
+                .populate("senderId", "_id pseudo avatarUrl")
+                .lean();
+
             return NextResponse.json({ message: populated }, { status: 201 });
         }
 

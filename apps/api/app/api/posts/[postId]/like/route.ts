@@ -3,13 +3,17 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import mongoose from "mongoose";
+import { requireUserId } from "@/lib/requestAuth";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: Request, { params }: { params: { postId: string } }) {
     try {
         await connectDB();
 
-        const meId = req.headers.get("x-user-id");
-        if (!meId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        const meId = await requireUserId(req);
+        if (!meId) {
+            return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        }
 
         const { postId } = params;
         if (!mongoose.Types.ObjectId.isValid(postId) || !mongoose.Types.ObjectId.isValid(meId)) {
@@ -54,6 +58,17 @@ export async function POST(req: Request, { params }: { params: { postId: string 
         // ✅ Optionnel mais conseillé: remettre likesCount exactement au length pour être 100% cohérent
         // (si tu veux éviter toute dérive suite à des anciens bugs)
         await Post.updateOne({ _id: baseId }, { $set: { likesCount } });
+
+        const baseOwner: any = await Post.findById(baseId).select("userId").lean();
+
+        if (likedByMe && baseOwner?.userId) {
+            await createNotification({
+                recipientId: String(baseOwner.userId),
+                actorId: String(me),
+                type: "like_post",
+                postId: String(baseId),
+            });
+        }
 
         return NextResponse.json(
             { status: likedByMe ? "liked" : "unliked", likesCount, likedByMe },

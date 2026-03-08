@@ -9,13 +9,8 @@ import {
     StyleSheet,
     ActivityIndicator,
 } from "react-native";
-import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
-
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
-
-/* ----------------------------- TYPES ---------------------------- */
+import { API_URL } from "../lib/config";
 
 type SearchType = "song" | "album" | "artist";
 
@@ -45,6 +40,12 @@ type ArtistItem = {
 
 type AnyItem = SongItem | AlbumItem | ArtistItem;
 
+type PickProfileKind =
+    | "pinnedTrack"
+    | "favoriteArtists"
+    | "favoriteAlbums"
+    | "favoriteTracks";
+
 type CreatePostNavPayload = {
     entityType: "song" | "album" | "artist";
     entityId: string | null;
@@ -56,35 +57,102 @@ type CreatePostNavPayload = {
     };
 };
 
-/* ---------------------------------------------------------------- */
+type PickedMusicItem = {
+    entityId: string;
+    entityType: "song" | "album" | "artist";
+    title: string;
+    artist: string;
+    coverUrl: string;
+    previewUrl: string;
+};
 
-export default function SearchScreen({ navigation }: any) {
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text();
+    if (!text) return null;
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        console.log("Non-JSON response:", text.slice(0, 200));
+        return null;
+    }
+}
+
+function normalizeToProfileMusic(item: AnyItem): PickedMusicItem {
+    if (item.type === "song") {
+        return {
+            entityId: item.id,
+            entityType: "song",
+            title: item.title,
+            artist: item.artist,
+            coverUrl: item.cover || "",
+            previewUrl: item.previewUrl || "",
+        };
+    }
+
+    if (item.type === "album") {
+        return {
+            entityId: item.id,
+            entityType: "album",
+            title: item.title,
+            artist: item.artist,
+            coverUrl: item.cover || "",
+            previewUrl: "",
+        };
+    }
+
+    return {
+        entityId: item.id,
+        entityType: "artist",
+        title: item.name,
+        artist: item.name,
+        coverUrl: item.cover || "",
+        previewUrl: "",
+    };
+}
+
+export default function SearchScreen({ navigation, route }: any) {
+    const mode: "pickTrack" | "pickProfileMusic" =
+        route?.params?.mode || "pickTrack";
+
+    const kind: PickProfileKind | undefined = route?.params?.kind;
+    const onPickProfileMusic:
+        | ((payload: { kind: PickProfileKind; item: PickedMusicItem }) => void)
+        | undefined = route?.params?.onPickProfileMusic;
+
+    const initialType: SearchType =
+        route?.params?.initialType ||
+        (kind === "favoriteArtists"
+            ? "artist"
+            : kind === "favoriteAlbums"
+                ? "album"
+                : "song");
+
     const [query, setQuery] = useState("");
-    const [type, setType] = useState<SearchType>("song");
+    const [type, setType] = useState<SearchType>(initialType);
     const [results, setResults] = useState<AnyItem[]>([]);
     const [loading, setLoading] = useState(false);
 
     const search = async (forcedType?: SearchType) => {
         const effective = forcedType ?? type;
+        const q = query.trim();
 
-        if (!query.trim()) return;
+        if (!q) return;
 
         try {
             setLoading(true);
 
-            const url = `${API_URL}/api/search/apple?q=${encodeURIComponent(
-                query.trim()
-            )}&type=${effective}`;
-
+            const url = `${API_URL}/api/search/apple?q=${encodeURIComponent(q)}&type=${effective}`;
             const res = await fetch(url);
-            const json = await res.json();
+            const json = await safeJson(res);
 
-            if (!res.ok || !json.items) {
-                console.log("Search error:", json);
+            if (!res.ok || !Array.isArray(json?.items)) {
+                console.log("Search error:", res.status, json);
                 setResults([]);
-            } else {
-                setResults(json.items);
+                return;
             }
+
+            setResults(json.items as AnyItem[]);
         } catch (err) {
             console.log("Search fetch error:", err);
             setResults([]);
@@ -97,24 +165,74 @@ export default function SearchScreen({ navigation }: any) {
         navigation.navigate("CreatePost", payload);
     };
 
+    const selectForProfileMusic = (item: AnyItem) => {
+        if (!kind || !onPickProfileMusic) return;
+
+        const normalized = normalizeToProfileMusic(item);
+
+        if (kind === "pinnedTrack" && normalized.entityType !== "song") return;
+        if (kind === "favoriteArtists" && normalized.entityType !== "artist") return;
+        if (kind === "favoriteAlbums" && normalized.entityType !== "album") return;
+        if (kind === "favoriteTracks" && normalized.entityType !== "song") return;
+
+        onPickProfileMusic({
+            kind,
+            item: normalized,
+        });
+
+        navigation.goBack();
+    };
+
+    const handlePress = (item: AnyItem) => {
+        if (mode === "pickProfileMusic") {
+            selectForProfileMusic(item);
+            return;
+        }
+
+        if (item.type === "song") {
+            goToCreatePost({
+                entityType: "song",
+                entityId: item.id,
+                track: {
+                    title: item.title,
+                    artist: item.artist,
+                    cover: item.cover,
+                    previewUrl: item.previewUrl,
+                },
+            });
+            return;
+        }
+
+        if (item.type === "album") {
+            goToCreatePost({
+                entityType: "album",
+                entityId: item.id,
+                track: {
+                    title: item.title,
+                    artist: item.artist,
+                    cover: item.cover,
+                    previewUrl: null,
+                },
+            });
+            return;
+        }
+
+        goToCreatePost({
+            entityType: "artist",
+            entityId: item.id,
+            track: {
+                title: item.name,
+                artist: item.name,
+                cover: item.cover,
+                previewUrl: null,
+            },
+        });
+    };
+
     const renderItem = ({ item }: { item: AnyItem }) => {
         if (item.type === "song") {
             return (
-                <TouchableOpacity
-                    style={styles.item}
-                    onPress={() => {
-                        goToCreatePost({
-                            entityType: "song",
-                            entityId: item.id,
-                            track: {
-                                title: item.title,
-                                artist: item.artist,
-                                cover: item.cover,
-                                previewUrl: item.previewUrl,
-                            },
-                        });
-                    }}
-                >
+                <TouchableOpacity style={styles.item} onPress={() => handlePress(item)}>
                     {item.cover ? (
                         <Image source={{ uri: item.cover }} style={styles.cover} />
                     ) : (
@@ -141,21 +259,7 @@ export default function SearchScreen({ navigation }: any) {
 
         if (item.type === "album") {
             return (
-                <TouchableOpacity
-                    style={styles.item}
-                    onPress={() => {
-                        goToCreatePost({
-                            entityType: "album",
-                            entityId: item.id,
-                            track: {
-                                title: item.title,
-                                artist: item.artist,
-                                cover: item.cover,
-                                previewUrl: null,
-                            },
-                        });
-                    }}
-                >
+                <TouchableOpacity style={styles.item} onPress={() => handlePress(item)}>
                     {item.cover ? (
                         <Image source={{ uri: item.cover }} style={styles.cover} />
                     ) : (
@@ -178,24 +282,8 @@ export default function SearchScreen({ navigation }: any) {
             );
         }
 
-        // artist
         return (
-            <TouchableOpacity
-                style={styles.item}
-                onPress={() => {
-                    // Pour un artiste : on met le nom dans title & artist (compat avec schema actuel)
-                    goToCreatePost({
-                        entityType: "artist",
-                        entityId: item.id,
-                        track: {
-                            title: item.name,
-                            artist: item.name,
-                            cover: item.cover,
-                            previewUrl: null,
-                        },
-                    });
-                }}
-            >
+            <TouchableOpacity style={styles.item} onPress={() => handlePress(item)}>
                 {item.cover ? (
                     <Image source={{ uri: item.cover }} style={styles.cover} />
                 ) : (
@@ -218,8 +306,31 @@ export default function SearchScreen({ navigation }: any) {
         );
     };
 
+    const screenTitle =
+        mode === "pickProfileMusic"
+            ? kind === "pinnedTrack"
+                ? "Choisir un son épinglé"
+                : kind === "favoriteArtists"
+                    ? "Choisir des artistes favoris"
+                    : kind === "favoriteAlbums"
+                        ? "Choisir des albums favoris"
+                        : "Choisir des morceaux favoris"
+            : "Rechercher";
+
     return (
         <View style={styles.container}>
+            <View style={styles.topRow}>
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    activeOpacity={0.85}
+                    style={styles.backBtn}
+                >
+                    <Ionicons name="chevron-back" size={22} color="#fff" />
+                </TouchableOpacity>
+
+                <Text style={styles.screenTitle}>{screenTitle}</Text>
+            </View>
+
             <TextInput
                 style={styles.input}
                 placeholder="Rechercher un titre, album, artiste..."
@@ -250,11 +361,7 @@ export default function SearchScreen({ navigation }: any) {
             </View>
 
             {loading ? (
-                <ActivityIndicator
-                    size="large"
-                    color="#9B5CFF"
-                    style={{ marginTop: 30 }}
-                />
+                <ActivityIndicator size="large" color="#9B5CFF" style={{ marginTop: 30 }} />
             ) : (
                 <FlatList
                     data={results}
@@ -262,6 +369,11 @@ export default function SearchScreen({ navigation }: any) {
                     renderItem={renderItem}
                     contentContainerStyle={{ paddingBottom: 200 }}
                     keyboardShouldPersistTaps="handled"
+                    ListEmptyComponent={
+                        query.trim().length > 0 ? (
+                            <Text style={styles.emptyText}>Aucun résultat</Text>
+                        ) : null
+                    }
                 />
             )}
         </View>
@@ -274,6 +386,21 @@ const styles = StyleSheet.create({
         backgroundColor: "#000",
         padding: 16,
         paddingTop: 50,
+    },
+    topRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 14,
+    },
+    backBtn: {
+        marginRight: 10,
+        padding: 4,
+    },
+    screenTitle: {
+        color: "#fff",
+        fontSize: 20,
+        fontWeight: "800",
+        flexShrink: 1,
     },
     input: {
         backgroundColor: "#111",
@@ -339,5 +466,10 @@ const styles = StyleSheet.create({
         color: "#aaa",
         marginTop: 3,
         fontSize: 13,
+    },
+    emptyText: {
+        color: "#777",
+        textAlign: "center",
+        marginTop: 30,
     },
 });

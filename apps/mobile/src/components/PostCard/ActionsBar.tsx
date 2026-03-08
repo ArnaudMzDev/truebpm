@@ -3,12 +3,11 @@ import React from "react";
 import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
 
 import { PostType } from "./types";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
+import { API_URL } from "../../lib/config";
+
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();

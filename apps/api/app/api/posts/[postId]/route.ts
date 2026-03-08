@@ -1,11 +1,13 @@
-// apps/api/app/api/posts/[postId]/route.ts
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
-import Post from "@/models/Post";
 import mongoose from "mongoose";
-import { verifyToken } from "@/lib/auth";
-import Comment from "@/models/Comment"; // ✅ pour cleanup des commentaires
+
+import { connectDB } from "@/lib/db";
+import { getOptionalUserId, requireUserId } from "@/lib/requestAuth";
+
+import Post from "@/models/Post";
+import Comment from "@/models/Comment";
+import User from "@/models/User";
 
 export async function GET(req: Request, { params }: { params: { postId: string } }) {
     try {
@@ -15,15 +17,11 @@ export async function GET(req: Request, { params }: { params: { postId: string }
         if (!mongoose.Types.ObjectId.isValid(postId)) {
             return NextResponse.json({ error: "postId invalide." }, { status: 400 });
         }
-
-        // ✅ meId depuis middleware OU depuis Authorization Bearer
-        let meId: string | null = req.headers.get("x-user-id");
-        if (!meId) {
-            meId = await verifyToken(req).catch(() => null);
-        }
-
+        const meId = await getOptionalUserId(req);
         const me =
-            meId && mongoose.Types.ObjectId.isValid(meId) ? new mongoose.Types.ObjectId(meId) : null;
+            meId && mongoose.Types.ObjectId.isValid(meId)
+                ? new mongoose.Types.ObjectId(meId)
+                : null;
 
         const post: any = await Post.findById(postId)
             .populate("userId", "pseudo avatarUrl")
@@ -38,7 +36,6 @@ export async function GET(req: Request, { params }: { params: { postId: string }
             return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
         }
 
-        // ✅ stats/flags basés sur l’original si c’est un repost
         const base = post.type === "repost" && post.repostOf ? post.repostOf : post;
 
         const likesArr = Array.isArray(base.likes) ? base.likes : [];
@@ -51,9 +48,9 @@ export async function GET(req: Request, { params }: { params: { postId: string }
             {
                 post: {
                     ...post,
-                    likesCount: typeof base.likesCount === "number" ? base.likesCount : likesArr.length,
-                    repostsCount: typeof base.repostsCount === "number" ? base.repostsCount : repostsArr.length,
-                    commentsCount: typeof base.commentsCount === "number" ? base.commentsCount : 0,
+                    likesCount: likesArr.length,
+                    repostsCount: repostsArr.length,
+                    commentsCount: Math.max(0, Number(base?.commentsCount || 0)),
                     likedByMe,
                     repostedByMe,
                 },
@@ -66,17 +63,6 @@ export async function GET(req: Request, { params }: { params: { postId: string }
     }
 }
 
-/**
- * DELETE /api/posts/:postId
- * - si post normal: seul l'auteur peut supprimer
- *   -> supprime aussi tous les reposts qui pointent dessus + commentaires liés
- * - si repost: seul le reposter peut supprimer
- *   -> supprime le wrapper repost + retire le reposter du post original (reposts + repostsCount)
- */
-// apps/api/app/api/posts/[postId]/route.ts
-import User from "@/models/User"; // ✅ ajoute cet import
-// (le reste de tes imports est déjà OK)
-
 export async function DELETE(req: Request, { params }: { params: { postId: string } }) {
     try {
         await connectDB();
@@ -86,24 +72,30 @@ export async function DELETE(req: Request, { params }: { params: { postId: strin
             return NextResponse.json({ error: "postId invalide." }, { status: 400 });
         }
 
-        const meId = await verifyToken(req).catch(() => null);
+        const meId = await requireUserId(req);
         if (!meId || !mongoose.Types.ObjectId.isValid(meId)) {
             return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
         }
 
         const me = new mongoose.Types.ObjectId(meId);
 
-        const post: any = await Post.findById(postId).select("_id userId type").lean();
+        const post: any = await Post.findById(postId)
+            .select("_id userId type repostOf repostedBy")
+            .lean();
+
         if (!post) {
             return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
         }
 
-        // ✅ on ne supprime que des posts normaux (pas les reposts)
+        // Ici on ne supprime que les vrais posts.
+        // Les reposts sont retirés via le toggle /repost.
         if (post.type === "repost") {
-            return NextResponse.json({ error: "Impossible de supprimer un repost ici." }, { status: 400 });
+            return NextResponse.json(
+                { error: "Utilise la route de toggle repost pour retirer un repost." },
+                { status: 400 }
+            );
         }
 
-        // ✅ ownership
         if (post.userId?.toString?.() !== me.toString()) {
             return NextResponse.json({ error: "Accès refusé." }, { status: 403 });
         }
@@ -111,17 +103,29 @@ export async function DELETE(req: Request, { params }: { params: { postId: strin
         // 1) supprimer le post
         await Post.deleteOne({ _id: post._id });
 
-        // 2) supprimer tous les reposts qui pointent vers ce post
-        const r = await Post.deleteMany({ type: "repost", repostOf: post._id });
+        // 2) supprimer les reposts liés
+        const repostDeletion = await Post.deleteMany({
+            type: "repost",
+            repostOf: post._id,
+        });
 
-        // 3) (optionnel mais recommandé) décrémenter notesCount
-        await User.updateOne({ _id: me }, { $inc: { notesCount: -1 } });
+        // 3) supprimer tous les commentaires liés
+        const commentDeletion = await Comment.deleteMany({
+            postId: post._id,
+        });
+
+        // 4) éviter notesCount négatif
+        await User.updateOne(
+            { _id: me, notesCount: { $gt: 0 } },
+            { $inc: { notesCount: -1 } }
+        );
 
         return NextResponse.json(
             {
                 success: true,
                 deletedId: postId,
-                deletedReposts: r?.deletedCount ?? 0,
+                deletedReposts: repostDeletion?.deletedCount ?? 0,
+                deletedComments: commentDeletion?.deletedCount ?? 0,
             },
             { status: 200 }
         );

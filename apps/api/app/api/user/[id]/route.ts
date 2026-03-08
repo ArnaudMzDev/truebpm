@@ -13,7 +13,6 @@ export async function GET(
 
         const userId = params.id;
 
-        // Vérification de l'ID MongoDB
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return NextResponse.json(
                 { error: "ID utilisateur invalide." },
@@ -21,9 +20,8 @@ export async function GET(
             );
         }
 
-        // Sélection stricte pour sécurité
         const user = await User.findById(userId)
-            .select("pseudo avatarUrl bannerUrl bio followers following notesCount createdAt")
+            .select("_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks")
             .lean();
 
         if (!user) {
@@ -33,11 +31,7 @@ export async function GET(
             );
         }
 
-        return NextResponse.json(
-            { user },
-            { status: 200 }
-        );
-
+        return NextResponse.json({ user }, { status: 200 });
     } catch (err) {
         console.error("❌ GET /api/user/[id] error:", err);
         return NextResponse.json(

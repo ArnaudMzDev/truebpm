@@ -1,5 +1,4 @@
-// apps/mobile/src/screens/ConversationsScreen.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -11,11 +10,10 @@ import {
     RefreshControl,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import { API_URL, SOCKET_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
+import { io, Socket } from "socket.io-client";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -28,6 +26,24 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
+function stripToken(raw: string | null) {
+    if (!raw) return null;
+    let t = raw.trim();
+
+    if (t.toLowerCase().startsWith("bearer ")) {
+        t = t.slice(7).trim();
+    }
+
+    if (
+        (t.startsWith('"') && t.endsWith('"')) ||
+        (t.startsWith("'") && t.endsWith("'"))
+    ) {
+        t = t.slice(1, -1).trim();
+    }
+
+    return t || null;
+}
+
 type Participant = { _id: string; pseudo: string; avatarUrl?: string };
 
 type Conversation = {
@@ -37,8 +53,6 @@ type Conversation = {
     lastMessageText?: string;
     lastMessageType?: "text" | "post" | "image" | "";
     updatedAt?: string;
-
-    // ✅ système de "lu" (si ton API l’envoie)
     unreadCount?: number;
 };
 
@@ -49,13 +63,14 @@ function formatPreview(c: Conversation) {
 }
 
 export default function ConversationsScreen({ navigation, route }: any) {
-    // ✅ si on arrive depuis "Partager", on reçoit sharePostId
     const sharePostId: string | null = route?.params?.sharePostId ?? null;
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [meId, setMeId] = useState<string | null>(null);
+
+    const socketRef = useRef<Socket | null>(null);
 
     const loadMeId = useCallback(async () => {
         const raw = await AsyncStorage.getItem("user");
@@ -99,6 +114,47 @@ export default function ConversationsScreen({ navigation, route }: any) {
         })();
     }, [fetchConversations, loadMeId]);
 
+    useEffect(() => {
+        let alive = true;
+
+        (async () => {
+            const stored = await AsyncStorage.getItem("token");
+            const rawToken = stripToken(stored);
+            if (!rawToken) return;
+
+            const s = io(SOCKET_URL, {
+                transports: ["websocket", "polling"],
+                auth: { token: rawToken },
+                reconnection: true,
+            });
+
+            socketRef.current = s;
+
+            s.on("connect", () => {
+                console.log("conversations socket connected", s.id);
+            });
+
+            s.on("conversations:invalidate", async () => {
+                if (!alive) return;
+                await fetchConversations();
+            });
+
+            s.on("disconnect", (reason) => {
+                console.log("conversations socket disconnected:", reason);
+            });
+        })();
+
+        return () => {
+            alive = false;
+            const s = socketRef.current;
+            if (s) {
+                s.removeAllListeners();
+                s.disconnect();
+            }
+            socketRef.current = null;
+        };
+    }, [fetchConversations]);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await fetchConversations();
@@ -117,7 +173,6 @@ export default function ConversationsScreen({ navigation, route }: any) {
                 otherUser: other
                     ? { _id: other._id, pseudo: other.pseudo, avatarUrl: other.avatarUrl }
                     : null,
-                // ✅ si présent, ChatScreen auto-enverra le post
                 sharePostId: sharePostId || null,
             });
         },

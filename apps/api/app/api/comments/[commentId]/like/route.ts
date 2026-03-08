@@ -3,13 +3,16 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Comment from "@/models/Comment";
 import mongoose from "mongoose";
+import { requireUserId } from "@/lib/requestAuth";
 
 export async function POST(req: Request, { params }: { params: { commentId: string } }) {
     try {
         await connectDB();
 
-        const meId = req.headers.get("x-user-id");
-        if (!meId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        const meId = await requireUserId(req);
+        if (!meId) {
+            return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        }
 
         const { commentId } = params;
         if (!mongoose.Types.ObjectId.isValid(commentId) || !mongoose.Types.ObjectId.isValid(meId)) {
@@ -18,8 +21,10 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
 
         const me = new mongoose.Types.ObjectId(meId);
 
-        const comment: any = await Comment.findById(commentId).select("likes likesCount").lean();
-        if (!comment) return NextResponse.json({ error: "Commentaire introuvable." }, { status: 404 });
+        const comment: any = await Comment.findById(commentId).select("likes").lean();
+        if (!comment) {
+            return NextResponse.json({ error: "Commentaire introuvable." }, { status: 404 });
+        }
 
         const likesArr = Array.isArray(comment.likes) ? comment.likes : [];
         const already = likesArr.some((id: any) => id?.toString?.() === me.toString());
@@ -27,23 +32,31 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
         if (already) {
             await Comment.updateOne(
                 { _id: commentId },
-                { $pull: { likes: me }, $inc: { likesCount: -1 } }
+                { $pull: { likes: me } }
             );
         } else {
             await Comment.updateOne(
                 { _id: commentId },
-                { $addToSet: { likes: me }, $inc: { likesCount: 1 } }
+                { $addToSet: { likes: me } }
             );
         }
 
-        const fresh: any = await Comment.findById(commentId).select("likesCount").lean();
-        const likesCount = fresh?.likesCount ?? 0;
+        const fresh: any = await Comment.findById(commentId).select("likes").lean();
+        const freshArr = Array.isArray(fresh?.likes) ? fresh.likes : [];
+
+        const likedByMe = freshArr.some((id: any) => id?.toString?.() === me.toString());
+        const likesCount = freshArr.length;
+
+        await Comment.updateOne(
+            { _id: commentId },
+            { $set: { likesCount } }
+        );
 
         return NextResponse.json(
             {
-                status: already ? "unliked" : "liked",
+                status: likedByMe ? "liked" : "unliked",
                 likesCount,
-                likedByMe: !already,
+                likedByMe,
             },
             { status: 200 }
         );

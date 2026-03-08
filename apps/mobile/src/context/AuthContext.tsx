@@ -1,11 +1,10 @@
 // apps/mobile/src/context/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
 import { emit } from "../lib/userEvents";
+import { API_URL } from "../lib/config";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
+
 
 type User = {
     _id: string;

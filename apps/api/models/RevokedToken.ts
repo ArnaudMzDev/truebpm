@@ -1,15 +1,16 @@
-import mongoose from "mongoose";
+import { Schema, model, models } from "mongoose";
 
-const RevokedTokenSchema = new mongoose.Schema(
+const RevokedTokenSchema = new Schema(
     {
-        jti: { type: String, required: true, unique: true, index: true },
-        userId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true, ref: "User" },
-        exp: { type: Date, required: true, index: true }, // date d’expiration du JWT
+        token: { type: String, required: true, unique: true },
+        exp: { type: Date, required: true },
     },
     { timestamps: true }
 );
 
-// TTL index : Mongo supprime automatiquement après expiration
 RevokedTokenSchema.index({ exp: 1 }, { expireAfterSeconds: 0 });
 
-export default mongoose.models.RevokedToken || mongoose.model("RevokedToken", RevokedTokenSchema);
+const RevokedToken =
+    models.RevokedToken || model("RevokedToken", RevokedTokenSchema);
+
+export default RevokedToken;

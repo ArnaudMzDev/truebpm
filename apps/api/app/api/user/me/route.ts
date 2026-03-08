@@ -17,7 +17,7 @@ export async function GET(req: Request) {
         }
 
         const user = await User.findById(userId)
-            .select("_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt")
+            .select("_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks")
             .lean();
 
         if (!user) {

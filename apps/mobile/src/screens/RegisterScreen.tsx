@@ -7,10 +7,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
-import Constants from "expo-constants";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
+import { API_URL } from "../lib/config";
 
 /* ----------------------------- ERROR MESSAGE ----------------------------- */
 function ErrorMessage({ message }: { message: string }) {

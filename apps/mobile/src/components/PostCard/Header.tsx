@@ -3,10 +3,8 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, Platform } from
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import { API_URL } from "../../lib/config";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
 
 type Props = {
     // Auteur affiché (post original)

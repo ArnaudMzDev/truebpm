@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import mongoose from "mongoose";
 import { verifyToken } from "@/lib/auth";
+import { getOptionalUserId } from "@/lib/requestAuth";
 
 export async function GET(req: Request) {
     try {
@@ -55,9 +56,9 @@ export async function GET(req: Request) {
             const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
             const repostedByMe = !!me && repostsArr.some((id: any) => id?.toString?.() === me.toString());
 
-            const likesCount = typeof base?.likesCount === "number" ? base.likesCount : likesArr.length;
-            const repostsCount = typeof base?.repostsCount === "number" ? base.repostsCount : repostsArr.length;
-            const commentsCount = typeof base?.commentsCount === "number" ? base.commentsCount : 0;
+            const likesCount = likesArr.length;
+            const repostsCount = repostsArr.length;
+            const commentsCount = Math.max(0, Number(base?.commentsCount || 0));
 
             // ✅ baseFields = champs affichés dans PostCard (trackTitle, artist, coverUrl, etc.)
             // ⚠️ IMPORTANT: on enlève tout ce qui pourrait écraser l'identité du repost (et causer des keys dupliquées)

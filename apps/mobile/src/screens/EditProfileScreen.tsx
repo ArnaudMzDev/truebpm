@@ -14,14 +14,20 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../components/Logo";
-import Constants from "expo-constants";
-
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
+import { API_URL } from "../lib/config";
 
 const CLOUD_NAME = "dyc6hwvj4";
 const UPLOAD_PRESET = "truebpm_unsigned";
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+
+type MusicRef = {
+    entityId: string;
+    entityType: "song" | "album" | "artist";
+    title: string;
+    artist: string;
+    coverUrl: string;
+    previewUrl: string;
+};
 
 type User = {
     _id: string;
@@ -30,9 +36,13 @@ type User = {
     bio?: string;
     avatarUrl?: string;
     bannerUrl?: string;
+
+    pinnedTrack?: MusicRef | null;
+    favoriteArtists?: MusicRef[];
+    favoriteAlbums?: MusicRef[];
+    favoriteTracks?: MusicRef[];
 };
 
-// JSON safe pour éviter "Unexpected character: <"
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
@@ -44,22 +54,64 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
-export default function EditProfileScreen({ navigation }: any) {
+function musicEquals(a?: MusicRef | null, b?: MusicRef | null) {
+    return JSON.stringify(a || null) === JSON.stringify(b || null);
+}
+
+function musicArrayEquals(a?: MusicRef[], b?: MusicRef[]) {
+    return JSON.stringify(a || []) === JSON.stringify(b || []);
+}
+function MusicChip({
+                       item,
+                       onRemove,
+                   }: {
+    item: MusicRef;
+    onRemove: () => void;
+}) {
+    return (
+        <View style={styles.musicChip}>
+            {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.musicChipCover} />
+            ) : null}
+
+            <View style={{ flex: 1 }}>
+                <Text style={styles.musicChipTitle} numberOfLines={1}>
+                    {item.title}
+                </Text>
+                <Text style={styles.musicChipArtist} numberOfLines={1}>
+                    {item.artist}
+                </Text>
+            </View>
+
+            <TouchableOpacity onPress={onRemove} style={styles.musicChipRemove}>
+                <Text style={styles.musicChipRemoveText}>✕</Text>
+            </TouchableOpacity>
+        </View>
+    );
+}
+
+export default function EditProfileScreen({ navigation, route }: any) {
     const [user, setUser] = useState<User | null>(null);
 
-    // URI affichées (peuvent être http(s) OU file:// OU null)
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [bannerUri, setBannerUri] = useState<string | null>(null);
-
     const [bio, setBio] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // ✅ On conserve les valeurs “source” pour savoir si l’utilisateur a modifié
     const [initialAvatar, setInitialAvatar] = useState<string>("");
     const [initialBanner, setInitialBanner] = useState<string>("");
     const [initialBio, setInitialBio] = useState<string>("");
 
-    /* -------------------- LOAD USER -------------------- */
+    const [pinnedTrack, setPinnedTrack] = useState<MusicRef | null>(null);
+    const [favoriteArtists, setFavoriteArtists] = useState<MusicRef[]>([]);
+    const [favoriteAlbums, setFavoriteAlbums] = useState<MusicRef[]>([]);
+    const [favoriteTracks, setFavoriteTracks] = useState<MusicRef[]>([]);
+
+    const [initialPinnedTrack, setInitialPinnedTrack] = useState<MusicRef | null>(null);
+    const [initialFavoriteArtists, setInitialFavoriteArtists] = useState<MusicRef[]>([]);
+    const [initialFavoriteAlbums, setInitialFavoriteAlbums] = useState<MusicRef[]>([]);
+    const [initialFavoriteTracks, setInitialFavoriteTracks] = useState<MusicRef[]>([]);
+
     useEffect(() => {
         const loadUser = async () => {
             const raw = await AsyncStorage.getItem("user");
@@ -80,6 +132,16 @@ export default function EditProfileScreen({ navigation }: any) {
                 setAvatarUri(a ? a : null);
                 setBannerUri(b ? b : null);
                 setBio(bi);
+
+                setPinnedTrack(u.pinnedTrack || null);
+                setFavoriteArtists(u.favoriteArtists || []);
+                setFavoriteAlbums(u.favoriteAlbums || []);
+                setFavoriteTracks(u.favoriteTracks || []);
+
+                setInitialPinnedTrack(u.pinnedTrack || null);
+                setInitialFavoriteArtists(u.favoriteArtists || []);
+                setInitialFavoriteAlbums(u.favoriteAlbums || []);
+                setInitialFavoriteTracks(u.favoriteTracks || []);
             } catch (e) {
                 console.log("EditProfile loadUser parse error:", e);
             }
@@ -88,7 +150,43 @@ export default function EditProfileScreen({ navigation }: any) {
         loadUser();
     }, []);
 
-    /* -------------------- IMAGE PICKER -------------------- */
+    useEffect(() => {
+        const picked = route?.params?.pickedProfileMusic;
+        if (!picked?.kind || !picked?.item) return;
+
+        const { kind, item } = picked as {
+            kind: "pinnedTrack" | "favoriteArtists" | "favoriteAlbums" | "favoriteTracks";
+            item: MusicRef;
+        };
+
+        if (kind === "pinnedTrack") {
+            setPinnedTrack(item);
+        }
+
+        if (kind === "favoriteArtists") {
+            setFavoriteArtists((prev) => {
+                const next = prev.filter((x) => x.entityId !== item.entityId);
+                return [...next, item].slice(0, 3);
+            });
+        }
+
+        if (kind === "favoriteAlbums") {
+            setFavoriteAlbums((prev) => {
+                const next = prev.filter((x) => x.entityId !== item.entityId);
+                return [...next, item].slice(0, 3);
+            });
+        }
+
+        if (kind === "favoriteTracks") {
+            setFavoriteTracks((prev) => {
+                const next = prev.filter((x) => x.entityId !== item.entityId);
+                return [...next, item].slice(0, 3);
+            });
+        }
+
+        navigation.setParams({ pickedProfileMusic: undefined });
+    }, [navigation, route?.params?.pickedProfileMusic]);
+
     const pickImage = async (type: "avatar" | "banner") => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
@@ -110,7 +208,6 @@ export default function EditProfileScreen({ navigation }: any) {
         }
     };
 
-    /* -------------------- CLOUDINARY UPLOAD -------------------- */
     const uploadToCloudinary = async (uri: string, folder: string) => {
         const formData = new FormData();
         formData.append(
@@ -135,7 +232,6 @@ export default function EditProfileScreen({ navigation }: any) {
         return data.secure_url as string;
     };
 
-    /* -------------------- HELPERS : changed? -------------------- */
     const bioChanged = useMemo(() => bio.trim() !== initialBio, [bio, initialBio]);
 
     const avatarChanged = useMemo(() => {
@@ -150,7 +246,75 @@ export default function EditProfileScreen({ navigation }: any) {
         return (bannerUri || "").trim() !== initialBanner;
     }, [bannerUri, initialBanner]);
 
-    /* -------------------- SAVE PROFILE -------------------- */
+    const pinnedChanged = useMemo(
+        () => !musicEquals(pinnedTrack, initialPinnedTrack),
+        [pinnedTrack, initialPinnedTrack]
+    );
+
+    const favoriteArtistsChanged = useMemo(
+        () => !musicArrayEquals(favoriteArtists, initialFavoriteArtists),
+        [favoriteArtists, initialFavoriteArtists]
+    );
+
+    const favoriteAlbumsChanged = useMemo(
+        () => !musicArrayEquals(favoriteAlbums, initialFavoriteAlbums),
+        [favoriteAlbums, initialFavoriteAlbums]
+    );
+
+    const favoriteTracksChanged = useMemo(
+        () => !musicArrayEquals(favoriteTracks, initialFavoriteTracks),
+        [favoriteTracks, initialFavoriteTracks]
+    );
+
+    const openPicker = (
+        kind: "pinnedTrack" | "favoriteArtists" | "favoriteAlbums" | "favoriteTracks"
+    ) => {
+        const initialType =
+            kind === "favoriteArtists"
+                ? "artist"
+                : kind === "favoriteAlbums"
+                    ? "album"
+                    : "song";
+
+        navigation.navigate("MusicSearch", {
+            mode: "pickProfileMusic",
+            kind,
+            initialType,
+            onPickProfileMusic: ({
+                                     kind,
+                                     item,
+                                 }: {
+                kind: "pinnedTrack" | "favoriteArtists" | "favoriteAlbums" | "favoriteTracks";
+                item: MusicRef;
+            }) => {
+                if (kind === "pinnedTrack") {
+                    setPinnedTrack(item);
+                }
+
+                if (kind === "favoriteArtists") {
+                    setFavoriteArtists((prev) => {
+                        const next = prev.filter((x) => x.entityId !== item.entityId);
+                        return [...next, item].slice(0, 3);
+                    });
+                }
+
+                if (kind === "favoriteAlbums") {
+                    setFavoriteAlbums((prev) => {
+                        const next = prev.filter((x) => x.entityId !== item.entityId);
+                        return [...next, item].slice(0, 3);
+                    });
+                }
+
+                if (kind === "favoriteTracks") {
+                    setFavoriteTracks((prev) => {
+                        const next = prev.filter((x) => x.entityId !== item.entityId);
+                        return [...next, item].slice(0, 3);
+                    });
+                }
+            },
+        });
+    };
+
     const handleSave = async () => {
         try {
             setLoading(true);
@@ -161,15 +325,13 @@ export default function EditProfileScreen({ navigation }: any) {
                 return Alert.alert("Erreur", "Tu n'es pas connecté.");
             }
 
-            // ✅ Payload intelligent : on n’envoie que ce qui a changé
             const payload: any = {};
 
             if (bioChanged) payload.bio = bio.trim();
 
-            // AVATAR
             if (avatarChanged) {
                 if (avatarUri === null) {
-                    payload.avatarUrl = null; // backend = efface
+                    payload.avatarUrl = null;
                 } else if (avatarUri.startsWith("file")) {
                     const url = await uploadToCloudinary(avatarUri, "truebpm/profile/avatar");
                     payload.avatarUrl = url;
@@ -178,7 +340,6 @@ export default function EditProfileScreen({ navigation }: any) {
                 }
             }
 
-            // BANNER
             if (bannerChanged) {
                 if (bannerUri === null) {
                     payload.bannerUrl = null;
@@ -189,6 +350,11 @@ export default function EditProfileScreen({ navigation }: any) {
                     payload.bannerUrl = bannerUri.trim();
                 }
             }
+
+            if (pinnedChanged) payload.pinnedTrack = pinnedTrack;
+            if (favoriteArtistsChanged) payload.favoriteArtists = favoriteArtists;
+            if (favoriteAlbumsChanged) payload.favoriteAlbums = favoriteAlbums;
+            if (favoriteTracksChanged) payload.favoriteTracks = favoriteTracks;
 
             if (Object.keys(payload).length === 0) {
                 setLoading(false);
@@ -233,13 +399,20 @@ export default function EditProfileScreen({ navigation }: any) {
             setBannerUri(b ? b : null);
             setBio(bi);
 
+            setPinnedTrack(next.pinnedTrack || null);
+            setFavoriteArtists(next.favoriteArtists || []);
+            setFavoriteAlbums(next.favoriteAlbums || []);
+            setFavoriteTracks(next.favoriteTracks || []);
+
+            setInitialPinnedTrack(next.pinnedTrack || null);
+            setInitialFavoriteArtists(next.favoriteArtists || []);
+            setInitialFavoriteAlbums(next.favoriteAlbums || []);
+            setInitialFavoriteTracks(next.favoriteTracks || []);
+
             setLoading(false);
             Alert.alert("Succès", "Ton profil a été mis à jour.");
 
-            // ✅ FIX NAVIGATION : "Profile" n'existe pas
-            // Retourne sur l'onglet profil
             navigation.navigate("Main", { screen: "ProfileTab" });
-            // (Alternative si tu viens toujours du profil : navigation.goBack();)
         } catch (err) {
             console.log("Profile update error:", err);
             setLoading(false);
@@ -301,6 +474,99 @@ export default function EditProfileScreen({ navigation }: any) {
                     onChangeText={setBio}
                 />
                 <Text style={styles.bioCount}>{bio.length}/280</Text>
+
+                <Text style={styles.sectionTitle}>Son épinglé</Text>
+                {pinnedTrack ? (
+                    <MusicChip
+                        item={pinnedTrack}
+                        onRemove={() => setPinnedTrack(null)}
+                    />
+                ) : (
+                    <Text style={styles.emptyText}>Aucun son épinglé</Text>
+                )}
+                <TouchableOpacity
+                    style={styles.selectBtn}
+                    onPress={() => openPicker("pinnedTrack")}
+                >
+                    <Text style={styles.selectBtnText}>
+                        {pinnedTrack ? "Changer le son épinglé" : "Choisir un son épinglé"}
+                    </Text>
+                </TouchableOpacity>
+
+                <Text style={styles.sectionTitle}>Artistes favoris</Text>
+                {favoriteArtists.length > 0 ? (
+                    favoriteArtists.map((item) => (
+                        <MusicChip
+                            key={`${item.entityType}:${item.entityId}`}
+                            item={item}
+                            onRemove={() =>
+                                setFavoriteArtists((prev) =>
+                                    prev.filter((x) => x.entityId !== item.entityId)
+                                )
+                            }
+                        />
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>Aucun artiste favori</Text>
+                )}
+                {favoriteArtists.length < 3 ? (
+                    <TouchableOpacity
+                        style={styles.selectBtn}
+                        onPress={() => openPicker("favoriteArtists")}
+                    >
+                        <Text style={styles.selectBtnText}>Ajouter un artiste</Text>
+                    </TouchableOpacity>
+                ) : null}
+
+                <Text style={styles.sectionTitle}>Albums favoris</Text>
+                {favoriteAlbums.length > 0 ? (
+                    favoriteAlbums.map((item) => (
+                        <MusicChip
+                            key={`${item.entityType}:${item.entityId}`}
+                            item={item}
+                            onRemove={() =>
+                                setFavoriteAlbums((prev) =>
+                                    prev.filter((x) => x.entityId !== item.entityId)
+                                )
+                            }
+                        />
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>Aucun album favori</Text>
+                )}
+                {favoriteAlbums.length < 3 ? (
+                    <TouchableOpacity
+                        style={styles.selectBtn}
+                        onPress={() => openPicker("favoriteAlbums")}
+                    >
+                        <Text style={styles.selectBtnText}>Ajouter un album</Text>
+                    </TouchableOpacity>
+                ) : null}
+
+                <Text style={styles.sectionTitle}>Morceaux favoris</Text>
+                {favoriteTracks.length > 0 ? (
+                    favoriteTracks.map((item) => (
+                        <MusicChip
+                            key={`${item.entityType}:${item.entityId}`}
+                            item={item}
+                            onRemove={() =>
+                                setFavoriteTracks((prev) =>
+                                    prev.filter((x) => x.entityId !== item.entityId)
+                                )
+                            }
+                        />
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>Aucun morceau favori</Text>
+                )}
+                {favoriteTracks.length < 3 ? (
+                    <TouchableOpacity
+                        style={styles.selectBtn}
+                        onPress={() => openPicker("favoriteTracks")}
+                    >
+                        <Text style={styles.selectBtnText}>Ajouter un morceau</Text>
+                    </TouchableOpacity>
+                ) : null}
 
                 <TouchableOpacity
                     style={[styles.button, loading && styles.buttonDisabled]}
@@ -399,6 +665,65 @@ const styles = StyleSheet.create({
         fontSize: 12,
         textAlign: "right",
         marginTop: 4,
+    },
+    emptyText: {
+        color: "#777",
+        fontSize: 13,
+        marginBottom: 6,
+    },
+    selectBtn: {
+        backgroundColor: "#111",
+        borderWidth: 1,
+        borderColor: "#2a2a2a",
+        paddingVertical: 12,
+        borderRadius: 12,
+        alignItems: "center",
+        marginTop: 8,
+    },
+    selectBtnText: {
+        color: "#fff",
+        fontSize: 14,
+        fontWeight: "700",
+    },
+    musicChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#111",
+        borderWidth: 1,
+        borderColor: "#222",
+        borderRadius: 12,
+        padding: 10,
+        marginTop: 8,
+    },
+    musicChipCover: {
+        width: 42,
+        height: 42,
+        borderRadius: 8,
+        marginRight: 10,
+    },
+    musicChipTitle: {
+        color: "#fff",
+        fontSize: 14,
+        fontWeight: "700",
+    },
+    musicChipArtist: {
+        color: "#888",
+        fontSize: 12,
+        marginTop: 2,
+    },
+    musicChipRemove: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#1b1b1b",
+        marginLeft: 10,
+    },
+    musicChipRemoveText: {
+        color: "#fff",
+        fontWeight: "800",
+        fontSize: 12,
     },
     button: {
         backgroundColor: "#5E17EB",

@@ -15,16 +15,11 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../components/Logo";
-import Constants from "expo-constants";
+import { API_URL } from "../lib/config";
 
 const CLOUD_NAME = "dyc6hwvj4";
 const UPLOAD_PRESET = "truebpm_unsigned";
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
-
-// 🔥 Récup IP locale via Expo (avec fallback)
-const hostUri = Constants.expoConfig?.hostUri;
-const localIP = hostUri ? hostUri.split(":")[0] : "192.168.1.146"; // adapte l’IP si besoin
-const API_URL = `http://${localIP}:3000`;
 
 export default function ProfileSetupScreen({ navigation }: any) {
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -114,7 +109,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
             }
 
             const res = await fetch(`${API_URL}/api/user/profile`, {
-                method: "POST",
+                method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,

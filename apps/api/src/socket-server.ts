@@ -1,4 +1,3 @@
-// apps/api/src/socket-server.ts
 import dotenv from "dotenv";
 import path from "path";
 import crypto from "crypto";
@@ -13,7 +12,6 @@ const fp = (s?: string) =>
 console.log("SOCKET JWT_SECRET fp:", fp(process.env.JWT_SECRET));
 console.log("SOCKET cwd:", process.cwd());
 console.log("SOCKET env path:", path.resolve(process.cwd(), ".env.local"));
-console.log("SOCKET raw JWT_SECRET:", process.env.JWT_SECRET);
 
 import "@/lib/loadModels";
 import { connectDB } from "@/lib/db";
@@ -21,8 +19,35 @@ import { verifyTokenSocket } from "./verifyTokenSocket";
 
 import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
+import Notification from "@/models/Notification";
+import User from "@/models/User";
 
 const PORT = Number(process.env.SOCKET_PORT || 3001);
+
+async function emitPresenceToContacts(io: Server, userId: string, isOnline: boolean, lastSeenAt: Date) {
+ try {
+  const me: any = await User.findById(userId)
+      .select("followersList followingList")
+      .lean();
+
+  const targets = new Set<string>();
+
+  for (const id of me?.followersList || []) targets.add(String(id));
+  for (const id of me?.followingList || []) targets.add(String(id));
+
+  const payload = {
+   userId: String(userId),
+   isOnline: !!isOnline,
+   lastSeenAt: lastSeenAt.toISOString(),
+  };
+
+  for (const targetId of targets) {
+   io.to(`user:${targetId}`).emit("presence:update", payload);
+  }
+ } catch (e: any) {
+  console.log("emitPresenceToContacts error:", e?.message || e);
+ }
+}
 
 async function main() {
  await connectDB();
@@ -41,21 +66,12 @@ async function main() {
   transports: ["polling", "websocket"],
  });
 
- // ✅ Auth middleware
  io.use(async (socket, next) => {
   try {
    const token = socket.handshake.auth?.token;
-
-   console.log(
-       "SOCKET token head:",
-       typeof token === "string" ? token.slice(0, 16) : token
-   );
-
    const userId = await verifyTokenSocket(token);
-
    // @ts-ignore
    socket.userId = String(userId);
-
    return next();
   } catch (e: any) {
    console.log("SOCKET auth failed:", e?.message || e);
@@ -63,7 +79,7 @@ async function main() {
   }
  });
 
- io.on("connection", (socket) => {
+ io.on("connection", async (socket) => {
   // @ts-ignore
   const meId = socket.userId as string;
 
@@ -75,16 +91,30 @@ async function main() {
 
   socket.join(`user:${meId}`);
 
+  // ✅ online
+  try {
+   const now = new Date();
+
+   await User.findByIdAndUpdate(meId, {
+    $set: {
+     isOnline: true,
+     lastSeenAt: now,
+    },
+   });
+
+   await emitPresenceToContacts(io, meId, true, now);
+  } catch (e: any) {
+   console.log("presence connect error:", e?.message || e);
+  }
+
   socket.on("conversation:join", ({ conversationId }) => {
    if (!conversationId) return;
    socket.join(`conversation:${conversationId}`);
-   console.log("📥 joined conversation:", { socketId: socket.id, conversationId });
   });
 
   socket.on("conversation:leave", ({ conversationId }) => {
    if (!conversationId) return;
    socket.leave(`conversation:${conversationId}`);
-   console.log("📤 left conversation:", { socketId: socket.id, conversationId });
   });
 
   socket.on("typing:set", ({ conversationId, typing }) => {
@@ -125,23 +155,40 @@ async function main() {
    }
   });
 
-  socket.on("disconnect", (reason) => {
+  socket.on("disconnect", async (reason) => {
    console.log("🛑 socket disconnected:", {
     socketId: socket.id,
     userId: meId,
     reason,
    });
+
+   try {
+    const stillConnected = await io.in(`user:${meId}`).fetchSockets();
+    if (stillConnected.length === 0) {
+     const now = new Date();
+
+     await User.findByIdAndUpdate(meId, {
+      $set: {
+       isOnline: false,
+       lastSeenAt: now,
+      },
+     });
+
+     await emitPresenceToContacts(io, meId, false, now);
+    }
+   } catch (e: any) {
+    console.log("presence disconnect error:", e?.message || e);
+   }
   });
  });
 
- // ✅ Change streams (Mongo replica set / Atlas)
  try {
-  const changeStream = Message.watch(
+  const messageChangeStream = Message.watch(
       [{ $match: { operationType: "insert" } }],
       { fullDocument: "updateLookup" }
   );
 
-  changeStream.on("change", async (change: any) => {
+  messageChangeStream.on("change", async (change: any) => {
    const doc = change.fullDocument;
    if (!doc) return;
 
@@ -165,11 +212,50 @@ async function main() {
    }
   });
 
-  changeStream.on("error", (e: any) => {
-   console.log("ChangeStream error:", e?.message || e);
+  messageChangeStream.on("error", (e: any) => {
+   console.log("Message ChangeStream error:", e?.message || e);
   });
  } catch (e: any) {
-  console.log("ChangeStream unavailable (Mongo must be replica set).", e?.message || e);
+  console.log("Message ChangeStream unavailable.", e?.message || e);
+ }
+
+ try {
+  const notificationChangeStream = Notification.watch(
+      [{ $match: { operationType: "insert" } }],
+      { fullDocument: "updateLookup" }
+  );
+
+  notificationChangeStream.on("change", async (change: any) => {
+   const doc = change.fullDocument;
+   if (!doc) return;
+
+   const recipientId = String(doc.recipientId);
+
+   const populated = await Notification.findById(doc._id)
+       .populate("actorId", "_id pseudo avatarUrl")
+       .populate("postId", "_id trackTitle artist coverUrl")
+       .populate("commentId", "_id text")
+       .lean();
+
+   const unreadCount = await Notification.countDocuments({
+    recipientId,
+    isRead: false,
+   });
+
+   io.to(`user:${recipientId}`).emit("notification:new", {
+    notification: populated,
+   });
+
+   io.to(`user:${recipientId}`).emit("notifications:unread_count", {
+    unreadCount,
+   });
+  });
+
+  notificationChangeStream.on("error", (e: any) => {
+   console.log("Notification ChangeStream error:", e?.message || e);
+  });
+ } catch (e: any) {
+  console.log("Notification ChangeStream unavailable.", e?.message || e);
  }
 
  server.listen(PORT, "0.0.0.0", () => {

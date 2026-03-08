@@ -1,5 +1,5 @@
 // apps/mobile/src/components/PostCard/index.tsx
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -24,81 +24,102 @@ export default function PostCard({ post, onDeleted }: Props) {
     const { me } = useUser();
 
     const [localPost, setLocalPost] = useState<PostType>(post);
+    const lastPostIdRef = useRef(post._id);
+
+    useEffect(() => {
+        if (lastPostIdRef.current !== post._id) {
+            lastPostIdRef.current = post._id;
+            setLocalPost(post);
+        }
+    }, [post]);
 
     const isRepost = localPost.type === "repost" && !!localPost.repostOf;
 
-    // ✅ le post de référence (likes / reposts / commentaires)
-    const basePost: PostType = (isRepost ? localPost.repostOf : localPost) as PostType;
-
-    // ✅ reposter (pour le bandeau)
+    const originalPost: PostType = (isRepost ? localPost.repostOf : localPost) as PostType;
     const reposter = localPost.repostedBy ?? null;
 
-    // ✅ droit de suppression : post normal + auteur = moi
+    // ✅ IMPORTANT:
+    // Pour les reposts, l’ActionsBar doit utiliser :
+    // - l’ID du post original
+    // - mais les compteurs/flags sociaux calculés au top-level du wrapper
+    const socialPost: PostType = useMemo(() => {
+        if (!isRepost || !localPost.repostOf) return localPost;
+
+        return {
+            ...localPost.repostOf,
+            likesCount: localPost.likesCount ?? localPost.repostOf.likesCount ?? 0,
+            repostsCount: localPost.repostsCount ?? localPost.repostOf.repostsCount ?? 0,
+            commentsCount: localPost.commentsCount ?? localPost.repostOf.commentsCount ?? 0,
+            likedByMe: localPost.likedByMe ?? localPost.repostOf.likedByMe ?? false,
+            repostedByMe: localPost.repostedByMe ?? localPost.repostOf.repostedByMe ?? false,
+        };
+    }, [isRepost, localPost]);
+
     const canDelete =
         localPost.type !== "repost" &&
         !!me?._id &&
         localPost.userId?._id?.toString?.() === me._id?.toString?.();
 
-    const isSimple = basePost.mode === "general";
+    const isSimple = originalPost.mode === "general";
 
     const average = useMemo(() => {
         if (isSimple) return null;
 
-        if (basePost.ratings && typeof basePost.ratings === "object") {
-            const values = Object.values(basePost.ratings);
+        if (originalPost.ratings && typeof originalPost.ratings === "object") {
+            const values = Object.values(originalPost.ratings);
             if (!values.length) return null;
             return Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1));
         }
 
-        const legacy = [basePost.prod, basePost.lyrics, basePost.emotion].filter(
+        const legacy = [originalPost.prod, originalPost.lyrics, originalPost.emotion].filter(
             (v) => typeof v === "number"
         ) as number[];
 
         if (!legacy.length) return null;
 
         return Number((legacy.reduce((a, b) => a + b, 0) / legacy.length).toFixed(1));
-    }, [basePost, isSimple]);
+    }, [originalPost, isSimple]);
 
-    const openDetail = () => navigation.push("PostDetail", { postId: basePost._id });
+    const openDetail = () => navigation.push("PostDetail", { postId: originalPost._id });
 
-    // ✅ patch local (likes / reposts)
     const onLocalUpdate = (patch: Partial<PostType>) => {
         setLocalPost((p) => {
             if (p.type === "repost" && p.repostOf) {
-                return { ...p, repostOf: { ...p.repostOf, ...patch } };
+                return {
+                    ...p,
+                    ...patch, // ✅ garde aussi les compteurs/flags au top-level du wrapper
+                    repostOf: { ...p.repostOf, ...patch }, // ✅ sync aussi l’original embarqué
+                };
             }
+
             return { ...p, ...patch };
         });
     };
 
-    // ✅ Share: ouvre Messages -> Conversations avec sharePostId
     const onShare = useCallback(() => {
-        if (!basePost?._id) return;
+        if (!originalPost?._id) return;
 
         navigation.navigate("Main", {
-            screen: "Notifications", // tab Messages
+            screen: "Notifications",
             params: {
                 screen: "Conversations",
-                params: { sharePostId: basePost._id },
+                params: { sharePostId: originalPost._id },
             },
         });
-    }, [navigation, basePost?._id]);
+    }, [navigation, originalPost?._id]);
 
     return (
         <TouchableOpacity activeOpacity={0.95} onPress={openDetail}>
             <View style={styles.card}>
-                {/* 🔁 bandeau repost */}
                 {isRepost && reposter ? (
                     <View style={styles.repostBanner}>
                         <Ionicons name="repeat" size={16} color="#9B5CFF" />
                         <Text style={styles.repostText}>
-                            <Text style={styles.reposterName}>{reposter.pseudo}</Text>{" "}
-                            a reposté
+                            <Text style={styles.reposterName}>{reposter.pseudo}</Text> a reposté
                         </Text>
                     </View>
                 ) : null}
 
-                {/* 💬 commentaire du repost */}
                 {isRepost && localPost.repostComment?.trim()?.length ? (
                     <View style={{ marginBottom: 10 }}>
                         <CommentBox text={localPost.repostComment} />
@@ -107,10 +128,10 @@ export default function PostCard({ post, onDeleted }: Props) {
 
                 <View style={isRepost ? styles.quoted : undefined}>
                     <Header
-                        pseudo={basePost.userId?.pseudo || "Utilisateur"}
-                        avatarUrl={basePost.userId?.avatarUrl || ""}
-                        createdAt={basePost.createdAt}
-                        userId={basePost.userId?._id || ""}
+                        pseudo={originalPost.userId?.pseudo || "Utilisateur"}
+                        avatarUrl={originalPost.userId?.avatarUrl || ""}
+                        createdAt={originalPost.createdAt}
+                        userId={originalPost.userId?._id || ""}
                         repostByPseudo={reposter?.pseudo}
                         repostByUserId={reposter?._id}
                         postId={localPost._id}
@@ -119,39 +140,41 @@ export default function PostCard({ post, onDeleted }: Props) {
                     />
 
                     <TrackInfo
-                        coverUrl={basePost.coverUrl}
-                        title={basePost.trackTitle}
-                        artist={basePost.artist}
-                        entityType={basePost.entityType}
+                        coverUrl={originalPost.coverUrl}
+                        title={originalPost.trackTitle}
+                        artist={originalPost.artist}
+                        entityType={originalPost.entityType}
                     />
 
                     {isSimple ? (
-                        <RatingSimple rating={basePost.rating} />
+                        <RatingSimple rating={originalPost.rating} />
                     ) : (
                         <RatingMulti
-                            entityType={basePost.entityType}
+                            entityType={originalPost.entityType}
                             average={average}
-                            ratings={basePost.ratings ?? null}
-                            prod={basePost.prod ?? null}
-                            lyrics={basePost.lyrics ?? null}
-                            emotion={basePost.emotion ?? null}
+                            ratings={originalPost.ratings ?? null}
+                            prod={originalPost.prod ?? null}
+                            lyrics={originalPost.lyrics ?? null}
+                            emotion={originalPost.emotion ?? null}
                         />
                     )}
 
-                    {basePost.comment?.trim().length ? <CommentBox text={basePost.comment} /> : null}
+                    {originalPost.comment?.trim().length ? (
+                        <CommentBox text={originalPost.comment} />
+                    ) : null}
 
                     <AudioPreview
-                        previewUrl={basePost.previewUrl}
-                        title={basePost.trackTitle}
-                        artist={basePost.artist}
-                        coverUrl={basePost.coverUrl}
+                        previewUrl={originalPost.previewUrl}
+                        title={originalPost.trackTitle}
+                        artist={originalPost.artist}
+                        coverUrl={originalPost.coverUrl}
                     />
 
                     <ActionsBar
-                        post={basePost}
+                        post={socialPost}
                         onLocalUpdate={onLocalUpdate}
                         onOpenComments={openDetail}
-                        onShare={onShare} // ✅ NEW
+                        onShare={onShare}
                     />
                 </View>
             </View>

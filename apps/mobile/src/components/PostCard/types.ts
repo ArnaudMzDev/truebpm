@@ -9,25 +9,22 @@ export type PostUser = {
 export type PostType = {
     _id: string;
 
-    // auteur du post (pour un repost wrapper, c'est souvent le reposter si ton API met userId = reposter)
     userId?: PostUser;
-
     createdAt: string;
 
-    mode: "general" | "multi";
+    mode?: "general" | "multi";
 
     entityType?: EntityType;
     entityId?: string | null;
 
-    trackTitle: string;
-    artist: string;
+    trackTitle?: string;
+    artist?: string;
     coverUrl?: string | null;
     previewUrl?: string | null;
 
     rating?: number | null;
     ratings?: Record<string, number> | null;
 
-    // legacy
     prod?: number | null;
     lyrics?: number | null;
     emotion?: number | null;
@@ -41,9 +38,8 @@ export type PostType = {
     likedByMe?: boolean;
     repostedByMe?: boolean;
 
-    // ✅ REPOST
     type?: "post" | "repost";
-    repostOf?: PostType | null; // original
-    repostedBy?: PostUser | null; // reposter (si ton API le renvoie)
+    repostOf?: PostType | null;
+    repostedBy?: PostUser | null;
     repostComment?: string;
 };

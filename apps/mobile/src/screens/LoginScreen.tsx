@@ -12,10 +12,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
-import Constants from "expo-constants";
-
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
+import { API_URL } from "../lib/config";
 
 function ErrorMessage({ message }: { message: string }) {
     const opacity = useRef(new Animated.Value(0)).current;
@@ -44,10 +41,6 @@ function validateEmail(email: string) {
     return /\S+@\S+\.\S+/.test(email);
 }
 
-/**
- * Parse JSON en mode safe :
- * - si le serveur renvoie HTML (404/405) => évite "Unexpected character: <"
- */
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
@@ -55,7 +48,6 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        // utile pour debug (retour HTML, etc.)
         console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
@@ -79,7 +71,8 @@ export default function LoginScreen({ navigation }: any) {
         setLoading(true);
 
         try {
-            // 1) Login -> token
+            console.log("LOGIN API_URL =", API_URL);
+
             const loginRes = await fetch(`${API_URL}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -101,7 +94,6 @@ export default function LoginScreen({ navigation }: any) {
 
             await AsyncStorage.setItem("token", token);
 
-            // 2) Source de vérité -> /user/me
             const meRes = await fetch(`${API_URL}/api/user/me`, {
                 method: "GET",
                 headers: {
@@ -112,7 +104,6 @@ export default function LoginScreen({ navigation }: any) {
             const meData = await safeJson(meRes);
 
             if (!meRes.ok) {
-                // Token pas accepté / backend pas prêt => on purge et on affiche
                 await AsyncStorage.multiRemove(["token", "user"]);
                 setLoading(false);
                 return setError(meData?.error || "Impossible de récupérer le profil.");

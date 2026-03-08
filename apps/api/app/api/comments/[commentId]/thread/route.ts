@@ -4,10 +4,14 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Comment from "@/models/Comment";
 import mongoose from "mongoose";
+import { getOptionalUserId } from "@/lib/requestAuth";
+
 
 export async function GET(req: Request, { params }: { params: { commentId: string } }) {
     try {
         await connectDB();
+
+        const meId = await getOptionalUserId(req);
 
         const { commentId } = params;
         if (!mongoose.Types.ObjectId.isValid(commentId)) {

@@ -1,5 +1,4 @@
-// apps/mobile/src/screens/ProfileScreen.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
     View,
     Text,
@@ -9,16 +8,27 @@ import {
     ActivityIndicator,
     FlatList,
     RefreshControl,
+    ScrollView,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import { API_URL } from "../lib/config";
 import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
+import { usePlayer } from "../context/PlayerContext";
 
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
+type MusicRef = {
+    entityId: string;
+    entityType: "song" | "album" | "artist";
+    title: string;
+    artist: string;
+    coverUrl: string;
+    previewUrl: string;
+};
+
+type ProfileTab = "posts" | "reposts" | "likes";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -36,9 +46,106 @@ function toBearer(rawToken: string | null) {
     return rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`;
 }
 
+function MusicHorizontalCard({
+                                 item,
+                                 compact = false,
+                             }: {
+    item: MusicRef;
+    compact?: boolean;
+}) {
+    return (
+        <View style={[styles.musicCard, compact && styles.musicCardCompact]}>
+            {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.musicCardCover} />
+            ) : (
+                <View style={[styles.musicCardCover, styles.musicPlaceholder]}>
+                    <Ionicons
+                        name={
+                            item.entityType === "artist"
+                                ? "person"
+                                : item.entityType === "album"
+                                    ? "disc"
+                                    : "musical-notes"
+                        }
+                        size={18}
+                        color="#9a9a9a"
+                    />
+                </View>
+            )}
+
+            <Text style={styles.musicCardTitle} numberOfLines={1}>
+                {item.title}
+            </Text>
+            <Text style={styles.musicCardArtist} numberOfLines={1}>
+                {item.artist}
+            </Text>
+        </View>
+    );
+}
+
+function SectionBlock({
+                          title,
+                          icon,
+                          children,
+                      }: {
+    title: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    children: React.ReactNode;
+}) {
+    return (
+        <View style={styles.sectionBlock}>
+            <View style={styles.sectionHeader}>
+                <Ionicons name={icon} size={16} color="#9B5CFF" />
+                <Text style={styles.sectionBlockTitle}>{title}</Text>
+            </View>
+            {children}
+        </View>
+    );
+}
+
+function EmptyMusicState({
+                             text,
+                             cta,
+                             onPress,
+                         }: {
+    text: string;
+    cta?: string;
+    onPress?: () => void;
+}) {
+    return (
+        <View style={styles.emptyBox}>
+            <Ionicons name="sparkles-outline" size={16} color="#777" />
+            <Text style={styles.emptyText}>{text}</Text>
+            {cta && onPress ? (
+                <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+                    <Text style={styles.emptyCta}>{cta}</Text>
+                </TouchableOpacity>
+            ) : null}
+        </View>
+    );
+}
+
+function EmptyPostsState({ tab }: { tab: ProfileTab }) {
+    const text =
+        tab === "posts"
+            ? "Tu n’as encore publié aucun post."
+            : tab === "reposts"
+                ? "Tu n’as encore reposté aucun post."
+                : "Aucun like pour le moment.";
+
+    return (
+        <View style={styles.emptyPostsBox}>
+            <Ionicons name="albums-outline" size={18} color="#777" />
+            <Text style={styles.emptyPostsText}>{text}</Text>
+        </View>
+    );
+}
+
 export default function ProfileScreen({ navigation }: any) {
     const [user, setUser] = useState<any>(null);
     const [loadingUser, setLoadingUser] = useState(true);
+
+    const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
 
     const [posts, setPosts] = useState<PostType[]>([]);
     const [initialLoadingPosts, setInitialLoadingPosts] = useState(true);
@@ -50,7 +157,8 @@ export default function ProfileScreen({ navigation }: any) {
 
     const LIMIT = 15;
 
-    // ✅ vrai logout propre (appel serveur + clear storage + reset nav)
+    const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
+
     const handleLogout = useCallback(async () => {
         const stored = await AsyncStorage.getItem("token");
         const bearer = toBearer(stored);
@@ -63,7 +171,6 @@ export default function ProfileScreen({ navigation }: any) {
         }
 
         await AsyncStorage.multiRemove(["token", "user"]);
-
         navigation.reset({ index: 0, routes: [{ name: "Login" }] });
     }, [navigation]);
 
@@ -93,7 +200,7 @@ export default function ProfileScreen({ navigation }: any) {
         return json.user;
     }, [handleLogout]);
 
-    const fetchInitialPosts = useCallback(async (uid: string) => {
+    const fetchTabPosts = useCallback(async (uid: string, tab: ProfileTab) => {
         try {
             setInitialLoadingPosts(true);
             setCursor(null);
@@ -103,10 +210,8 @@ export default function ProfileScreen({ navigation }: any) {
             if (!bearer) return;
 
             const res = await fetch(
-                `${API_URL}/api/posts?userId=${encodeURIComponent(uid)}&limit=${LIMIT}`,
-                {
-                    headers: { Authorization: bearer }, // ✅ IMPORTANT (sans double Bearer)
-                }
+                `${API_URL}/api/posts/user/${encodeURIComponent(uid)}?tab=${tab}&limit=${LIMIT}`,
+                { headers: { Authorization: bearer } }
             );
 
             const json = await safeJson(res);
@@ -133,12 +238,8 @@ export default function ProfileScreen({ navigation }: any) {
             if (!bearer) return;
 
             const res = await fetch(
-                `${API_URL}/api/posts?userId=${encodeURIComponent(
-                    user._id
-                )}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
-                {
-                    headers: { Authorization: bearer }, // ✅ IMPORTANT
-                }
+                `${API_URL}/api/posts/user/${encodeURIComponent(user._id)}?tab=${activeTab}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
+                { headers: { Authorization: bearer } }
             );
 
             const json = await safeJson(res);
@@ -146,7 +247,6 @@ export default function ProfileScreen({ navigation }: any) {
 
             const newPosts = json?.posts || [];
             setPosts((prev) => [...prev, ...newPosts]);
-
             setCursor(json?.nextCursor || null);
             setHasMore(!!json?.nextCursor);
         } catch (err) {
@@ -154,14 +254,14 @@ export default function ProfileScreen({ navigation }: any) {
         } finally {
             setLoadingMore(false);
         }
-    }, [user, cursor, loadingMore, hasMore]);
+    }, [user, cursor, loadingMore, hasMore, activeTab]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         const me = await fetchMe();
-        if (me?._id) await fetchInitialPosts(me._id);
+        if (me?._id) await fetchTabPosts(me._id, activeTab);
         setRefreshing(false);
-    }, [fetchMe, fetchInitialPosts]);
+    }, [fetchMe, fetchTabPosts, activeTab]);
 
     useEffect(() => {
         (async () => {
@@ -178,19 +278,67 @@ export default function ProfileScreen({ navigation }: any) {
             const me = await fetchMe();
             setLoadingUser(false);
 
-            if (me?._id) await fetchInitialPosts(me._id);
+            if (me?._id) await fetchTabPosts(me._id, activeTab);
             else setInitialLoadingPosts(false);
         })();
-    }, [fetchMe, fetchInitialPosts]);
+    }, [fetchMe, fetchTabPosts]);
 
     useFocusEffect(
         useCallback(() => {
             (async () => {
                 const me = await fetchMe();
-                if (me?._id) await fetchInitialPosts(me._id);
+                if (me?._id) await fetchTabPosts(me._id, activeTab);
             })();
-        }, [fetchMe, fetchInitialPosts])
+        }, [fetchMe, fetchTabPosts, activeTab])
     );
+
+    useEffect(() => {
+        if (!user?._id) return;
+        fetchTabPosts(user._id, activeTab);
+    }, [activeTab, user?._id, fetchTabPosts]);
+
+    const pinnedTrack = user?.pinnedTrack as MusicRef | null;
+    const favoriteArtists = (user?.favoriteArtists || []) as MusicRef[];
+    const favoriteAlbums = (user?.favoriteAlbums || []) as MusicRef[];
+    const favoriteTracks = (user?.favoriteTracks || []) as MusicRef[];
+
+    const isPinnedCurrent =
+        !!pinnedTrack &&
+        !!currentTrack &&
+        currentTrack.title === pinnedTrack.title &&
+        currentTrack.artist === pinnedTrack.artist &&
+        currentTrack.url === (pinnedTrack.previewUrl || "");
+
+    const canPlayPinned =
+        !!pinnedTrack &&
+        pinnedTrack.entityType === "song" &&
+        !!pinnedTrack.previewUrl;
+
+    const handlePlayPinned = useCallback(async () => {
+        if (!pinnedTrack || !canPlayPinned) return;
+
+        if (isPinnedCurrent) {
+            await togglePlay();
+            return;
+        }
+
+        await playPreview({
+            title: pinnedTrack.title,
+            artist: pinnedTrack.artist,
+            url: pinnedTrack.previewUrl,
+            coverUrl: pinnedTrack.coverUrl,
+        });
+    }, [pinnedTrack, canPlayPinned, isPinnedCurrent, togglePlay, playPreview]);
+
+    const profileCompletion = useMemo(() => {
+        let score = 0;
+        if (user?.bio?.trim()) score += 1;
+        if (pinnedTrack) score += 1;
+        if (favoriteArtists.length) score += 1;
+        if (favoriteAlbums.length) score += 1;
+        if (favoriteTracks.length) score += 1;
+        return score;
+    }, [user?.bio, pinnedTrack, favoriteArtists.length, favoriteAlbums.length, favoriteTracks.length]);
 
     if (loadingUser || !user || (initialLoadingPosts && posts.length === 0)) {
         return (
@@ -200,6 +348,19 @@ export default function ProfileScreen({ navigation }: any) {
         );
     }
 
+    const TabButton = ({ tab, label }: { tab: ProfileTab; label: string }) => {
+        const active = activeTab === tab;
+        return (
+            <TouchableOpacity
+                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.85}
+            >
+                <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>{label}</Text>
+            </TouchableOpacity>
+        );
+    };
+
     const Header = () => (
         <View style={{ width: "100%" }}>
             <View style={styles.bannerBox}>
@@ -207,56 +368,58 @@ export default function ProfileScreen({ navigation }: any) {
                     source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
                     style={styles.banner}
                 />
+                <View style={styles.bannerOverlay} />
             </View>
 
-            <View style={styles.buttonsRow}>
+            <View style={styles.topActions}>
                 <TouchableOpacity
                     style={styles.editButton}
                     onPress={() => navigation.navigate("EditProfile")}
+                    activeOpacity={0.85}
                 >
+                    <Ionicons name="create-outline" size={15} color="#fff" />
                     <Text style={styles.editText}>Modifier</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                    <Text style={styles.logoutIcon}>⏻</Text>
+                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.85}>
+                    <Ionicons name="log-out-outline" size={15} color="#FF7A7A" />
                 </TouchableOpacity>
             </View>
 
-            <Image
-                source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                style={[styles.avatar, styles.avatarGlow]}
-            />
+            <View style={styles.identityBlock}>
+                <Image
+                    source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
+                    style={[styles.avatar, styles.avatarGlow]}
+                />
 
-            <Text style={styles.pseudo}>{user.pseudo}</Text>
-            <Text style={styles.bio}>{user.bio || "Aucune bio."}</Text>
+                <Text style={styles.pseudo}>{user.pseudo}</Text>
+                <Text style={styles.bio}>{user.bio || "Ajoute une bio pour personnaliser ton univers musical."}</Text>
+
+                <View style={styles.profileBadgeRow}>
+                    <View style={styles.profileBadge}>
+                        <Ionicons name="sparkles" size={13} color="#9B5CFF" />
+                        <Text style={styles.profileBadgeText}>Profil musical {profileCompletion}/5</Text>
+                    </View>
+                </View>
+            </View>
 
             <View style={styles.stats}>
                 <TouchableOpacity
                     style={styles.statBtn}
                     onPress={() => navigation.navigate("FollowersList", { userId: user._id })}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.8}
                 >
-                    <Text style={styles.statNumber} pointerEvents="none">
-                        {user.followers || 0}
-                    </Text>
-                    <Text style={styles.statLabel} pointerEvents="none">
-                        Followers
-                    </Text>
+                    <Text style={styles.statNumber}>{user.followers || 0}</Text>
+                    <Text style={styles.statLabel}>Followers</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={styles.statBtn}
                     onPress={() => navigation.navigate("FollowingList", { userId: user._id })}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.8}
                 >
-                    <Text style={styles.statNumber} pointerEvents="none">
-                        {user.following || 0}
-                    </Text>
-                    <Text style={styles.statLabel} pointerEvents="none">
-                        Following
-                    </Text>
+                    <Text style={styles.statNumber}>{user.following || 0}</Text>
+                    <Text style={styles.statLabel}>Following</Text>
                 </TouchableOpacity>
 
                 <View style={styles.statBtn}>
@@ -265,7 +428,103 @@ export default function ProfileScreen({ navigation }: any) {
                 </View>
             </View>
 
-            <Text style={styles.postsTitle}>Mes posts</Text>
+            <SectionBlock title="Son épinglé" icon="musical-notes-outline">
+                {pinnedTrack ? (
+                    <TouchableOpacity
+                        activeOpacity={canPlayPinned ? 0.9 : 1}
+                        onPress={canPlayPinned ? handlePlayPinned : undefined}
+                        style={[styles.pinnedCard, isPinnedCurrent && isPlaying && styles.pinnedCardPlaying]}
+                    >
+                        {pinnedTrack.coverUrl ? (
+                            <Image source={{ uri: pinnedTrack.coverUrl }} style={styles.pinnedCover} />
+                        ) : (
+                            <View style={[styles.pinnedCover, styles.musicPlaceholder]}>
+                                <Ionicons name="musical-notes" size={22} color="#999" />
+                            </View>
+                        )}
+
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.pinnedLabel}>Titre du moment</Text>
+                            <Text style={styles.pinnedTitle} numberOfLines={1}>
+                                {pinnedTrack.title}
+                            </Text>
+                            <Text style={styles.pinnedArtist} numberOfLines={1}>
+                                {pinnedTrack.artist}
+                            </Text>
+                        </View>
+
+                        {canPlayPinned ? (
+                            <View style={[styles.pinnedPlayBtn, isPinnedCurrent && isPlaying && styles.pinnedPlayBtnActive]}>
+                                <Ionicons
+                                    name={isPinnedCurrent && isPlaying ? "pause" : "play"}
+                                    size={18}
+                                    color="#fff"
+                                />
+                            </View>
+                        ) : null}
+                    </TouchableOpacity>
+                ) : (
+                    <EmptyMusicState
+                        text="Ajoute un son épinglé pour donner le ton de ton profil."
+                        cta="Choisir un son"
+                        onPress={() => navigation.navigate("EditProfile")}
+                    />
+                )}
+            </SectionBlock>
+
+            <SectionBlock title="Artistes favoris" icon="person-outline">
+                {favoriteArtists.length > 0 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                        {favoriteArtists.map((item) => (
+                            <MusicHorizontalCard key={`artist:${item.entityId}`} item={item} compact />
+                        ))}
+                    </ScrollView>
+                ) : (
+                    <EmptyMusicState
+                        text="Ajoute jusqu’à 3 artistes favoris."
+                        cta="Compléter"
+                        onPress={() => navigation.navigate("EditProfile")}
+                    />
+                )}
+            </SectionBlock>
+
+            <SectionBlock title="Albums favoris" icon="disc-outline">
+                {favoriteAlbums.length > 0 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                        {favoriteAlbums.map((item) => (
+                            <MusicHorizontalCard key={`album:${item.entityId}`} item={item} compact />
+                        ))}
+                    </ScrollView>
+                ) : (
+                    <EmptyMusicState
+                        text="Ajoute tes albums de référence."
+                        cta="Compléter"
+                        onPress={() => navigation.navigate("EditProfile")}
+                    />
+                )}
+            </SectionBlock>
+
+            <SectionBlock title="Morceaux favoris" icon="headset-outline">
+                {favoriteTracks.length > 0 ? (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                        {favoriteTracks.map((item) => (
+                            <MusicHorizontalCard key={`track:${item.entityId}`} item={item} compact />
+                        ))}
+                    </ScrollView>
+                ) : (
+                    <EmptyMusicState
+                        text="Ajoute tes morceaux favoris pour enrichir ton profil."
+                        cta="Compléter"
+                        onPress={() => navigation.navigate("EditProfile")}
+                    />
+                )}
+            </SectionBlock>
+
+            <View style={styles.tabsRow}>
+                <TabButton tab="posts" label="Posts" />
+                <TabButton tab="reposts" label="Reposts" />
+                <TabButton tab="likes" label="Likes" />
+            </View>
         </View>
     );
 
@@ -275,14 +534,13 @@ export default function ProfileScreen({ navigation }: any) {
             keyExtractor={(item) => item._id}
             renderItem={({ item }) => <PostCard post={item} />}
             ListHeaderComponent={Header}
+            ListEmptyComponent={<EmptyPostsState tab={activeTab} />}
             contentContainerStyle={{ paddingBottom: 40 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9B5CFF" />}
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
             ListFooterComponent={
-                loadingMore ? (
-                    <ActivityIndicator size="small" color="#9B5CFF" style={{ marginVertical: 16 }} />
-                ) : null
+                loadingMore ? <ActivityIndicator size="small" color="#9B5CFF" style={{ marginVertical: 16 }} /> : null
             }
             style={{ flex: 1, backgroundColor: "#000" }}
         />
@@ -296,74 +554,305 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    bannerBox: { width: "100%", height: 160, backgroundColor: "#111" },
-    banner: { width: "100%", height: "100%" },
-    buttonsRow: {
+
+    bannerBox: {
+        width: "100%",
+        height: 190,
+        backgroundColor: "#111",
+        position: "relative",
+    },
+    banner: {
+        width: "100%",
+        height: "100%",
+    },
+    bannerOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(0,0,0,0.18)",
+    },
+
+    topActions: {
+        position: "absolute",
+        top: 146,
+        right: 16,
         flexDirection: "row",
-        justifyContent: "flex-end",
-        paddingHorizontal: 16,
-        marginTop: 10,
         gap: 10,
+        zIndex: 3,
     },
     editButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
         backgroundColor: "#5E17EB",
-        paddingVertical: 6,
+        paddingVertical: 8,
         paddingHorizontal: 14,
-        borderRadius: 10,
+        borderRadius: 12,
     },
-    editText: { color: "#fff", fontWeight: "600" },
+    editText: {
+        color: "#fff",
+        fontWeight: "700",
+    },
     logoutButton: {
-        backgroundColor: "#330000",
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        backgroundColor: "#1a0d0d",
         borderWidth: 1,
-        borderColor: "#FF4444",
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: 10,
+        borderColor: "#5b2323",
+        alignItems: "center",
+        justifyContent: "center",
     },
-    logoutIcon: { color: "#FF5555", fontSize: 14, fontWeight: "700" },
 
+    identityBlock: {
+        marginTop: -48,
+        paddingHorizontal: 20,
+    },
     avatar: {
-        width: 90,
-        height: 90,
-        borderRadius: 45,
-        borderWidth: 3,
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        borderWidth: 4,
         borderColor: "#000",
-        marginTop: -50,
-        marginLeft: 20,
+        backgroundColor: "#111",
     },
     avatarGlow: {
         shadowColor: "#9B5CFF",
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
         shadowOffset: { width: 0, height: 0 },
     },
-    pseudo: { fontSize: 22, color: "#fff", fontWeight: "800", marginTop: 10, marginLeft: 20 },
-    bio: { color: "#ccc", fontSize: 14, marginTop: 6, marginLeft: 20, marginRight: 20 },
+    pseudo: {
+        fontSize: 24,
+        color: "#fff",
+        fontWeight: "800",
+        marginTop: 12,
+    },
+    bio: {
+        color: "#c9c9c9",
+        fontSize: 14,
+        lineHeight: 20,
+        marginTop: 8,
+        marginRight: 16,
+    },
+
+    profileBadgeRow: {
+        flexDirection: "row",
+        marginTop: 12,
+    },
+    profileBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "#121212",
+        borderWidth: 1,
+        borderColor: "#252525",
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+        borderRadius: 999,
+    },
+    profileBadgeText: {
+        color: "#d0d0d0",
+        fontSize: 12,
+        fontWeight: "700",
+    },
 
     stats: {
         flexDirection: "row",
-        marginTop: 25,
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderColor: "#222",
+        marginTop: 22,
+        marginHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: "#0f0f0f",
+        borderWidth: 1,
+        borderColor: "#1c1c1c",
+        borderRadius: 16,
     },
-
     statBtn: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 8,
+        paddingVertical: 10,
     },
-
-    statNumber: { color: "#fff", fontSize: 18, fontWeight: "700" },
-    statLabel: { color: "#aaa", fontSize: 13 },
-
-    postsTitle: {
+    statNumber: {
         color: "#fff",
         fontSize: 18,
-        fontWeight: "700",
-        marginLeft: 20,
-        marginTop: 30,
+        fontWeight: "800",
+    },
+    statLabel: {
+        color: "#8f8f8f",
+        fontSize: 12,
+        marginTop: 4,
+        fontWeight: "600",
+    },
+
+    sectionBlock: {
+        marginTop: 22,
+        marginHorizontal: 16,
+        backgroundColor: "#0d0d0d",
+        borderWidth: 1,
+        borderColor: "#1c1c1c",
+        borderRadius: 18,
+        padding: 14,
+    },
+    sectionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 12,
+    },
+    sectionBlockTitle: {
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "800",
+    },
+
+    pinnedCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#131313",
+        borderWidth: 1,
+        borderColor: "#242424",
+        borderRadius: 16,
+        padding: 12,
+        gap: 12,
+    },
+    pinnedCardPlaying: {
+        borderColor: "#6f37f0",
+        backgroundColor: "#151022",
+    },
+    pinnedCover: {
+        width: 60,
+        height: 60,
+        borderRadius: 12,
+        backgroundColor: "#1a1a1a",
+    },
+    pinnedLabel: {
+        color: "#9B5CFF",
+        fontSize: 12,
+        fontWeight: "800",
+        marginBottom: 4,
+    },
+    pinnedTitle: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "800",
+    },
+    pinnedArtist: {
+        color: "#a6a6a6",
+        fontSize: 13,
+        marginTop: 4,
+    },
+    pinnedPlayBtn: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#5E17EB",
+    },
+    pinnedPlayBtnActive: {
+        backgroundColor: "#7B3DFF",
+    },
+
+    horizontalList: {
+        paddingRight: 6,
+    },
+    musicCard: {
+        width: 132,
+        marginRight: 10,
+        backgroundColor: "#131313",
+        borderWidth: 1,
+        borderColor: "#232323",
+        borderRadius: 14,
+        padding: 10,
+    },
+    musicCardCompact: {
+        width: 128,
+    },
+    musicCardCover: {
+        width: "100%",
+        height: 108,
+        borderRadius: 10,
+        backgroundColor: "#1b1b1b",
         marginBottom: 10,
+    },
+    musicPlaceholder: {
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    musicCardTitle: {
+        color: "#fff",
+        fontSize: 13,
+        fontWeight: "800",
+    },
+    musicCardArtist: {
+        color: "#8d8d8d",
+        fontSize: 12,
+        marginTop: 4,
+    },
+
+    emptyBox: {
+        alignItems: "flex-start",
+        gap: 8,
+        backgroundColor: "#131313",
+        borderWidth: 1,
+        borderColor: "#232323",
+        borderRadius: 14,
+        padding: 14,
+    },
+    emptyText: {
+        color: "#8c8c8c",
+        fontSize: 13,
+        lineHeight: 18,
+    },
+    emptyCta: {
+        color: "#9B5CFF",
+        fontWeight: "800",
+        fontSize: 13,
+    },
+
+    tabsRow: {
+        flexDirection: "row",
+        gap: 10,
+        marginHorizontal: 16,
+        marginTop: 24,
+        marginBottom: 12,
+    },
+    tabBtn: {
+        flex: 1,
+        backgroundColor: "#111",
+        borderWidth: 1,
+        borderColor: "#232323",
+        borderRadius: 12,
+        paddingVertical: 11,
+        alignItems: "center",
+    },
+    tabBtnActive: {
+        backgroundColor: "#5E17EB",
+        borderColor: "#5E17EB",
+    },
+    tabBtnText: {
+        color: "#b8b8b8",
+        fontWeight: "800",
+        fontSize: 13,
+    },
+    tabBtnTextActive: {
+        color: "#fff",
+    },
+
+    emptyPostsBox: {
+        marginHorizontal: 16,
+        marginTop: 6,
+        padding: 16,
+        borderRadius: 16,
+        backgroundColor: "#111",
+        borderWidth: 1,
+        borderColor: "#1f1f1f",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    emptyPostsText: {
+        color: "#8b8b8b",
+        fontSize: 13,
+        flex: 1,
     },
 });

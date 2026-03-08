@@ -10,11 +10,8 @@ import {
 } from "react-native";
 import { useUser } from "../context/UserContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import { API_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
-
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
 
 type Props = {
     user: {

@@ -1,5 +1,19 @@
 import { Schema, model, models } from "mongoose";
 
+const MusicRefSchema = new Schema(
+    {
+        entityId: { type: String, default: "" },
+        entityType: { type: String, enum: ["song", "album", "artist"], required: true },
+
+        title: { type: String, default: "" },
+        artist: { type: String, default: "" },
+
+        coverUrl: { type: String, default: "" },
+        previewUrl: { type: String, default: "" },
+    },
+    { _id: false }
+);
+
 const UserSchema = new Schema(
     {
         pseudo: String,
@@ -23,6 +37,40 @@ const UserSchema = new Schema(
         },
 
         notesCount: { type: Number, default: 0 },
+
+        // présence
+        isOnline: { type: Boolean, default: false, index: true },
+        lastSeenAt: { type: Date, default: null },
+
+        // ✅ profil musical
+        pinnedTrack: { type: MusicRefSchema, default: null },
+
+        favoriteArtists: {
+            type: [MusicRefSchema],
+            default: [],
+            validate: {
+                validator: (arr: any[]) => arr.length <= 3,
+                message: "favoriteArtists cannot exceed 3 items",
+            },
+        },
+
+        favoriteAlbums: {
+            type: [MusicRefSchema],
+            default: [],
+            validate: {
+                validator: (arr: any[]) => arr.length <= 3,
+                message: "favoriteAlbums cannot exceed 3 items",
+            },
+        },
+
+        favoriteTracks: {
+            type: [MusicRefSchema],
+            default: [],
+            validate: {
+                validator: (arr: any[]) => arr.length <= 3,
+                message: "favoriteTracks cannot exceed 3 items",
+            },
+        },
     },
     { timestamps: true }
 );
@@ -35,4 +83,5 @@ UserSchema.index(
         default_language: "none",
     }
 );
+
 export default models.User || model("User", UserSchema);

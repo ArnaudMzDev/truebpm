@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 import mongoose from "mongoose";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: Request, ctx: { params: { id: string } }) {
     try {
@@ -50,6 +51,11 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
             target.followers = Math.max(0, (target.followers || 0) - 1);
 
             await Promise.all([me.save(), target.save()]);
+            await createNotification({
+                recipientId: String(target._id),
+                actorId: String(me._id),
+                type: "follow",
+            });
 
             return NextResponse.json(
                 {

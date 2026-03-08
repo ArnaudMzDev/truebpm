@@ -1,16 +1,19 @@
-// apps/api/app/api/posts/[postId]/repost/route.ts
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import mongoose from "mongoose";
+import { requireUserId } from "@/lib/requestAuth";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: Request, { params }: { params: { postId: string } }) {
     try {
         await connectDB();
 
-        const meId = req.headers.get("x-user-id");
-        if (!meId) return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        const meId = await requireUserId(req);
+        if (!meId) {
+            return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+        }
 
         const { postId } = params;
         if (!mongoose.Types.ObjectId.isValid(postId) || !mongoose.Types.ObjectId.isValid(meId)) {
@@ -19,49 +22,63 @@ export async function POST(req: Request, { params }: { params: { postId: string 
 
         const me = new mongoose.Types.ObjectId(meId);
 
-        // On récupère le post visé
-        const target: any = await Post.findById(postId).select("_id type repostOf repostedBy").lean();
-        if (!target) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+        const target: any = await Post.findById(postId)
+            .select("_id type repostOf repostedBy")
+            .lean();
 
-        // ✅ Si on appuie sur un repost, on toggle sur le post ORIGINAL
+        if (!target) {
+            return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+        }
+
         const baseId =
             target.type === "repost" && target.repostOf
                 ? new mongoose.Types.ObjectId(target.repostOf)
                 : new mongoose.Types.ObjectId(postId);
 
-        const base: any = await Post.findById(baseId).select("_id type").lean();
-        if (!base) return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+        const baseDoc: any = await Post.findById(baseId)
+            .select("_id type userId")
+            .lean();
 
-        // Interdit de repost un repost comme "base"
-        if (base.type === "repost") {
+        if (!baseDoc) {
+            return NextResponse.json({ error: "Post introuvable." }, { status: 404 });
+        }
+
+        if (baseDoc.type === "repost") {
             return NextResponse.json({ error: "Impossible de repost un repost." }, { status: 400 });
         }
 
-        // Existe déjà ?
-        const existing: any = await Post.findOne({ type: "repost", repostOf: baseId, repostedBy: meId })
+        const existing: any = await Post.findOne({
+            type: "repost",
+            repostOf: baseId,
+            repostedBy: meId,
+        })
             .select("_id")
             .lean();
 
         if (existing?._id) {
-            // ✅ UNREPOST
             await Post.deleteOne({ _id: existing._id });
 
             await Post.updateOne(
                 { _id: baseId },
-                { $pull: { reposts: me }, $inc: { repostsCount: -1 } }
+                { $pull: { reposts: me } }
             );
 
-            const fresh: any = await Post.findById(baseId).select("reposts repostsCount").lean();
+            const fresh: any = await Post.findById(baseId).select("reposts").lean();
             const arr = Array.isArray(fresh?.reposts) ? fresh.reposts : [];
-            const repostsCount = typeof fresh?.repostsCount === "number" ? fresh.repostsCount : arr.length;
+            const repostedByMe = arr.some((id: any) => id?.toString?.() === me.toString());
+            const repostsCount = arr.length;
+
+            await Post.updateOne(
+                { _id: baseId },
+                { $set: { repostsCount } }
+            );
 
             return NextResponse.json(
-                { status: "unreposted", repostedByMe: false, repostsCount: Math.max(0, repostsCount) },
+                { status: "unreposted", repostedByMe, repostsCount },
                 { status: 200 }
             );
         }
 
-        // ✅ REPOST
         const body = await req.json().catch(() => null);
         const repostComment = typeof body?.comment === "string" ? body.comment.trim() : "";
 
@@ -69,24 +86,39 @@ export async function POST(req: Request, { params }: { params: { postId: string 
             type: "repost",
             repostOf: baseId,
             repostedBy: meId,
-
-            // ✅ IMPORTANT: pour que ça apparaisse sur le profil via query userId
             userId: meId,
-
             repostComment,
         });
 
         await Post.updateOne(
             { _id: baseId },
-            { $addToSet: { reposts: me }, $inc: { repostsCount: 1 } }
+            { $addToSet: { reposts: me } }
         );
 
-        const fresh: any = await Post.findById(baseId).select("reposts repostsCount").lean();
+        const fresh: any = await Post.findById(baseId).select("reposts").lean();
         const arr = Array.isArray(fresh?.reposts) ? fresh.reposts : [];
-        const repostsCount = typeof fresh?.repostsCount === "number" ? fresh.repostsCount : arr.length;
+        const repostedByMe = arr.some((id: any) => id?.toString?.() === me.toString());
+        const repostsCount = arr.length;
+
+        await Post.updateOne(
+            { _id: baseId },
+            { $set: { repostsCount } }
+        );
+
+        await createNotification({
+            recipientId: String(baseDoc.userId),
+            actorId: String(me),
+            type: "repost_post",
+            postId: String(baseId),
+        });
 
         return NextResponse.json(
-            { status: "reposted", repostedByMe: true, repostsCount, repostId: created._id.toString() },
+            {
+                status: "reposted",
+                repostedByMe,
+                repostsCount,
+                repostId: created._id.toString(),
+            },
             { status: 201 }
         );
     } catch (e) {

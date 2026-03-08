@@ -6,12 +6,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
-import Constants from "expo-constants";
-
+import { API_URL } from "../lib/config";
 type SplashNav = NativeStackNavigationProp<RootStackParamList, "Splash">;
-
-const localIP = Constants.expoConfig?.hostUri?.split(":")[0];
-const API_URL = `http://${localIP}:3000`;
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text().catch(() => "");
