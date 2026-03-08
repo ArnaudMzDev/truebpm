@@ -354,6 +354,7 @@ export default function ChatScreen({ route, navigation }: any) {
                     if (!alive) return;
                     console.log("socket connected", s.id);
                     s.emit("conversation:join", { conversationId });
+                    s.emit("read:mark", { conversationId }); // ✅ pour sync immédiate du "Vu"
                 });
 
                 s.on("connect_error", (e: any) => {
@@ -372,6 +373,8 @@ export default function ChatScreen({ route, navigation }: any) {
                     const myId = meIdRef.current;
                     if (myId && sender === String(myId)) return; // ignore self
 
+                    setOtherTyping(false);
+
                     setMessages((prev) => {
                         const next = uniqById([...prev, message as Msg]);
                         next.sort((a, b) => {
@@ -385,7 +388,6 @@ export default function ChatScreen({ route, navigation }: any) {
 
                     scrollBottomRef.current(true);
 
-                    // mark read sans await
                     markAsReadRef.current().catch(() => {});
                     s.emit("read:mark", { conversationId: cid });
                 });
@@ -470,6 +472,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
         setSending(true);
         sendTyping(false);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
 
         const tempId = `tmp_${Date.now()}`;
         const optimistic: Msg = {
@@ -532,6 +536,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
         setSending(true);
         sendTyping(false);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
 
         const tempId = `tmp_img_${Date.now()}`;
         const optimistic: Msg = {
@@ -589,6 +595,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
             setSending(true);
             sendTyping(false);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
 
             const tempId = `tmp_post_${Date.now()}`;
             const optimistic: Msg = {
@@ -628,25 +636,6 @@ export default function ChatScreen({ route, navigation }: any) {
         },
         [conversationId, fetchReadState, meId, scrollBottom, sending, sendTyping]
     );
-
-    useEffect(() => {
-        if (!sharePostId) return;
-        if (shareSentRef.current) return;
-        shareSentRef.current = true;
-
-        sendPost(sharePostId);
-        navigation.setParams?.({ sharePostId: null });
-    }, [navigation, sendPost, sharePostId]);
-
-    const openPost = useCallback(
-        (postId?: string) => {
-            if (!postId) return;
-            navigation.push("PostDetail", { postId });
-        },
-        [navigation]
-    );
-
-    console.log("SOCKET_URL", SOCKET_URL);
 
     const renderItem = ({ item }: { item: Msg }) => {
         const mine = String(item?.senderId?._id) === String(meId);
@@ -817,8 +806,13 @@ export default function ChatScreen({ route, navigation }: any) {
                 contentContainerStyle={{ padding: 16, paddingBottom: 12 }}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.2}
-                ListHeaderComponent={loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginBottom: 10 }} /> : null}
+                ListHeaderComponent={
+                    loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginBottom: 10 }} /> : null
+                }
                 keyboardShouldPersistTaps="handled"
+                maintainVisibleContentPosition={{
+                    minIndexForVisible: 1,
+                }}
             />
 
             {/* Input */}

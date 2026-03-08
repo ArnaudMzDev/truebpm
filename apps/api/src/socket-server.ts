@@ -1,11 +1,19 @@
 // apps/api/src/socket-server.ts
-import http from "http";
-import { Server } from "socket.io";
 import dotenv from "dotenv";
 import path from "path";
+import crypto from "crypto";
+import http from "http";
+import { Server } from "socket.io";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
-dotenv.config({ path: path.resolve(process.cwd(), "../../.env.local") });
+
+const fp = (s?: string) =>
+    s ? crypto.createHash("sha256").update(s).digest("hex").slice(0, 8) : "missing";
+
+console.log("SOCKET JWT_SECRET fp:", fp(process.env.JWT_SECRET));
+console.log("SOCKET cwd:", process.cwd());
+console.log("SOCKET env path:", path.resolve(process.cwd(), ".env.local"));
+console.log("SOCKET raw JWT_SECRET:", process.env.JWT_SECRET);
 
 import "@/lib/loadModels";
 import { connectDB } from "@/lib/db";
@@ -17,133 +25,159 @@ import Message from "@/models/Message";
 const PORT = Number(process.env.SOCKET_PORT || 3001);
 
 async function main() {
-    await connectDB();
+ await connectDB();
 
-    const server = http.createServer();
+ const server = http.createServer();
 
-    const io = new Server(server, {
-        cors: {
-            origin: "*",
-            methods: ["GET", "POST"],
-        },
-        // ✅ Laisse Socket.IO choisir / accepte polling + websocket
-        transports: ["polling", "websocket"],
+ server.on("error", (e) => {
+  console.log("❌ socket http server error:", e);
+ });
+
+ const io = new Server(server, {
+  cors: {
+   origin: "*",
+   methods: ["GET", "POST"],
+  },
+  transports: ["polling", "websocket"],
+ });
+
+ // ✅ Auth middleware
+ io.use(async (socket, next) => {
+  try {
+   const token = socket.handshake.auth?.token;
+
+   console.log(
+       "SOCKET token head:",
+       typeof token === "string" ? token.slice(0, 16) : token
+   );
+
+   const userId = await verifyTokenSocket(token);
+
+   // @ts-ignore
+   socket.userId = String(userId);
+
+   return next();
+  } catch (e: any) {
+   console.log("SOCKET auth failed:", e?.message || e);
+   return next(new Error("Unauthorized"));
+  }
+ });
+
+ io.on("connection", (socket) => {
+  // @ts-ignore
+  const meId = socket.userId as string;
+
+  console.log("✅ socket connected:", {
+   socketId: socket.id,
+   userId: meId,
+   transport: socket.conn.transport.name,
+  });
+
+  socket.join(`user:${meId}`);
+
+  socket.on("conversation:join", ({ conversationId }) => {
+   if (!conversationId) return;
+   socket.join(`conversation:${conversationId}`);
+   console.log("📥 joined conversation:", { socketId: socket.id, conversationId });
+  });
+
+  socket.on("conversation:leave", ({ conversationId }) => {
+   if (!conversationId) return;
+   socket.leave(`conversation:${conversationId}`);
+   console.log("📤 left conversation:", { socketId: socket.id, conversationId });
+  });
+
+  socket.on("typing:set", ({ conversationId, typing }) => {
+   if (!conversationId) return;
+
+   socket.to(`conversation:${conversationId}`).emit("typing:update", {
+    conversationId,
+    userId: meId,
+    typing: !!typing,
+   });
+  });
+
+  socket.on("read:mark", async ({ conversationId }) => {
+   try {
+    if (!conversationId) return;
+
+    const convo = await Conversation.findById(conversationId).lean();
+    if (!convo) return;
+
+    const isMember = (convo.participants || []).some(
+        (p: any) => String(p) === String(meId)
+    );
+    if (!isMember) return;
+
+    const now = new Date();
+
+    await Conversation.findByIdAndUpdate(conversationId, {
+     $set: { [`readAt.${meId}`]: now },
     });
 
-    // ✅ Auth middleware
-    io.use(async (socket, next) => {
-        try {
-            console.log("SOCKET token head:", String(socket.handshake.auth?.token || "").slice(0, 16));
-            const token = socket.handshake.auth?.token; // ✅ token brut
-            const userId = await verifyTokenSocket(token);
-            // @ts-ignore
-            socket.userId = String(userId);
-            next();
-        } catch (e) {
-            next(new Error("Unauthorized"));
-        }
+    io.to(`conversation:${conversationId}`).emit("read:update", {
+     conversationId,
+     userId: meId,
+     readAt: now.toISOString(),
     });
+   } catch (e: any) {
+    console.log("read:mark error", e?.message || e);
+   }
+  });
 
-    io.on("connection", (socket) => {
-        // @ts-ignore
-        const meId = socket.userId as string;
+  socket.on("disconnect", (reason) => {
+   console.log("🛑 socket disconnected:", {
+    socketId: socket.id,
+    userId: meId,
+    reason,
+   });
+  });
+ });
 
-        socket.join(`user:${meId}`);
+ // ✅ Change streams (Mongo replica set / Atlas)
+ try {
+  const changeStream = Message.watch(
+      [{ $match: { operationType: "insert" } }],
+      { fullDocument: "updateLookup" }
+  );
 
-        socket.on("conversation:join", ({ conversationId }) => {
-            if (!conversationId) return;
-            socket.join(`conversation:${conversationId}`);
-        });
+  changeStream.on("change", async (change: any) => {
+   const doc = change.fullDocument;
+   if (!doc) return;
 
-        socket.on("conversation:leave", ({ conversationId }) => {
-            if (!conversationId) return;
-            socket.leave(`conversation:${conversationId}`);
-        });
+   const conversationId = String(doc.conversationId);
 
-        socket.on("typing:set", ({ conversationId, typing }) => {
-            if (!conversationId) return;
-            socket.to(`conversation:${conversationId}`).emit("typing:update", {
-                conversationId,
-                userId: meId,
-                typing: !!typing,
-            });
-        });
+   const populated = await Message.findById(doc._id)
+       .populate("senderId", "_id pseudo avatarUrl")
+       .populate("postId")
+       .lean();
 
-        socket.on("read:mark", async ({ conversationId }) => {
-            try {
-                if (!conversationId) return;
+   io.to(`conversation:${conversationId}`).emit("message:new", {
+    conversationId,
+    message: populated,
+   });
 
-                const convo = await Conversation.findById(conversationId).lean();
-                if (!convo) return;
+   const convo = await Conversation.findById(conversationId).lean();
+   const participants = (convo?.participants || []).map((p: any) => String(p));
 
-                const isMember = (convo.participants || []).some(
-                    (p: any) => String(p) === String(meId)
-                );
-                if (!isMember) return;
+   for (const uid of participants) {
+    io.to(`user:${uid}`).emit("conversations:invalidate", { userId: uid });
+   }
+  });
 
-                const now = new Date();
-                await Conversation.findByIdAndUpdate(conversationId, {
-                    $set: { [`readAt.${meId}`]: now },
-                });
+  changeStream.on("error", (e: any) => {
+   console.log("ChangeStream error:", e?.message || e);
+  });
+ } catch (e: any) {
+  console.log("ChangeStream unavailable (Mongo must be replica set).", e?.message || e);
+ }
 
-                io.to(`conversation:${conversationId}`).emit("read:update", {
-                    conversationId,
-                    userId: meId,
-                    readAt: now.toISOString(),
-                });
-            } catch (e) {
-                // on évite de crasher le socket
-                console.log("read:mark error", (e as any)?.message || e);
-            }
-        });
-
-        socket.on("disconnect", () => {});
-    });
-
-    // ✅ Change streams (Mongo replica set / Atlas)
-    try {
-        const changeStream = Message.watch(
-            [{ $match: { operationType: "insert" } }],
-            { fullDocument: "updateLookup" }
-        );
-
-        changeStream.on("change", async (change: any) => {
-            const doc = change.fullDocument;
-            if (!doc) return;
-
-            const conversationId = String(doc.conversationId);
-
-            const populated = await Message.findById(doc._id)
-                .populate("senderId", "_id pseudo avatarUrl")
-                .populate("postId")
-                .lean();
-
-            io.to(`conversation:${conversationId}`).emit("message:new", {
-                conversationId,
-                message: populated,
-            });
-
-            const convo = await Conversation.findById(conversationId).lean();
-            const participants = (convo?.participants || []).map((p: any) => String(p));
-
-            for (const uid of participants) {
-                io.to(`user:${uid}`).emit("conversations:invalidate", { userId: uid });
-            }
-        });
-
-        changeStream.on("error", (e) => {
-            console.log("ChangeStream error:", (e as any)?.message || e);
-        });
-    } catch (e: any) {
-        console.log("ChangeStream unavailable (Mongo must be replica set).", e?.message || e);
-    }
-
-    server.listen(PORT, () => {
-        console.log(`✅ Socket server listening on :${PORT}`);
-    });
+ server.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Socket server listening on :${PORT}`);
+ });
 }
 
 main().catch((e) => {
-    console.error("Socket server fatal:", e);
-    process.exit(1);
+ console.error("Socket server fatal:", e);
+ process.exit(1);
 });

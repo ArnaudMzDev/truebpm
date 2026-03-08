@@ -1,3 +1,4 @@
+// apps/mobile/src/screens/ProfileScreen.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import {
     View,
@@ -30,6 +31,11 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
+function toBearer(rawToken: string | null) {
+    if (!rawToken) return null;
+    return rawToken.startsWith("Bearer ") ? rawToken : `Bearer ${rawToken}`;
+}
+
 export default function ProfileScreen({ navigation }: any) {
     const [user, setUser] = useState<any>(null);
     const [loadingUser, setLoadingUser] = useState(true);
@@ -44,21 +50,35 @@ export default function ProfileScreen({ navigation }: any) {
 
     const LIMIT = 15;
 
+    // ✅ vrai logout propre (appel serveur + clear storage + reset nav)
     const handleLogout = useCallback(async () => {
+        const stored = await AsyncStorage.getItem("token");
+        const bearer = toBearer(stored);
+
+        if (bearer) {
+            await fetch(`${API_URL}/api/auth/logout`, {
+                method: "POST",
+                headers: { Authorization: bearer },
+            }).catch(() => {});
+        }
+
         await AsyncStorage.multiRemove(["token", "user"]);
-        navigation.replace("Login");
+
+        navigation.reset({ index: 0, routes: [{ name: "Login" }] });
     }, [navigation]);
 
     const fetchMe = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
+        const stored = await AsyncStorage.getItem("token");
+        const bearer = toBearer(stored);
+
+        if (!bearer) {
             await handleLogout();
             return null;
         }
 
         const res = await fetch(`${API_URL}/api/user/me`, {
             method: "GET",
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: bearer },
         });
 
         const json = await safeJson(res);
@@ -79,13 +99,13 @@ export default function ProfileScreen({ navigation }: any) {
             setCursor(null);
             setHasMore(true);
 
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
+            const bearer = toBearer(await AsyncStorage.getItem("token"));
+            if (!bearer) return;
 
             const res = await fetch(
                 `${API_URL}/api/posts?userId=${encodeURIComponent(uid)}&limit=${LIMIT}`,
                 {
-                    headers: { Authorization: `Bearer ${token}` }, // ✅ IMPORTANT
+                    headers: { Authorization: bearer }, // ✅ IMPORTANT (sans double Bearer)
                 }
             );
 
@@ -109,15 +129,15 @@ export default function ProfileScreen({ navigation }: any) {
         try {
             setLoadingMore(true);
 
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
+            const bearer = toBearer(await AsyncStorage.getItem("token"));
+            if (!bearer) return;
 
             const res = await fetch(
                 `${API_URL}/api/posts?userId=${encodeURIComponent(
                     user._id
                 )}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
                 {
-                    headers: { Authorization: `Bearer ${token}` }, // ✅ IMPORTANT
+                    headers: { Authorization: bearer }, // ✅ IMPORTANT
                 }
             );
 
@@ -147,10 +167,10 @@ export default function ProfileScreen({ navigation }: any) {
         (async () => {
             setLoadingUser(true);
 
-            const stored = await AsyncStorage.getItem("user");
-            if (stored) {
+            const storedUser = await AsyncStorage.getItem("user");
+            if (storedUser) {
                 try {
-                    const cached = JSON.parse(stored);
+                    const cached = JSON.parse(storedUser);
                     if (cached?._id) setUser(cached);
                 } catch {}
             }
@@ -256,9 +276,7 @@ export default function ProfileScreen({ navigation }: any) {
             renderItem={({ item }) => <PostCard post={item} />}
             ListHeaderComponent={Header}
             contentContainerStyle={{ paddingBottom: 40 }}
-            refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9B5CFF" />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9B5CFF" />}
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
             ListFooterComponent={

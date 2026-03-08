@@ -6,21 +6,13 @@
   <component name="ChangeListManager">
     <list default="true" id="b7041585-3975-4118-bd64-fec653cf918c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/conversations/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/conversations/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/lib/db.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/lib/db.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/models/Conversation.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/Conversation.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/models/Message.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/Message.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/ActionsBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/ActionsBar.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/UserListItem.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/UserListItem.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/login/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/auth/login/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/auth/logout/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/auth/logout/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/lib/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/lib/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/src/socket-server.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/src/socket-server.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/src/verifyTokenSocket.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/src/verifyTokenSocket.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ChatScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ChatScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ConversationsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ConversationsScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ExploreSearchScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ExploreSearchScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/PostScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/PostScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -101,7 +93,8 @@
       <workItem from="1770157208279" duration="599000" />
       <workItem from="1772057899315" duration="8772000" />
       <workItem from="1772154655170" duration="591000" />
-      <workItem from="1772323263488" duration="9480000" />
+      <workItem from="1772323263488" duration="11084000" />
+      <workItem from="1772899933648" duration="4713000" />
     </task>
     <servers />
   </component>

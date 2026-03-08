@@ -1,4 +1,3 @@
-// apps/api/src/verifyTokenSocket.ts
 import jwt, { JwtPayload } from "jsonwebtoken";
 
 function cleanToken(raw: any): string | null {
@@ -6,10 +5,8 @@ function cleanToken(raw: any): string | null {
     let t = raw.trim();
     if (!t) return null;
 
-    // support "Bearer xxx"
     if (t.toLowerCase().startsWith("bearer ")) t = t.slice(7).trim();
 
-    // support token stocké avec guillemets
     if (
         (t.startsWith('"') && t.endsWith('"')) ||
         (t.startsWith("'") && t.endsWith("'"))
@@ -29,17 +26,16 @@ export async function verifyTokenSocket(rawToken: any): Promise<string> {
 
     let decoded: string | JwtPayload;
     try {
-        decoded = jwt.verify(token, secret) as any;
+        decoded = jwt.verify(token, secret) as JwtPayload | string;
     } catch (e: any) {
         console.log("socket auth failed:", e?.message || e);
         throw new Error("Unauthorized");
     }
 
     const payload = typeof decoded === "string" ? null : decoded;
+    const userId = (payload as any)?.id;
 
-    // ✅ ton token = { id }
-    const userId = (payload as any)?.id || (payload as any)?.sub;
-    if (!userId) throw new Error("Token payload has no id");
+    if (!userId) throw new Error("Token payload missing id");
 
     return String(userId);
 }

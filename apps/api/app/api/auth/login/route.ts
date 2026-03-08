@@ -31,6 +31,7 @@ export async function POST(req: Request) {
         }
 
         const token = signToken(userDoc._id.toString());
+        console.log("LOGIN token head:", token.slice(0, 20));
 
         // ✅ user complet (source de vérité)
         const user = await User.findById(userDoc._id)

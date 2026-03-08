@@ -17,14 +17,9 @@ export async function verifyToken(req: Request): Promise<string | null> {
         const header = req.headers.get("authorization");
         if (!header) return null;
 
-        const parts = header.split(" ");
-        if (parts.length < 2) return null;
-
-        const scheme = parts[0];
-        const token = parts[1];
-
+        const [scheme, token] = header.split(" ");
+        if (!scheme || !token) return null;
         if (scheme.toLowerCase() !== "bearer") return null;
-        if (!token) return null;
 
         const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
         return decoded?.id ?? null;
