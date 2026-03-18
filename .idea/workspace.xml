@@ -8,53 +8,25 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/like/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/like/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/replies/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/replies/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/thread/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/thread/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/conversations/[id]/messages/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/conversations/[id]/messages/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/conversations/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/conversations/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/follow/[id]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/follow/[id]/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/messages/conversations/[id]/messages/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/messages/conversations/[id]/messages/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/middleware.ts" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/comments/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/comments/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/like/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/like/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/repost/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/repost/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/user/[id]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/user/[id]/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/[id]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/[id]/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/me/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/me/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/profile/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/profile/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/lib/loadModels.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/lib/loadModels.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/middleware.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/middleware.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/models/RevokedToken.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/RevokedToken.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/models/Notification.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/Notification.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/models/User.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/User.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/models/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/src/socket-server.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/src/socket-server.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/app.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/ActionsBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/ActionsBar.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/Header.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/Header.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/types.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/types.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/UserListItem.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/UserListItem.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/context/AuthContext.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/context/AuthContext.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/context/UserContext.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/context/UserContext.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ChatScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ChatScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ConversationsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ConversationsScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/CreatePostScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/CreatePostScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/lib/config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/lib/config.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/EditProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/EditProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ExploreSearchScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ExploreSearchScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/FollowersListScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/FollowersListScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/FollowingListScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/FollowingListScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/LoginScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/PostScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/PostScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/NotificationsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/NotificationsScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileSetupScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileSetupScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/RegisterScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/RegisterScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/SearchScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/SearchScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/SplashScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/SplashScreen.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -100,11 +72,11 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/apps/mobile/src/components" />
       <recent name="$PROJECT_DIR$/apps/api/src" />
       <recent name="$PROJECT_DIR$/apps/mobile/src" />
       <recent name="$PROJECT_DIR$/apps/api/app/api" />
       <recent name="$PROJECT_DIR$/apps/api/app" />
-      <recent name="$PROJECT_DIR$/apps/mobile/src/screens" />
     </key>
   </component>
   <component name="SharedIndexes">
@@ -137,7 +109,8 @@
       <workItem from="1772057899315" duration="8772000" />
       <workItem from="1772154655170" duration="591000" />
       <workItem from="1772323263488" duration="11084000" />
-      <workItem from="1772899933648" duration="19138000" />
+      <workItem from="1772899933648" duration="21470000" />
+      <workItem from="1773503749587" duration="8828000" />
     </task>
     <servers />
   </component>
@@ -165,7 +138,6 @@
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx</url>
           <line>7</line>
-          <properties lambdaOrdinal="-1" />
           <option name="timeStamp" value="3" />
         </line-breakpoint>
       </breakpoints>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     View,
     Text,
@@ -13,12 +13,14 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import Logo from "../components/Logo";
 import { API_URL } from "../lib/config";
 
 const CLOUD_NAME = "dyc6hwvj4";
 const UPLOAD_PRESET = "truebpm_unsigned";
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+const PROFILE_MUSIC_PICK_KEY = "edit_profile_pending_music_pick";
 
 type MusicRef = {
     entityId: string;
@@ -29,6 +31,12 @@ type MusicRef = {
     previewUrl: string;
 };
 
+type PickKind =
+    | "pinnedTrack"
+    | "favoriteArtists"
+    | "favoriteAlbums"
+    | "favoriteTracks";
+
 type User = {
     _id: string;
     pseudo: string;
@@ -36,7 +44,6 @@ type User = {
     bio?: string;
     avatarUrl?: string;
     bannerUrl?: string;
-
     pinnedTrack?: MusicRef | null;
     favoriteArtists?: MusicRef[];
     favoriteAlbums?: MusicRef[];
@@ -61,6 +68,7 @@ function musicEquals(a?: MusicRef | null, b?: MusicRef | null) {
 function musicArrayEquals(a?: MusicRef[], b?: MusicRef[]) {
     return JSON.stringify(a || []) === JSON.stringify(b || []);
 }
+
 function MusicChip({
                        item,
                        onRemove,
@@ -90,7 +98,7 @@ function MusicChip({
     );
 }
 
-export default function EditProfileScreen({ navigation, route }: any) {
+export default function EditProfileScreen({ navigation }: any) {
     const [user, setUser] = useState<User | null>(null);
 
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -98,9 +106,9 @@ export default function EditProfileScreen({ navigation, route }: any) {
     const [bio, setBio] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const [initialAvatar, setInitialAvatar] = useState<string>("");
-    const [initialBanner, setInitialBanner] = useState<string>("");
-    const [initialBio, setInitialBio] = useState<string>("");
+    const [initialAvatar, setInitialAvatar] = useState("");
+    const [initialBanner, setInitialBanner] = useState("");
+    const [initialBio, setInitialBio] = useState("");
 
     const [pinnedTrack, setPinnedTrack] = useState<MusicRef | null>(null);
     const [favoriteArtists, setFavoriteArtists] = useState<MusicRef[]>([]);
@@ -111,6 +119,36 @@ export default function EditProfileScreen({ navigation, route }: any) {
     const [initialFavoriteArtists, setInitialFavoriteArtists] = useState<MusicRef[]>([]);
     const [initialFavoriteAlbums, setInitialFavoriteAlbums] = useState<MusicRef[]>([]);
     const [initialFavoriteTracks, setInitialFavoriteTracks] = useState<MusicRef[]>([]);
+
+    const applyPickedMusic = useCallback((kind: PickKind, item: MusicRef) => {
+        if (kind === "pinnedTrack") {
+            setPinnedTrack(item);
+            return;
+        }
+
+        if (kind === "favoriteArtists") {
+            setFavoriteArtists((prev) => {
+                const next = [item, ...prev.filter((x) => x.entityId !== item.entityId)];
+                return next.slice(0, 3);
+            });
+            return;
+        }
+
+        if (kind === "favoriteAlbums") {
+            setFavoriteAlbums((prev) => {
+                const next = [item, ...prev.filter((x) => x.entityId !== item.entityId)];
+                return next.slice(0, 3);
+            });
+            return;
+        }
+
+        if (kind === "favoriteTracks") {
+            setFavoriteTracks((prev) => {
+                const next = [item, ...prev.filter((x) => x.entityId !== item.entityId)];
+                return next.slice(0, 3);
+            });
+        }
+    }, []);
 
     useEffect(() => {
         const loadUser = async () => {
@@ -129,19 +167,24 @@ export default function EditProfileScreen({ navigation, route }: any) {
                 setInitialBanner(b);
                 setInitialBio(bi);
 
-                setAvatarUri(a ? a : null);
-                setBannerUri(b ? b : null);
+                setAvatarUri(a || null);
+                setBannerUri(b || null);
                 setBio(bi);
 
-                setPinnedTrack(u.pinnedTrack || null);
-                setFavoriteArtists(u.favoriteArtists || []);
-                setFavoriteAlbums(u.favoriteAlbums || []);
-                setFavoriteTracks(u.favoriteTracks || []);
+                const pt = u.pinnedTrack || null;
+                const fa = Array.isArray(u.favoriteArtists) ? u.favoriteArtists : [];
+                const fal = Array.isArray(u.favoriteAlbums) ? u.favoriteAlbums : [];
+                const ft = Array.isArray(u.favoriteTracks) ? u.favoriteTracks : [];
 
-                setInitialPinnedTrack(u.pinnedTrack || null);
-                setInitialFavoriteArtists(u.favoriteArtists || []);
-                setInitialFavoriteAlbums(u.favoriteAlbums || []);
-                setInitialFavoriteTracks(u.favoriteTracks || []);
+                setPinnedTrack(pt);
+                setFavoriteArtists(fa);
+                setFavoriteAlbums(fal);
+                setFavoriteTracks(ft);
+
+                setInitialPinnedTrack(pt);
+                setInitialFavoriteArtists(fa);
+                setInitialFavoriteAlbums(fal);
+                setInitialFavoriteTracks(ft);
             } catch (e) {
                 console.log("EditProfile loadUser parse error:", e);
             }
@@ -150,42 +193,31 @@ export default function EditProfileScreen({ navigation, route }: any) {
         loadUser();
     }, []);
 
-    useEffect(() => {
-        const picked = route?.params?.pickedProfileMusic;
-        if (!picked?.kind || !picked?.item) return;
+    useFocusEffect(
+        useCallback(() => {
+            let active = true;
 
-        const { kind, item } = picked as {
-            kind: "pinnedTrack" | "favoriteArtists" | "favoriteAlbums" | "favoriteTracks";
-            item: MusicRef;
-        };
+            (async () => {
+                try {
+                    const raw = await AsyncStorage.getItem(PROFILE_MUSIC_PICK_KEY);
+                    if (!raw || !active) return;
 
-        if (kind === "pinnedTrack") {
-            setPinnedTrack(item);
-        }
+                    const parsed = JSON.parse(raw);
+                    if (parsed?.kind && parsed?.item) {
+                        applyPickedMusic(parsed.kind, parsed.item);
+                    }
 
-        if (kind === "favoriteArtists") {
-            setFavoriteArtists((prev) => {
-                const next = prev.filter((x) => x.entityId !== item.entityId);
-                return [...next, item].slice(0, 3);
-            });
-        }
+                    await AsyncStorage.removeItem(PROFILE_MUSIC_PICK_KEY);
+                } catch (e) {
+                    console.log("EditProfile pending music pick error:", e);
+                }
+            })();
 
-        if (kind === "favoriteAlbums") {
-            setFavoriteAlbums((prev) => {
-                const next = prev.filter((x) => x.entityId !== item.entityId);
-                return [...next, item].slice(0, 3);
-            });
-        }
-
-        if (kind === "favoriteTracks") {
-            setFavoriteTracks((prev) => {
-                const next = prev.filter((x) => x.entityId !== item.entityId);
-                return [...next, item].slice(0, 3);
-            });
-        }
-
-        navigation.setParams({ pickedProfileMusic: undefined });
-    }, [navigation, route?.params?.pickedProfileMusic]);
+            return () => {
+                active = false;
+            };
+        }, [applyPickedMusic])
+    );
 
     const pickImage = async (type: "avatar" | "banner") => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -266,9 +298,7 @@ export default function EditProfileScreen({ navigation, route }: any) {
         [favoriteTracks, initialFavoriteTracks]
     );
 
-    const openPicker = (
-        kind: "pinnedTrack" | "favoriteArtists" | "favoriteAlbums" | "favoriteTracks"
-    ) => {
+    const openPicker = (kind: PickKind) => {
         const initialType =
             kind === "favoriteArtists"
                 ? "artist"
@@ -280,38 +310,6 @@ export default function EditProfileScreen({ navigation, route }: any) {
             mode: "pickProfileMusic",
             kind,
             initialType,
-            onPickProfileMusic: ({
-                                     kind,
-                                     item,
-                                 }: {
-                kind: "pinnedTrack" | "favoriteArtists" | "favoriteAlbums" | "favoriteTracks";
-                item: MusicRef;
-            }) => {
-                if (kind === "pinnedTrack") {
-                    setPinnedTrack(item);
-                }
-
-                if (kind === "favoriteArtists") {
-                    setFavoriteArtists((prev) => {
-                        const next = prev.filter((x) => x.entityId !== item.entityId);
-                        return [...next, item].slice(0, 3);
-                    });
-                }
-
-                if (kind === "favoriteAlbums") {
-                    setFavoriteAlbums((prev) => {
-                        const next = prev.filter((x) => x.entityId !== item.entityId);
-                        return [...next, item].slice(0, 3);
-                    });
-                }
-
-                if (kind === "favoriteTracks") {
-                    setFavoriteTracks((prev) => {
-                        const next = prev.filter((x) => x.entityId !== item.entityId);
-                        return [...next, item].slice(0, 3);
-                    });
-                }
-            },
         });
     };
 
@@ -395,23 +393,27 @@ export default function EditProfileScreen({ navigation, route }: any) {
             setInitialBanner(b);
             setInitialBio(bi);
 
-            setAvatarUri(a ? a : null);
-            setBannerUri(b ? b : null);
+            setAvatarUri(a || null);
+            setBannerUri(b || null);
             setBio(bi);
 
-            setPinnedTrack(next.pinnedTrack || null);
-            setFavoriteArtists(next.favoriteArtists || []);
-            setFavoriteAlbums(next.favoriteAlbums || []);
-            setFavoriteTracks(next.favoriteTracks || []);
+            const pt = next.pinnedTrack || null;
+            const fa = Array.isArray(next.favoriteArtists) ? next.favoriteArtists : [];
+            const fal = Array.isArray(next.favoriteAlbums) ? next.favoriteAlbums : [];
+            const ft = Array.isArray(next.favoriteTracks) ? next.favoriteTracks : [];
 
-            setInitialPinnedTrack(next.pinnedTrack || null);
-            setInitialFavoriteArtists(next.favoriteArtists || []);
-            setInitialFavoriteAlbums(next.favoriteAlbums || []);
-            setInitialFavoriteTracks(next.favoriteTracks || []);
+            setPinnedTrack(pt);
+            setFavoriteArtists(fa);
+            setFavoriteAlbums(fal);
+            setFavoriteTracks(ft);
+
+            setInitialPinnedTrack(pt);
+            setInitialFavoriteArtists(fa);
+            setInitialFavoriteAlbums(fal);
+            setInitialFavoriteTracks(ft);
 
             setLoading(false);
             Alert.alert("Succès", "Ton profil a été mis à jour.");
-
             navigation.navigate("Main", { screen: "ProfileTab" });
         } catch (err) {
             console.log("Profile update error:", err);
@@ -477,17 +479,11 @@ export default function EditProfileScreen({ navigation, route }: any) {
 
                 <Text style={styles.sectionTitle}>Son épinglé</Text>
                 {pinnedTrack ? (
-                    <MusicChip
-                        item={pinnedTrack}
-                        onRemove={() => setPinnedTrack(null)}
-                    />
+                    <MusicChip item={pinnedTrack} onRemove={() => setPinnedTrack(null)} />
                 ) : (
                     <Text style={styles.emptyText}>Aucun son épinglé</Text>
                 )}
-                <TouchableOpacity
-                    style={styles.selectBtn}
-                    onPress={() => openPicker("pinnedTrack")}
-                >
+                <TouchableOpacity style={styles.selectBtn} onPress={() => openPicker("pinnedTrack")}>
                     <Text style={styles.selectBtnText}>
                         {pinnedTrack ? "Changer le son épinglé" : "Choisir un son épinglé"}
                     </Text>
@@ -510,10 +506,7 @@ export default function EditProfileScreen({ navigation, route }: any) {
                     <Text style={styles.emptyText}>Aucun artiste favori</Text>
                 )}
                 {favoriteArtists.length < 3 ? (
-                    <TouchableOpacity
-                        style={styles.selectBtn}
-                        onPress={() => openPicker("favoriteArtists")}
-                    >
+                    <TouchableOpacity style={styles.selectBtn} onPress={() => openPicker("favoriteArtists")}>
                         <Text style={styles.selectBtnText}>Ajouter un artiste</Text>
                     </TouchableOpacity>
                 ) : null}
@@ -535,10 +528,7 @@ export default function EditProfileScreen({ navigation, route }: any) {
                     <Text style={styles.emptyText}>Aucun album favori</Text>
                 )}
                 {favoriteAlbums.length < 3 ? (
-                    <TouchableOpacity
-                        style={styles.selectBtn}
-                        onPress={() => openPicker("favoriteAlbums")}
-                    >
+                    <TouchableOpacity style={styles.selectBtn} onPress={() => openPicker("favoriteAlbums")}>
                         <Text style={styles.selectBtnText}>Ajouter un album</Text>
                     </TouchableOpacity>
                 ) : null}
@@ -560,10 +550,7 @@ export default function EditProfileScreen({ navigation, route }: any) {
                     <Text style={styles.emptyText}>Aucun morceau favori</Text>
                 )}
                 {favoriteTracks.length < 3 ? (
-                    <TouchableOpacity
-                        style={styles.selectBtn}
-                        onPress={() => openPicker("favoriteTracks")}
-                    >
+                    <TouchableOpacity style={styles.selectBtn} onPress={() => openPicker("favoriteTracks")}>
                         <Text style={styles.selectBtnText}>Ajouter un morceau</Text>
                     </TouchableOpacity>
                 ) : null}
@@ -573,7 +560,9 @@ export default function EditProfileScreen({ navigation, route }: any) {
                     disabled={loading}
                     onPress={handleSave}
                 >
-                    <Text style={styles.buttonText}>{loading ? "Enregistrement..." : "Enregistrer"}</Text>
+                    <Text style={styles.buttonText}>
+                        {loading ? "Enregistrement..." : "Enregistrer"}
+                    </Text>
                 </TouchableOpacity>
             </ScrollView>
         </KeyboardAvoidingView>

@@ -7,7 +7,9 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "keywords": [],
   "author": "",
@@ -30,7 +32,10 @@
   "dependencies": {
     "@truebpm/config": "link:packages/config",
     "@truebpm/types": "link:packages/types",
-    "@truebpm/ui": "link:packages/ui"
+    "@truebpm/ui": "link:packages/ui",
+    "expo": "~54.0.23",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   },
   "pnpm": {
     "overrides": {

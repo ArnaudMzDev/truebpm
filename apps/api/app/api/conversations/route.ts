@@ -1,4 +1,3 @@
-// apps/api/app/api/conversations/route.ts
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -100,11 +99,34 @@ export async function POST(req: Request) {
 
         const [meUser, otherUser] = await Promise.all([
             User.findById(meId).select("_id").lean(),
-            User.findById(otherUserId).select("_id pseudo avatarUrl").lean(),
+            User.findById(otherUserId)
+                .select("_id pseudo avatarUrl messagePrivacy followersList")
+                .lean(),
         ]);
 
         if (!meUser || !otherUser) {
             return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+        }
+
+        const messagePrivacy = (otherUser as any)?.messagePrivacy || "everyone";
+
+        if (messagePrivacy === "following") {
+            const followersList = Array.isArray((otherUser as any)?.followersList)
+                ? (otherUser as any).followersList
+                : [];
+
+            const canMessage = followersList.some(
+                (id: any) => id?.toString?.() === String(meId)
+            );
+
+            if (!canMessage) {
+                return NextResponse.json(
+                    {
+                        error: "Cet utilisateur accepte uniquement les messages des comptes qu’il suit.",
+                    },
+                    { status: 403 }
+                );
+            }
         }
 
         const sorted = [String(meId), String(otherUserId)].sort();
@@ -139,13 +161,17 @@ export async function POST(req: Request) {
     } catch (e: any) {
         if (e?.code === 11000) {
             try {
+                await connectDB();
+
+                const meId = await requireUserId(req);
                 const body = await req.json().catch(() => null);
                 const otherUserId = body?.otherUserId as string | undefined;
-                if (!otherUserId) {
+
+                if (!meId || !otherUserId) {
                     return NextResponse.json({ error: "Conflit de création." }, { status: 409 });
                 }
 
-                const sorted = [String(await requireUserId(req)), String(otherUserId)].sort();
+                const sorted = [String(meId), String(otherUserId)].sort();
                 const participantsKey = `${sorted[0]}:${sorted[1]}`;
 
                 const conversation = await Conversation.findOne({

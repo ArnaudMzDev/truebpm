@@ -16,6 +16,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import PostCard from "../components/PostCard";
+import NotesStrip from "../components/NotesStrip";
 import { PostType } from "../components/PostCard/types";
 import { usePlayer } from "../context/PlayerContext";
 
@@ -238,7 +239,9 @@ export default function ProfileScreen({ navigation }: any) {
             if (!bearer) return;
 
             const res = await fetch(
-                `${API_URL}/api/posts/user/${encodeURIComponent(user._id)}?tab=${activeTab}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
+                `${API_URL}/api/posts/user/${encodeURIComponent(
+                    user._id
+                )}?tab=${activeTab}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
                 { headers: { Authorization: bearer } }
             );
 
@@ -381,8 +384,12 @@ export default function ProfileScreen({ navigation }: any) {
                     <Text style={styles.editText}>Modifier</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.85}>
-                    <Ionicons name="log-out-outline" size={15} color="#FF7A7A" />
+                <TouchableOpacity
+                    style={styles.settingsButton}
+                    onPress={() => navigation.navigate("Settings")}
+                    activeOpacity={0.85}
+                >
+                    <Ionicons name="settings-outline" size={18} color="#fff" />
                 </TouchableOpacity>
             </View>
 
@@ -591,13 +598,13 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "700",
     },
-    logoutButton: {
+    settingsButton: {
         width: 38,
         height: 38,
         borderRadius: 12,
-        backgroundColor: "#1a0d0d",
+        backgroundColor: "#141414",
         borderWidth: 1,
-        borderColor: "#5b2323",
+        borderColor: "#272727",
         alignItems: "center",
         justifyContent: "center",
     },

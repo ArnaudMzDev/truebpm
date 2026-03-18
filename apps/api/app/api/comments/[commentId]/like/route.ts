@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/db";
 import Comment from "@/models/Comment";
 import mongoose from "mongoose";
 import { requireUserId } from "@/lib/requestAuth";
+import Notification from "@/models/Notification";
+import { createNotification } from "@/lib/notifications";
 
 export async function POST(req: Request, { params }: { params: { commentId: string } }) {
     try {
@@ -21,7 +23,10 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
 
         const me = new mongoose.Types.ObjectId(meId);
 
-        const comment: any = await Comment.findById(commentId).select("likes").lean();
+        const comment: any = await Comment.findById(commentId)
+            .select("likes userId postId")
+            .lean();
+
         if (!comment) {
             return NextResponse.json({ error: "Commentaire introuvable." }, { status: 404 });
         }
@@ -34,11 +39,28 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
                 { _id: commentId },
                 { $pull: { likes: me } }
             );
+
+            await Notification.deleteOne({
+                type: "like_comment",
+                recipientId: comment.userId,
+                actorId: me,
+                commentId: comment._id,
+            });
         } else {
             await Comment.updateOne(
                 { _id: commentId },
                 { $addToSet: { likes: me } }
             );
+
+            if (String(comment.userId) !== String(meId)) {
+                await createNotification({
+                    recipientId: String(comment.userId),
+                    actorId: String(meId),
+                    type: "like_comment",
+                    postId: String(comment.postId),
+                    commentId: String(comment._id),
+                });
+            }
         }
 
         const fresh: any = await Comment.findById(commentId).select("likes").lean();

@@ -18,11 +18,17 @@ import ProfileSetupScreen from "./src/screens/ProfileSetupScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import EditProfileScreen from "./src/screens/EditProfileScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
+import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
+import ChangeEmailScreen from "./src/screens/ChangeEmailScreen";
+import PrivacySettingsScreen from "./src/screens/PrivacySettingsScreen";
+import FollowRequestsScreen from "./src/screens/FollowRequestsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
 
 import CreatePostScreen from "./src/screens/CreatePostScreen";
 import SearchScreen from "./src/screens/SearchScreen";
 import ExploreSearchScreen from "./src/screens/ExploreSearchScreen";
+import CreateNoteScreen from "./src/screens/CreateNoteScreen";
 
 import UserProfileScreen from "./src/screens/UserProfileScreen";
 import FollowersListScreen from "./src/screens/FollowersListScreen";
@@ -51,19 +57,25 @@ function EmptyScreen() {
 function stripToken(raw: string | null) {
     if (!raw) return null;
     let t = raw.trim();
-    if (t.toLowerCase().startsWith("bearer ")) t = t.slice(7).trim();
+
+    if (t.toLowerCase().startsWith("bearer ")) {
+        t = t.slice(7).trim();
+    }
+
     if (
         (t.startsWith('"') && t.endsWith('"')) ||
         (t.startsWith("'") && t.endsWith("'"))
     ) {
         t = t.slice(1, -1).trim();
     }
+
     return t || null;
 }
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
+
     try {
         return JSON.parse(text);
     } catch {
@@ -185,12 +197,7 @@ function MainTabs() {
             })}
         >
             <Tabs.Screen name="Home" component={HomeScreen} options={{ title: "Accueil" }} />
-
-            <Tabs.Screen
-                name="ExploreSearch"
-                component={ExploreSearchScreen}
-                options={{ title: "Recherche" }}
-            />
+            <Tabs.Screen name="ExploreSearch" component={ExploreSearchScreen} options={{ title: "Recherche" }} />
 
             <Tabs.Screen
                 name="CreatePostTab"
@@ -209,12 +216,16 @@ function MainTabs() {
                 component={MessagesNavigator}
                 options={{
                     title: "Messages",
-                    tabBarBadge: messagesUnread > 0 ? (messagesUnread > 99 ? "99+" : messagesUnread) : undefined,
+                    tabBarBadge:
+                        messagesUnread > 0
+                            ? messagesUnread > 99
+                                ? "99+"
+                                : messagesUnread
+                            : undefined,
                 }}
                 listeners={{
                     tabPress: () => {
                         setMessagesUnread(0);
-
                         setTimeout(() => {
                             fetchMessagesUnread().catch(() => {});
                         }, 250);
@@ -263,6 +274,7 @@ function PushBootstrap() {
                     navigationRef.navigate("PostDetail", { postId: data.postId });
                     return;
                 }
+
                 if (data?.actorId) {
                     navigationRef.navigate("UserProfile", { userId: data.actorId });
                 }
@@ -303,10 +315,16 @@ export default function App() {
 
                             <Stack.Screen name="MusicSearch" component={SearchScreen} />
                             <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+                            <Stack.Screen name="CreateNote" component={CreateNoteScreen} />
                             <Stack.Screen name="PostDetail" component={PostScreen} />
                             <Stack.Screen name="SocialNotifications" component={NotificationsScreen} />
 
                             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                            <Stack.Screen name="Settings" component={SettingsScreen} />
+                            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+                            <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+                            <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+                            <Stack.Screen name="FollowRequests" component={FollowRequestsScreen} />
                             <Stack.Screen name="UserProfile" component={UserProfileScreen} />
                         </Stack.Navigator>
                     </NavigationContainer>

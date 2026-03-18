@@ -5,7 +5,7 @@ import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 
 const SELECT_USER =
-    "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks";
+    "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy";
 
 function normalizeMusicRef(input: any, expectedType?: "song" | "album" | "artist") {
     if (!input || typeof input !== "object") return null;
@@ -100,7 +100,6 @@ export async function PATCH(req: Request) {
             if (b.length > 0) update.bannerUrl = b;
         }
 
-        // ✅ pinned track
         if (pinnedTrack === null) {
             update.pinnedTrack = null;
         } else if (typeof pinnedTrack === "object") {
@@ -108,7 +107,6 @@ export async function PATCH(req: Request) {
             if (normalized) update.pinnedTrack = normalized;
         }
 
-        // ✅ favorites
         if (favoriteArtists !== undefined) {
             const normalized = normalizeMusicArray(favoriteArtists, "artist");
             if (normalized) update.favoriteArtists = normalized;

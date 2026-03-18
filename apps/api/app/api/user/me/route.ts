@@ -2,6 +2,7 @@ import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
+import Post from "@/models/Post";
 import { verifyToken } from "@/lib/auth";
 
 export async function GET(req: Request) {
@@ -17,7 +18,9 @@ export async function GET(req: Request) {
         }
 
         const user = await User.findById(userId)
-            .select("_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks")
+            .select(
+                "_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy"
+            )
             .lean();
 
         if (!user) {
@@ -27,8 +30,18 @@ export async function GET(req: Request) {
             );
         }
 
+        const realNotesCount = await Post.countDocuments({
+            userId,
+            type: "post",
+        });
+
+        const safeUser = {
+            ...user,
+            notesCount: realNotesCount,
+        };
+
         return NextResponse.json(
-            { user },
+            { user: safeUser },
             { status: 200, headers: { "Cache-Control": "no-store" } }
         );
     } catch (err) {

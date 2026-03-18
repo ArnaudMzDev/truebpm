@@ -2,22 +2,26 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../lib/config";
 
+type FollowStatus = "none" | "requested" | "following";
 
-type Me = any;
+type FollowToggleResult = {
+    ok: boolean;
+    status?: FollowStatus;
+    error?: string;
+};
 
 type UserEvent =
-    | { type: "ME_UPDATED"; me: Me }
-    | { type: "FOLLOW_TOGGLED"; targetId: string; following: boolean; me: Me };
-
-type Listener = (event: UserEvent) => void;
+    | {
+    type: "FOLLOW_TOGGLED";
+    targetId: string;
+    following: boolean;
+};
 
 type UserContextType = {
-    me: Me | null;
-    setMe: (next: Me | null) => Promise<void>;
-    refreshMe: () => Promise<Me | null>;
-    subscribe: (listener: Listener) => () => void;
-    // helper follow/unfollow centralisé (optionnel mais pratique)
-    toggleFollow: (targetId: string) => Promise<{ ok: boolean; following?: boolean }>;
+    me: any;
+    refreshMe: () => Promise<void>;
+    toggleFollow: (targetUserId: string) => Promise<FollowToggleResult>;
+    subscribe: (listener: (event: UserEvent) => void) => () => void;
 };
 
 const UserContext = createContext<UserContextType | null>(null);
@@ -25,6 +29,7 @@ const UserContext = createContext<UserContextType | null>(null);
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
+
     try {
         return JSON.parse(text);
     } catch {
@@ -34,129 +39,128 @@ async function safeJson(res: Response): Promise<any | null> {
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-    const [me, _setMe] = useState<Me | null>(null);
+    const [me, setMe] = useState<any>(null);
+    const listenersRef = useRef<Array<(event: UserEvent) => void>>([]);
 
-    // ✅ event bus
-    const listenersRef = useRef(new Set<Listener>());
     const emit = useCallback((event: UserEvent) => {
-        listenersRef.current.forEach((fn) => {
+        for (const listener of listenersRef.current) {
             try {
-                fn(event);
-            } catch (e) {
-                console.log("UserContext listener error:", e);
-            }
-        });
-    }, []);
-
-    const subscribe = useCallback((listener: Listener) => {
-        listenersRef.current.add(listener);
-        return () => listenersRef.current.delete(listener);
-    }, []);
-
-    const setMe = useCallback(
-        async (next: Me | null) => {
-            _setMe(next);
-            if (next) {
-                await AsyncStorage.setItem("user", JSON.stringify(next));
-                emit({ type: "ME_UPDATED", me: next });
-            } else {
-                await AsyncStorage.removeItem("user");
-            }
-        },
-        [emit]
-    );
-
-    const hydrateFromCache = useCallback(async () => {
-        const raw = await AsyncStorage.getItem("user");
-        if (!raw) return null;
-        try {
-            const cached = JSON.parse(raw);
-            if (cached?._id) _setMe(cached);
-            return cached;
-        } catch {
-            return null;
+                listener(event);
+            } catch {}
         }
     }, []);
 
     const refreshMe = useCallback(async () => {
         const token = await AsyncStorage.getItem("token");
-        if (!token) return null;
+        if (!token) {
+            setMe(null);
+            return;
+        }
 
-        const res = await fetch(`${API_URL}/api/user/me`, {
-            method: "GET",
-            headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const json = await safeJson(res);
-        if (!res.ok || !json?.user?._id) return null;
-
-        await setMe(json.user);
-        return json.user;
-    }, [setMe]);
-
-    // ✅ au boot : cache -> puis refresh (best UX)
-    useEffect(() => {
-        (async () => {
-            await hydrateFromCache();
-            await refreshMe();
-        })();
-    }, [hydrateFromCache, refreshMe]);
-
-    // ✅ follow/unfollow centralisé + update me + emit
-    const toggleFollow = useCallback(
-        async (targetId: string) => {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return { ok: false };
-
-            const res = await fetch(`${API_URL}/api/follow/${targetId}`, {
-                method: "POST",
+        try {
+            const res = await fetch(`${API_URL}/api/user/me`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
 
             const json = await safeJson(res);
-            if (!res.ok || !json) return { ok: false };
-
-            const didFollow = json.status === "followed" || json.following === true;
-
-            // update ME local
-            const current = me || (await hydrateFromCache());
-            if (current?._id) {
-                const prevList: string[] = (current.followingList || []).map((x: any) => x?.toString?.());
-                let nextList = prevList;
-
-                if (didFollow) {
-                    if (!prevList.includes(targetId)) nextList = [...prevList, targetId];
-                } else {
-                    nextList = prevList.filter((id) => id !== targetId);
-                }
-
-                const nextMe = {
-                    ...current,
-                    followingList: nextList,
-                    following:
-                        typeof json.followingCount === "number"
-                            ? json.followingCount
-                            : Math.max(0, (current.following || 0) + (didFollow ? 1 : -1)),
-                };
-
-                await setMe(nextMe);
-
-                emit({
-                    type: "FOLLOW_TOGGLED",
-                    targetId,
-                    following: didFollow,
-                    me: nextMe,
-                });
+            if (!res.ok || !json?.user?._id) {
+                setMe(null);
+                return;
             }
 
-            return { ok: true, following: didFollow };
+            setMe(json.user);
+            await AsyncStorage.setItem("user", JSON.stringify(json.user));
+        } catch (e) {
+            console.log("refreshMe error:", e);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshMe();
+    }, [refreshMe]);
+
+    const toggleFollow = useCallback(
+        async (targetUserId: string): Promise<FollowToggleResult> => {
+            const token = await AsyncStorage.getItem("token");
+            if (!token) {
+                return { ok: false, error: "Non authentifié." };
+            }
+
+            const wasFollowing =
+                Array.isArray(me?.followingList) &&
+                me.followingList.some((id: any) => String(id) === String(targetUserId));
+
+            try {
+                const res = await fetch(`${API_URL}/api/follow/toggle`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ targetUserId }),
+                });
+
+                const json = await safeJson(res);
+                if (!res.ok) {
+                    return { ok: false, error: json?.error || "Impossible de modifier le suivi." };
+                }
+
+                const status = (json?.status || "none") as FollowStatus;
+                const nowFollowing = status === "following";
+
+                setMe((prev: any) => {
+                    if (!prev?._id) return prev;
+
+                    const currentList = Array.isArray(prev.followingList) ? prev.followingList : [];
+                    let nextList = currentList;
+
+                    if (status === "following") {
+                        const already = currentList.some((id: any) => String(id) === String(targetUserId));
+                        nextList = already ? currentList : [...currentList, targetUserId];
+                    } else {
+                        nextList = currentList.filter((id: any) => String(id) !== String(targetUserId));
+                    }
+
+                    return {
+                        ...prev,
+                        followingList: nextList,
+                        following: nextList.length,
+                    };
+                });
+
+                if (wasFollowing !== nowFollowing) {
+                    emit({
+                        type: "FOLLOW_TOGGLED",
+                        targetId: targetUserId,
+                        following: nowFollowing,
+                    });
+                }
+
+                return { ok: true, status };
+            } catch (e) {
+                console.log("toggleFollow error:", e);
+                return { ok: false, error: "Erreur réseau." };
+            }
         },
-        [emit, hydrateFromCache, me, setMe]
+        [emit, me?.followingList]
     );
 
+    const subscribe = useCallback((listener: (event: UserEvent) => void) => {
+        listenersRef.current.push(listener);
+
+        return () => {
+            listenersRef.current = listenersRef.current.filter((l) => l !== listener);
+        };
+    }, []);
+
     const value = useMemo(
-        () => ({ me, setMe, refreshMe, subscribe, toggleFollow }),
-        [me, setMe, refreshMe, subscribe, toggleFollow]
+        () => ({
+            me,
+            refreshMe,
+            toggleFollow,
+            subscribe,
+        }),
+        [me, refreshMe, toggleFollow, subscribe]
     );
 
     return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
@@ -164,6 +168,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
 export function useUser() {
     const ctx = useContext(UserContext);
-    if (!ctx) throw new Error("useUser must be used within UserProvider");
+    if (!ctx) {
+        throw new Error("useUser must be used inside UserProvider");
+    }
     return ctx;
 }

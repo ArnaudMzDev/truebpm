@@ -30,6 +30,7 @@ type MusicRef = {
 };
 
 type ProfileTab = "posts" | "reposts" | "likes";
+type FollowStatus = "self" | "none" | "requested" | "following";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -124,6 +125,42 @@ function EmptyPostsState({ tab }: { tab: ProfileTab }) {
     );
 }
 
+function PrivateLockedState({
+                                followStatus,
+                                onToggleFollow,
+                                loading,
+                            }: {
+    followStatus: FollowStatus;
+    onToggleFollow: () => void;
+    loading: boolean;
+}) {
+    const label =
+        followStatus === "requested"
+            ? "Demandé"
+            : followStatus === "following"
+                ? "Suivi"
+                : "Demander à suivre";
+
+    return (
+        <View style={styles.privateBox}>
+            <Ionicons name="lock-closed" size={20} color="#fff" />
+            <Text style={styles.privateTitle}>Ce compte est privé</Text>
+            <Text style={styles.privateText}>
+                Tu dois être accepté pour voir les posts, les reposts et les likes de ce profil.
+            </Text>
+
+            <TouchableOpacity
+                style={[styles.privateBtn, loading && { opacity: 0.7 }]}
+                activeOpacity={0.85}
+                disabled={loading}
+                onPress={onToggleFollow}
+            >
+                <Text style={styles.privateBtnText}>{loading ? "..." : label}</Text>
+            </TouchableOpacity>
+        </View>
+    );
+}
+
 export default function UserProfileScreen({ route, navigation }: any) {
     const { userId } = route.params;
 
@@ -142,6 +179,8 @@ export default function UserProfileScreen({ route, navigation }: any) {
     const [hasMore, setHasMore] = useState(true);
 
     const [openingChat, setOpeningChat] = useState(false);
+    const [followLoading, setFollowLoading] = useState(false);
+    const [isPrivateLocked, setIsPrivateLocked] = useState(false);
 
     const LIMIT = 15;
 
@@ -149,10 +188,8 @@ export default function UserProfileScreen({ route, navigation }: any) {
         return me?._id?.toString?.() === userId?.toString?.();
     }, [me, userId]);
 
-    const isFollowing = useMemo(() => {
-        const list = me?.followingList || [];
-        return list.some((id: any) => id?.toString?.() === userId?.toString?.());
-    }, [me, userId]);
+    const followStatus = (user?.followStatus || "none") as FollowStatus;
+    const isFollowing = followStatus === "following";
 
     const fetchUser = useCallback(async () => {
         const token = await AsyncStorage.getItem("token");
@@ -189,6 +226,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
         setPosts(json?.posts || []);
         setCursor(json?.nextCursor || null);
         setHasMore(!!json?.nextCursor);
+        setIsPrivateLocked(!!json?.isPrivateLocked);
     }, []);
 
     useEffect(() => {
@@ -211,11 +249,18 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
             setUser((prev: any) => {
                 if (!prev) return prev;
-                const delta = event.following ? 1 : -1;
+                const nextFollowing = event.following;
+
                 return {
                     ...prev,
-                    followers: Math.max(0, (prev.followers || 0) + delta),
+                    followStatus: nextFollowing ? "following" : "none",
+                    followers: Math.max(0, (prev.followers || 0) + (nextFollowing ? 1 : -1)),
                 };
+            });
+
+            setIsPrivateLocked((prev) => {
+                if (event.following) return false;
+                return prev;
             });
         });
 
@@ -223,7 +268,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
     }, [subscribe, userId]);
 
     const loadMore = useCallback(async () => {
-        if (!cursor || loadingMore || !hasMore) return;
+        if (!cursor || loadingMore || !hasMore || isPrivateLocked) return;
 
         try {
             setLoadingMore(true);
@@ -242,10 +287,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
             setPosts((prev) => [...prev, ...(json?.posts || [])]);
             setCursor(json?.nextCursor || null);
             setHasMore(!!json?.nextCursor);
+            setIsPrivateLocked(!!json?.isPrivateLocked);
         } finally {
             setLoadingMore(false);
         }
-    }, [cursor, loadingMore, hasMore, userId, activeTab]);
+    }, [cursor, loadingMore, hasMore, userId, activeTab, isPrivateLocked]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -254,15 +300,68 @@ export default function UserProfileScreen({ route, navigation }: any) {
     }, [fetchUser, fetchTabPosts, userId, activeTab]);
 
     const handleFollowToggle = useCallback(async () => {
-        if (isSelf) return;
-        const r = await toggleFollow(userId);
-        if (!r.ok) return;
-    }, [isSelf, toggleFollow, userId]);
+        if (isSelf || followLoading) return;
+
+        setFollowLoading(true);
+        try {
+            const r = await toggleFollow(userId);
+            if (!r.ok) {
+                Alert.alert("Erreur", r.error || "Impossible de modifier le suivi.");
+                return;
+            }
+
+            setUser((prev: any) => {
+                if (!prev) return prev;
+
+                const prevFollowers = Number(prev.followers || 0);
+
+                if (r.status === "requested") {
+                    return {
+                        ...prev,
+                        followStatus: "requested",
+                    };
+                }
+
+                if (r.status === "following") {
+                    return {
+                        ...prev,
+                        followStatus: "following",
+                        followers: prev.followStatus === "following" ? prevFollowers : prevFollowers + 1,
+                    };
+                }
+
+                return {
+                    ...prev,
+                    followStatus: "none",
+                    followers: prev.followStatus === "following" ? Math.max(0, prevFollowers - 1) : prevFollowers,
+                };
+            });
+
+            await fetchTabPosts(userId, activeTab);
+        } finally {
+            setFollowLoading(false);
+        }
+    }, [isSelf, followLoading, toggleFollow, userId, fetchTabPosts, activeTab]);
+
+    const canMessage = useMemo(() => {
+        if (isSelf) return true;
+        if (!user) return false;
+        if ((user.messagePrivacy || "everyone") === "everyone") return true;
+        return isFollowing;
+    }, [isSelf, user, isFollowing]);
 
     const openChat = useCallback(async () => {
         if (isSelf) return;
         if (!user?._id) return;
         if (openingChat) return;
+
+        if (!canMessage) {
+            Alert.alert(
+                "Messages limités",
+                "Cet utilisateur accepte uniquement les messages des comptes qu’il suit."
+            );
+            return;
+        }
 
         const token = await AsyncStorage.getItem("token");
         if (!token) {
@@ -283,7 +382,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
             const json = await safeJson(res);
             if (!res.ok) {
-                console.log("openChat error:", res.status, json);
                 Alert.alert("Erreur", json?.error || "Impossible d'ouvrir la conversation.");
                 return;
             }
@@ -315,7 +413,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
         } finally {
             setOpeningChat(false);
         }
-    }, [isSelf, user, openingChat, navigation]);
+    }, [isSelf, user, openingChat, navigation, canMessage]);
 
     const pinnedTrack = user?.pinnedTrack as MusicRef | null;
     const favoriteArtists = (user?.favoriteArtists || []) as MusicRef[];
@@ -371,6 +469,15 @@ export default function UserProfileScreen({ route, navigation }: any) {
         );
     };
 
+    const followButtonLabel =
+        followStatus === "requested"
+            ? "Demandé"
+            : followStatus === "following"
+                ? "Ne plus suivre"
+                : user?.isPrivate
+                    ? "Demander"
+                    : "Suivre";
+
     const Header = () => (
         <View>
             <View style={styles.bannerBox}>
@@ -389,6 +496,22 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
                 <Text style={styles.pseudo}>{user.pseudo}</Text>
                 <Text style={styles.bio}>{user.bio || "Aucune bio."}</Text>
+
+                <View style={styles.badgesRow}>
+                    {user?.isPrivate ? (
+                        <View style={styles.badge}>
+                            <Ionicons name="lock-closed" size={12} color="#fff" />
+                            <Text style={styles.badgeText}>Compte privé</Text>
+                        </View>
+                    ) : null}
+
+                    {user?.messagePrivacy === "following" ? (
+                        <View style={styles.badgeSecondary}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={12} color="#fff" />
+                            <Text style={styles.badgeText}>Messages abonnements</Text>
+                        </View>
+                    ) : null}
+                </View>
             </View>
 
             <View style={styles.statsRow}>
@@ -420,12 +543,20 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 <View style={styles.actionsRow}>
                     <TouchableOpacity
                         onPress={openChat}
-                        style={[styles.msgBtn, openingChat && { opacity: 0.7 }]}
+                        style={[
+                            styles.msgBtn,
+                            !canMessage && styles.msgBtnDisabled,
+                            openingChat && { opacity: 0.7 },
+                        ]}
                         activeOpacity={0.85}
                         disabled={openingChat}
                     >
                         <Text style={styles.msgText}>
-                            {openingChat ? "Ouverture..." : "Message"}
+                            {openingChat
+                                ? "Ouverture..."
+                                : canMessage
+                                    ? "Message"
+                                    : "Messages limités"}
                         </Text>
                     </TouchableOpacity>
 
@@ -434,12 +565,13 @@ export default function UserProfileScreen({ route, navigation }: any) {
                         style={[
                             styles.followBtn,
                             isFollowing ? styles.following : styles.notFollowing,
+                            followStatus === "requested" && styles.requestedBtn,
+                            followLoading && { opacity: 0.7 },
                         ]}
                         activeOpacity={0.85}
+                        disabled={followLoading}
                     >
-                        <Text style={styles.followText}>
-                            {isFollowing ? "Ne plus suivre" : "Suivre"}
-                        </Text>
+                        <Text style={styles.followText}>{followButtonLabel}</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -528,6 +660,33 @@ export default function UserProfileScreen({ route, navigation }: any) {
         </View>
     );
 
+    if (isPrivateLocked && !isSelf) {
+        return (
+            <FlatList
+                ListHeaderComponent={Header}
+                data={[]}
+                keyExtractor={(item) => item._id}
+                renderItem={() => null}
+                ListEmptyComponent={
+                    <PrivateLockedState
+                        followStatus={followStatus}
+                        onToggleFollow={handleFollowToggle}
+                        loading={followLoading}
+                    />
+                }
+                contentContainerStyle={{ paddingBottom: 60 }}
+                style={{ backgroundColor: "#000" }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#9B5CFF"
+                    />
+                }
+            />
+        );
+    }
+
     return (
         <FlatList
             ListHeaderComponent={Header}
@@ -598,6 +757,40 @@ const styles = StyleSheet.create({
         marginRight: 16,
     },
 
+    badgesRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+        marginTop: 12,
+    },
+    badge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "#2A1A1A",
+        borderWidth: 1,
+        borderColor: "#4B2A2A",
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    badgeSecondary: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "#151515",
+        borderWidth: 1,
+        borderColor: "#272727",
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    badgeText: {
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: "700",
+    },
+
     statsRow: {
         flexDirection: "row",
         marginTop: 22,
@@ -642,6 +835,10 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+    msgBtnDisabled: {
+        backgroundColor: "#101010",
+        borderColor: "#202020",
+    },
     msgText: {
         color: "#fff",
         fontWeight: "800",
@@ -660,6 +857,11 @@ const styles = StyleSheet.create({
     },
     notFollowing: {
         backgroundColor: "#5E17EB",
+    },
+    requestedBtn: {
+        backgroundColor: "#26203A",
+        borderWidth: 1,
+        borderColor: "#5E17EB",
     },
     followText: {
         color: "#fff",
@@ -785,6 +987,41 @@ const styles = StyleSheet.create({
         color: "#8c8c8c",
         fontSize: 13,
         lineHeight: 18,
+    },
+
+    privateBox: {
+        marginHorizontal: 16,
+        marginTop: 8,
+        padding: 18,
+        borderRadius: 18,
+        backgroundColor: "#111",
+        borderWidth: 1,
+        borderColor: "#232323",
+        alignItems: "center",
+    },
+    privateTitle: {
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "800",
+        marginTop: 12,
+    },
+    privateText: {
+        color: "#888",
+        fontSize: 13,
+        lineHeight: 19,
+        marginTop: 8,
+        textAlign: "center",
+    },
+    privateBtn: {
+        marginTop: 16,
+        backgroundColor: "#5E17EB",
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 18,
+    },
+    privateBtnText: {
+        color: "#fff",
+        fontWeight: "800",
     },
 
     tabsRow: {

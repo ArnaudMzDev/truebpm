@@ -9,8 +9,12 @@ import {
     StyleSheet,
     ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../lib/config";
+
+const PROFILE_MUSIC_PICK_KEY = "edit_profile_pending_music_pick";
+const NOTE_TRACK_PICK_KEY = "create_note_pending_track_pick";
 
 type SearchType = "song" | "album" | "artist";
 
@@ -57,15 +61,6 @@ type CreatePostNavPayload = {
     };
 };
 
-type PickedMusicItem = {
-    entityId: string;
-    entityType: "song" | "album" | "artist";
-    title: string;
-    artist: string;
-    coverUrl: string;
-    previewUrl: string;
-};
-
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
@@ -78,11 +73,11 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
-function normalizeToProfileMusic(item: AnyItem): PickedMusicItem {
+function normalizeToProfileMusic(item: AnyItem) {
     if (item.type === "song") {
         return {
             entityId: item.id,
-            entityType: "song",
+            entityType: "song" as const,
             title: item.title,
             artist: item.artist,
             coverUrl: item.cover || "",
@@ -93,7 +88,7 @@ function normalizeToProfileMusic(item: AnyItem): PickedMusicItem {
     if (item.type === "album") {
         return {
             entityId: item.id,
-            entityType: "album",
+            entityType: "album" as const,
             title: item.title,
             artist: item.artist,
             coverUrl: item.cover || "",
@@ -103,7 +98,7 @@ function normalizeToProfileMusic(item: AnyItem): PickedMusicItem {
 
     return {
         entityId: item.id,
-        entityType: "artist",
+        entityType: "artist" as const,
         title: item.name,
         artist: item.name,
         coverUrl: item.cover || "",
@@ -112,13 +107,10 @@ function normalizeToProfileMusic(item: AnyItem): PickedMusicItem {
 }
 
 export default function SearchScreen({ navigation, route }: any) {
-    const mode: "pickTrack" | "pickProfileMusic" =
+    const mode: "pickTrack" | "pickProfileMusic" | "pickNoteTrack" =
         route?.params?.mode || "pickTrack";
 
     const kind: PickProfileKind | undefined = route?.params?.kind;
-    const onPickProfileMusic:
-        | ((payload: { kind: PickProfileKind; item: PickedMusicItem }) => void)
-        | undefined = route?.params?.onPickProfileMusic;
 
     const initialType: SearchType =
         route?.params?.initialType ||
@@ -135,24 +127,25 @@ export default function SearchScreen({ navigation, route }: any) {
 
     const search = async (forcedType?: SearchType) => {
         const effective = forcedType ?? type;
-        const q = query.trim();
-
-        if (!q) return;
+        if (!query.trim()) return;
 
         try {
             setLoading(true);
 
-            const url = `${API_URL}/api/search/apple?q=${encodeURIComponent(q)}&type=${effective}`;
+            const url = `${API_URL}/api/search/apple?q=${encodeURIComponent(
+                query.trim()
+            )}&type=${effective}`;
+
             const res = await fetch(url);
             const json = await safeJson(res);
 
-            if (!res.ok || !Array.isArray(json?.items)) {
+            if (!res.ok || !json?.items) {
                 console.log("Search error:", res.status, json);
                 setResults([]);
                 return;
             }
 
-            setResults(json.items as AnyItem[]);
+            setResults(Array.isArray(json.items) ? json.items : []);
         } catch (err) {
             console.log("Search fetch error:", err);
             setResults([]);
@@ -165,8 +158,8 @@ export default function SearchScreen({ navigation, route }: any) {
         navigation.navigate("CreatePost", payload);
     };
 
-    const selectForProfileMusic = (item: AnyItem) => {
-        if (!kind || !onPickProfileMusic) return;
+    const selectForProfileMusic = async (item: AnyItem) => {
+        if (!kind) return;
 
         const normalized = normalizeToProfileMusic(item);
 
@@ -175,10 +168,32 @@ export default function SearchScreen({ navigation, route }: any) {
         if (kind === "favoriteAlbums" && normalized.entityType !== "album") return;
         if (kind === "favoriteTracks" && normalized.entityType !== "song") return;
 
-        onPickProfileMusic({
-            kind,
-            item: normalized,
-        });
+        try {
+            await AsyncStorage.setItem(
+                PROFILE_MUSIC_PICK_KEY,
+                JSON.stringify({
+                    kind,
+                    item: normalized,
+                })
+            );
+        } catch (e) {
+            console.log("save picked profile music error:", e);
+        }
+
+        navigation.goBack();
+    };
+
+    const selectForNoteTrack = async (item: AnyItem) => {
+        const normalized = normalizeToProfileMusic(item);
+
+        try {
+            await AsyncStorage.setItem(
+                NOTE_TRACK_PICK_KEY,
+                JSON.stringify(normalized)
+            );
+        } catch (e) {
+            console.log("save picked note track error:", e);
+        }
 
         navigation.goBack();
     };
@@ -186,6 +201,11 @@ export default function SearchScreen({ navigation, route }: any) {
     const handlePress = (item: AnyItem) => {
         if (mode === "pickProfileMusic") {
             selectForProfileMusic(item);
+            return;
+        }
+
+        if (mode === "pickNoteTrack") {
+            selectForNoteTrack(item);
             return;
         }
 
@@ -250,9 +270,7 @@ export default function SearchScreen({ navigation, route }: any) {
                         </Text>
                     </View>
 
-                    {item.previewUrl ? (
-                        <Ionicons name="play" size={18} color="#bbb" />
-                    ) : null}
+                    {item.previewUrl ? <Ionicons name="play" size={18} color="#bbb" /> : null}
                 </TouchableOpacity>
             );
         }
@@ -315,21 +333,13 @@ export default function SearchScreen({ navigation, route }: any) {
                     : kind === "favoriteAlbums"
                         ? "Choisir des albums favoris"
                         : "Choisir des morceaux favoris"
-            : "Rechercher";
+            : mode === "pickNoteTrack"
+                ? "Choisir un son pour la note"
+                : "Rechercher";
 
     return (
         <View style={styles.container}>
-            <View style={styles.topRow}>
-                <TouchableOpacity
-                    onPress={() => navigation.goBack()}
-                    activeOpacity={0.85}
-                    style={styles.backBtn}
-                >
-                    <Ionicons name="chevron-back" size={22} color="#fff" />
-                </TouchableOpacity>
-
-                <Text style={styles.screenTitle}>{screenTitle}</Text>
-            </View>
+            <Text style={styles.screenTitle}>{screenTitle}</Text>
 
             <TextInput
                 style={styles.input}
@@ -369,11 +379,6 @@ export default function SearchScreen({ navigation, route }: any) {
                     renderItem={renderItem}
                     contentContainerStyle={{ paddingBottom: 200 }}
                     keyboardShouldPersistTaps="handled"
-                    ListEmptyComponent={
-                        query.trim().length > 0 ? (
-                            <Text style={styles.emptyText}>Aucun résultat</Text>
-                        ) : null
-                    }
                 />
             )}
         </View>
@@ -387,20 +392,11 @@ const styles = StyleSheet.create({
         padding: 16,
         paddingTop: 50,
     },
-    topRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 14,
-    },
-    backBtn: {
-        marginRight: 10,
-        padding: 4,
-    },
     screenTitle: {
         color: "#fff",
         fontSize: 20,
         fontWeight: "800",
-        flexShrink: 1,
+        marginBottom: 14,
     },
     input: {
         backgroundColor: "#111",
@@ -466,10 +462,5 @@ const styles = StyleSheet.create({
         color: "#aaa",
         marginTop: 3,
         fontSize: 13,
-    },
-    emptyText: {
-        color: "#777",
-        textAlign: "center",
-        marginTop: 30,
     },
 });

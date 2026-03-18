@@ -65,6 +65,8 @@ function getNotificationText(item: any) {
             return `${actor} a commenté ton post`;
         case "reply_comment":
             return `${actor} a répondu à ton commentaire`;
+        case "like_comment":
+            return `${actor} a aimé ton commentaire`;
         case "repost_post":
             return `${actor} a reposté ton post`;
         default:

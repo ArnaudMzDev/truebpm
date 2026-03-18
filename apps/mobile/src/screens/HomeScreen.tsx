@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { io, Socket } from "socket.io-client";
 
 import PostCard from "../components/PostCard";
+import NotesStrip from "../components/NotesStrip";
 import { PostType } from "../components/PostCard/types";
 import { API_URL, SOCKET_URL } from "../lib/config";
 import { useUser } from "../context/UserContext";
@@ -437,6 +438,8 @@ export default function HomeScreen({ navigation }: any) {
 
     const ListHeader = () => (
         <View>
+            <NotesStrip navigation={navigation} />
+
             <View style={styles.suggestionsBlock}>
                 <View style={styles.suggestionsHeader}>
                     <TouchableOpacity

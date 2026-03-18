@@ -125,7 +125,7 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
             { $inc: { commentsCount: 1 } }
         );
 
-        if (parent.userId) {
+        if (parent.userId && String(parent.userId) !== String(meId)) {
             await createNotification({
                 recipientId: String(parent.userId),
                 actorId: String(meId),

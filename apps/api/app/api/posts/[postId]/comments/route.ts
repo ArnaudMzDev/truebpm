@@ -102,12 +102,15 @@ export async function POST(req: Request, { params }: { params: { postId: string 
 
         await Post.updateOne({ _id: postId }, { $inc: { commentsCount: 1 } });
 
-        await createNotification({
-            recipientId: String(postDoc.userId),
-            actorId: String(meId),
-            type: "comment_post",
-            postId: String(postId),
-        });
+        if (String(postDoc.userId) !== String(meId)) {
+            await createNotification({
+                recipientId: String(postDoc.userId),
+                actorId: String(meId),
+                type: "comment_post",
+                postId: String(postId),
+                commentId: String(created._id),
+            });
+        }
 
         const populated: any = await Comment.findById(created._id)
             .populate("userId", "pseudo avatarUrl")
