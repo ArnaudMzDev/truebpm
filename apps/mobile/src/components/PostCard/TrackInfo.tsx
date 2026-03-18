@@ -4,8 +4,8 @@ import { EntityType } from "./types";
 
 type Props = {
     coverUrl?: string | null;
-    title: string;
-    artist: string;
+    title?: string;
+    artist?: string;
     entityType?: EntityType;
 };
 
@@ -16,11 +16,26 @@ function getEntityLabel(entityType?: EntityType) {
 }
 
 export default function TrackInfo({ coverUrl, title, artist, entityType }: Props) {
+    const cleanTitle =
+        typeof title === "string" && title.trim().length > 0
+            ? title.trim()
+            : "Titre inconnu";
+
+    const cleanArtist =
+        typeof artist === "string" && artist.trim().length > 0
+            ? artist.trim()
+            : "Artiste inconnu";
+
+    const cleanCover =
+        typeof coverUrl === "string" && coverUrl.trim().length > 0
+            ? coverUrl.trim()
+            : "";
+
     return (
         <View style={styles.row}>
             <View style={styles.coverWrap}>
-                {coverUrl ? (
-                    <Image source={{ uri: coverUrl }} style={styles.cover} />
+                {cleanCover ? (
+                    <Image source={{ uri: cleanCover }} style={styles.cover} />
                 ) : (
                     <View style={styles.coverPlaceholder} />
                 )}
@@ -29,7 +44,7 @@ export default function TrackInfo({ coverUrl, title, artist, entityType }: Props
             <View style={styles.meta}>
                 <View style={styles.topLine}>
                     <Text numberOfLines={1} style={styles.title}>
-                        {title}
+                        {cleanTitle}
                     </Text>
 
                     <View style={styles.badge}>
@@ -38,7 +53,7 @@ export default function TrackInfo({ coverUrl, title, artist, entityType }: Props
                 </View>
 
                 <Text numberOfLines={1} style={styles.artist}>
-                    {artist}
+                    {cleanArtist}
                 </Text>
             </View>
         </View>
@@ -50,6 +65,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         marginTop: 12,
+        width: "100%",
     },
     coverWrap: {
         width: 54,
@@ -72,6 +88,7 @@ const styles = StyleSheet.create({
     meta: {
         flex: 1,
         marginLeft: 12,
+        minWidth: 0,
     },
     topLine: {
         flexDirection: "row",

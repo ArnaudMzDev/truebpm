@@ -28,7 +28,8 @@ export async function POST(req: Request) {
     try {
         await connectDB();
 
-        const userId = req.headers.get("x-user-id")!;        if (!userId) {
+        const userId = req.headers.get("x-user-id");
+        if (!userId) {
             return NextResponse.json(
                 { error: "Non authentifié." },
                 { status: 401 }
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
             trackTitle,
             artist,
             coverUrl,
+            previewUrl,
 
             mode,
             rating,
@@ -120,6 +122,7 @@ export async function POST(req: Request) {
             trackTitle,
             artist,
             coverUrl: coverUrl || null,
+            previewUrl: previewUrl || null,
 
             mode,
             rating: finalRating,

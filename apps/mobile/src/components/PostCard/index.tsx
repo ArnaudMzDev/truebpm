@@ -30,6 +30,8 @@ export default function PostCard({ post, onDeleted }: Props) {
         if (lastPostIdRef.current !== post._id) {
             lastPostIdRef.current = post._id;
             setLocalPost(post);
+        } else {
+            setLocalPost(post);
         }
     }, [post]);
 
@@ -38,10 +40,6 @@ export default function PostCard({ post, onDeleted }: Props) {
     const originalPost: PostType = (isRepost ? localPost.repostOf : localPost) as PostType;
     const reposter = localPost.repostedBy ?? null;
 
-    // ✅ IMPORTANT:
-    // Pour les reposts, l’ActionsBar doit utiliser :
-    // - l’ID du post original
-    // - mais les compteurs/flags sociaux calculés au top-level du wrapper
     const socialPost: PostType = useMemo(() => {
         if (!isRepost || !localPost.repostOf) return localPost;
 
@@ -87,8 +85,8 @@ export default function PostCard({ post, onDeleted }: Props) {
             if (p.type === "repost" && p.repostOf) {
                 return {
                     ...p,
-                    ...patch, // ✅ garde aussi les compteurs/flags au top-level du wrapper
-                    repostOf: { ...p.repostOf, ...patch }, // ✅ sync aussi l’original embarqué
+                    ...patch,
+                    repostOf: { ...p.repostOf, ...patch },
                 };
             }
 
@@ -109,87 +107,96 @@ export default function PostCard({ post, onDeleted }: Props) {
     }, [navigation, originalPost?._id]);
 
     return (
-        <TouchableOpacity activeOpacity={0.95} onPress={openDetail}>
-            <View style={styles.card}>
-                {isRepost && reposter ? (
-                    <View style={styles.repostBanner}>
-                        <Ionicons name="repeat" size={16} color="#9B5CFF" />
-                        <Text style={styles.repostText}>
-                            <Text style={styles.reposterName}>{reposter.pseudo}</Text> a reposté
-                        </Text>
-                    </View>
-                ) : null}
-
-                {isRepost && localPost.repostComment?.trim()?.length ? (
-                    <View style={{ marginBottom: 10 }}>
-                        <CommentBox text={localPost.repostComment} />
-                    </View>
-                ) : null}
-
-                <View style={isRepost ? styles.quoted : undefined}>
-                    <Header
-                        pseudo={originalPost.userId?.pseudo || "Utilisateur"}
-                        avatarUrl={originalPost.userId?.avatarUrl || ""}
-                        createdAt={originalPost.createdAt}
-                        userId={originalPost.userId?._id || ""}
-                        repostByPseudo={reposter?.pseudo}
-                        repostByUserId={reposter?._id}
-                        postId={localPost._id}
-                        canDelete={canDelete}
-                        onDeleted={(id) => onDeleted?.(id)}
-                    />
-
-                    <TrackInfo
-                        coverUrl={originalPost.coverUrl}
-                        title={originalPost.trackTitle}
-                        artist={originalPost.artist}
-                        entityType={originalPost.entityType}
-                    />
-
-                    {isSimple ? (
-                        <RatingSimple rating={originalPost.rating} />
-                    ) : (
-                        <RatingMulti
-                            entityType={originalPost.entityType}
-                            average={average}
-                            ratings={originalPost.ratings ?? null}
-                            prod={originalPost.prod ?? null}
-                            lyrics={originalPost.lyrics ?? null}
-                            emotion={originalPost.emotion ?? null}
-                        />
-                    )}
-
-                    {originalPost.comment?.trim().length ? (
-                        <CommentBox text={originalPost.comment} />
+        <View style={styles.outer}>
+            <TouchableOpacity activeOpacity={0.95} onPress={openDetail}>
+                <View style={styles.card}>
+                    {isRepost && reposter ? (
+                        <View style={styles.repostBanner}>
+                            <Ionicons name="repeat" size={16} color="#9B5CFF" />
+                            <Text style={styles.repostText}>
+                                <Text style={styles.reposterName}>{reposter.pseudo}</Text> a reposté
+                            </Text>
+                        </View>
                     ) : null}
 
-                    <AudioPreview
-                        previewUrl={originalPost.previewUrl}
-                        title={originalPost.trackTitle}
-                        artist={originalPost.artist}
-                        coverUrl={originalPost.coverUrl}
-                    />
+                    {isRepost && localPost.repostComment?.trim()?.length ? (
+                        <View style={{ marginBottom: 10 }}>
+                            <CommentBox text={localPost.repostComment} />
+                        </View>
+                    ) : null}
 
-                    <ActionsBar
-                        post={socialPost}
-                        onLocalUpdate={onLocalUpdate}
-                        onOpenComments={openDetail}
-                        onShare={onShare}
-                    />
+                    <View style={isRepost ? styles.quoted : undefined}>
+                        <Header
+                            pseudo={originalPost.userId?.pseudo || "Utilisateur"}
+                            avatarUrl={originalPost.userId?.avatarUrl || ""}
+                            createdAt={originalPost.createdAt}
+                            userId={originalPost.userId?._id || ""}
+                            repostByPseudo={reposter?.pseudo}
+                            repostByUserId={reposter?._id}
+                            postId={localPost._id}
+                            canDelete={canDelete}
+                            onDeleted={(id) => onDeleted?.(id)}
+                        />
+
+                        <TrackInfo
+                            coverUrl={originalPost.coverUrl}
+                            title={originalPost.trackTitle}
+                            artist={originalPost.artist}
+                            entityType={originalPost.entityType}
+                        />
+
+                        {isSimple ? (
+                            <RatingSimple rating={originalPost.rating ?? null} />
+                        ) : (
+                            <RatingMulti
+                                entityType={originalPost.entityType}
+                                average={average}
+                                ratings={originalPost.ratings ?? null}
+                                prod={originalPost.prod ?? null}
+                                lyrics={originalPost.lyrics ?? null}
+                                emotion={originalPost.emotion ?? null}
+                            />
+                        )}
+
+                        {originalPost.comment?.trim().length ? (
+                            <CommentBox text={originalPost.comment} />
+                        ) : null}
+
+
+                        <AudioPreview
+                            previewUrl={originalPost.previewUrl}
+                            title={originalPost.trackTitle}
+                            artist={originalPost.artist}
+                            coverUrl={originalPost.coverUrl}
+                        />
+
+                        <ActionsBar
+                            post={socialPost}
+                            onLocalUpdate={onLocalUpdate}
+                            onOpenComments={openDetail}
+                            onShare={onShare}
+                        />
+                    </View>
                 </View>
-            </View>
-        </TouchableOpacity>
+            </TouchableOpacity>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
+    outer: {
+        width: "100%",
+    },
+
     card: {
+        width: "100%",
         backgroundColor: "#111",
         padding: 16,
         borderRadius: 14,
         borderWidth: 1,
         borderColor: "#222",
         marginBottom: 16,
+        alignSelf: "stretch",
     },
 
     repostBanner: {
@@ -209,6 +216,7 @@ const styles = StyleSheet.create({
     },
 
     quoted: {
+        width: "100%",
         borderWidth: 1,
         borderColor: "#1e1e1e",
         borderRadius: 14,

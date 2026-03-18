@@ -1,35 +1,46 @@
-// apps/mobile/src/components/PostCard/AudioPreview.tsx
 import React, { useMemo, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayer } from "../../context/PlayerContext";
 
 type Props = {
-    previewUrl: string | null;
-    title: string;
-    artist: string;
-    coverUrl: string | null;
+    previewUrl: string | null | undefined;
+    title: string | undefined;
+    artist: string | undefined;
+    coverUrl: string | null | undefined;
 };
 
 export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     const player = usePlayer();
 
-    // ✅ si pas de preview => rien
-    if (!previewUrl) return null;
+    const cleanPreviewUrl =
+        typeof previewUrl === "string" ? previewUrl.trim() : "";
+
+    const cleanTitle =
+        typeof title === "string" && title.trim().length > 0
+            ? title.trim()
+            : "Titre inconnu";
+
+    const cleanArtist =
+        typeof artist === "string" && artist.trim().length > 0
+            ? artist.trim()
+            : "Artiste inconnu";
+
+    const cleanCoverUrl =
+        typeof coverUrl === "string" ? coverUrl.trim() : "";
+
+    if (!cleanPreviewUrl) return null;
 
     const currentTrack = player?.currentTrack ?? null;
     const isPlaying = !!player?.isPlaying;
 
-    // ✅ IMPORTANT : match uniquement par URL
     const isCurrentTrack = useMemo(() => {
-        return !!currentTrack && currentTrack.url === previewUrl;
-    }, [currentTrack, previewUrl]);
+        return !!currentTrack && currentTrack.url === cleanPreviewUrl;
+    }, [currentTrack, cleanPreviewUrl]);
 
     const togglePlay = useCallback(async () => {
         try {
-            // Si c'est déjà ce track et qu'on joue => pause
             if (isCurrentTrack && isPlaying) {
-                // pause() si dispo, sinon togglePlay() si tu l’as dans ton context
                 if (typeof (player as any)?.pause === "function") {
                     await (player as any).pause();
                 } else if (typeof (player as any)?.togglePlay === "function") {
@@ -38,19 +49,19 @@ export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Pr
                 return;
             }
 
-            // Sinon => playPreview
             if (typeof (player as any)?.playPreview === "function") {
                 await (player as any).playPreview({
-                    title,
-                    artist,
-                    cover: coverUrl || "",
-                    url: previewUrl,
+                    title: cleanTitle,
+                    artist: cleanArtist,
+                    coverUrl: cleanCoverUrl,
+                    cover: cleanCoverUrl,
+                    url: cleanPreviewUrl,
                 });
             }
         } catch (e) {
             console.log("AudioPreview togglePlay error:", e);
         }
-    }, [player, isCurrentTrack, isPlaying, title, artist, coverUrl, previewUrl]);
+    }, [player, isCurrentTrack, isPlaying, cleanTitle, cleanArtist, cleanCoverUrl, cleanPreviewUrl]);
 
     return (
         <View style={styles.container}>
@@ -73,7 +84,7 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: "row",
         alignItems: "center",
-        marginTop: 6,
+        marginTop: 8,
     },
     button: {
         width: 32,

@@ -6,28 +6,11 @@
   <component name="ChangeListManager">
     <list default="true" id="b7041585-3975-4118-bd64-fec653cf918c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/like/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/like/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/replies/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/comments/[commentId]/replies/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/conversations/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/conversations/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/comments/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/[postId]/comments/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/route.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/user/[id]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/user/[id]/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/[id]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/[id]/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/me/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/me/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/user/profile/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/user/profile/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/lib/loadModels.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/lib/loadModels.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/models/Notification.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/Notification.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/models/User.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/User.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/context/UserContext.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/context/UserContext.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/lib/config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/lib/config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/EditProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/EditProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/NotificationsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/NotificationsScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/SearchScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/SearchScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pnpm-lock.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/pnpm-lock.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/AudioPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/AudioPreview.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/TrackInfo.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/TrackInfo.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -111,6 +94,7 @@
       <workItem from="1772323263488" duration="11084000" />
       <workItem from="1772899933648" duration="21470000" />
       <workItem from="1773503749587" duration="8828000" />
+      <workItem from="1773848773524" duration="1353000" />
     </task>
     <servers />
   </component>
@@ -137,7 +121,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx</url>
-          <line>7</line>
+          <line>15</line>
           <option name="timeStamp" value="3" />
         </line-breakpoint>
       </breakpoints>
