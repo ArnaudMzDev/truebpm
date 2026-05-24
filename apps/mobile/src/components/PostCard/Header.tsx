@@ -1,26 +1,22 @@
 import React from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_URL } from "../../lib/config";
 
+import { API_URL } from "../../lib/config";
+import { colors, spacing, typography, fontWeights, radius } from "../../theme";
 
 type Props = {
-    // Auteur affiché (post original)
     pseudo: string;
     avatarUrl: string;
     createdAt: string;
     userId: string;
-
-    // ✅ Optionnel : annotation repost
     repostByPseudo?: string;
     repostByUserId?: string;
-
-    // ✅ Pour le menu "..."
-    postId?: string;                 // id du post (doc) à supprimer
-    canDelete?: boolean;             // true uniquement si c'est TON post (et pas un repost)
-    onDeleted?: (postId: string) => void; // callback pour retirer de la liste
+    postId?: string;
+    canDelete?: boolean;
+    onDeleted?: (postId: string) => void;
 };
 
 async function safeJson(res: Response): Promise<any | null> {
@@ -41,7 +37,6 @@ export default function Header({
                                    userId,
                                    repostByPseudo,
                                    repostByUserId,
-
                                    postId,
                                    canDelete,
                                    onDeleted,
@@ -72,17 +67,14 @@ export default function Header({
 
         const json = await safeJson(res);
         if (!res.ok) {
-            console.log("Delete post error:", res.status, json);
             Alert.alert("Erreur", json?.error || "Impossible de supprimer ce post.");
             return;
         }
 
-        // ✅ retire le post côté UI
         onDeleted?.(postId);
     };
 
     const openMenu = () => {
-        // Pour l’instant on ne met une action que si c’est supprimable
         if (!canDelete || !postId) return;
 
         Alert.alert(
@@ -111,38 +103,53 @@ export default function Header({
 
     return (
         <View style={styles.container}>
-            <View style={styles.leftWrap}>
-                {/* ✅ Ligne auteur */}
-                <TouchableOpacity style={styles.left} onPress={() => goToProfile(userId)} activeOpacity={0.85}>
-                    <Image source={{ uri: avatarUrl || "https://picsum.photos/200" }} style={styles.avatar} />
+            <TouchableOpacity
+                style={styles.left}
+                onPress={() => goToProfile(userId)}
+                activeOpacity={0.88}
+            >
+                <Image
+                    source={{ uri: avatarUrl || "https://picsum.photos/200" }}
+                    style={styles.avatar}
+                />
 
-                    <View style={{ flexShrink: 1 }}>
+                <View style={styles.textWrap}>
+                    <View style={styles.nameRow}>
                         <Text style={styles.pseudo} numberOfLines={1}>
                             {pseudo}
                         </Text>
+                    </View>
+
+                    <View style={styles.metaRow}>
+                        <Text style={styles.date}>{dateLabel}</Text>
 
                         {showRepost ? (
-                            <View style={styles.subLine}>
-                                <TouchableOpacity onPress={() => goToProfile(repostByUserId)} activeOpacity={0.85}>
+                            <>
+                                <Text style={styles.dot}>·</Text>
+                                <TouchableOpacity
+                                    onPress={() => goToProfile(repostByUserId)}
+                                    activeOpacity={0.85}
+                                >
                                     <Text style={styles.repostText} numberOfLines={1}>
-                                        Reposté par <Text style={styles.repostAt}>@{repostByPseudo}</Text>
+                                        reposté par <Text style={styles.repostAt}>@{repostByPseudo}</Text>
                                     </Text>
                                 </TouchableOpacity>
-
-                                <Text style={styles.dot}> · </Text>
-                                <Text style={styles.date}>{dateLabel}</Text>
-                            </View>
-                        ) : (
-                            <Text style={styles.date}>{dateLabel}</Text>
-                        )}
+                            </>
+                        ) : null}
                     </View>
-                </TouchableOpacity>
-            </View>
-
-            {/* ✅ Menu */}
-            <TouchableOpacity style={styles.menuButton} activeOpacity={0.85} onPress={openMenu}>
-                <Ionicons name="ellipsis-vertical" size={18} color={canDelete ? "#aaa" : "#555"} />
+                </View>
             </TouchableOpacity>
+
+            {canDelete ? (
+                <TouchableOpacity
+                    style={styles.menuButton}
+                    activeOpacity={0.8}
+                    onPress={openMenu}
+                    hitSlop={8}
+                >
+                    <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+            ) : null}
         </View>
     );
 }
@@ -169,64 +176,80 @@ function formatDate(dateString: string): string {
 const styles = StyleSheet.create({
     container: {
         flexDirection: "row",
+        alignItems: "flex-start",
         justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 14,
+        marginBottom: spacing.md,
     },
 
-    leftWrap: { flex: 1, paddingRight: 10 },
-
     left: {
+        flex: 1,
         flexDirection: "row",
         alignItems: "center",
+        paddingRight: spacing.sm,
     },
 
     avatar: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        marginRight: 10,
-        shadowColor: "#9B5CFF",
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 0 },
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        marginRight: spacing.md,
+        backgroundColor: colors.surface4,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
+    textWrap: {
+        flex: 1,
+        minWidth: 0,
+        justifyContent: "center",
+    },
+
+    nameRow: {
+        flexDirection: "row",
+        alignItems: "center",
     },
 
     pseudo: {
-        color: "#fff",
-        fontSize: 15,
-        fontWeight: "700",
+        color: colors.text,
+        fontSize: 16,
+        fontWeight: fontWeights.black,
+        lineHeight: 20,
+    },
+
+    metaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        flexWrap: "wrap",
+        marginTop: 3,
+        gap: 6,
     },
 
     date: {
-        color: "#888",
-        fontSize: 12,
-        marginTop: 1,
-    },
-
-    subLine: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 1,
-        flexWrap: "wrap",
-    },
-
-    repostText: {
-        color: "#888",
-        fontSize: 12,
-    },
-
-    repostAt: {
-        color: "#9B5CFF",
-        fontWeight: "800",
+        color: colors.textMuted,
+        fontSize: typography.caption,
     },
 
     dot: {
-        color: "#666",
-        fontSize: 12,
+        color: colors.textFaint,
+        fontSize: typography.caption,
+    },
+
+    repostText: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+    },
+
+    repostAt: {
+        color: colors.primary,
+        fontWeight: fontWeights.black,
     },
 
     menuButton: {
-        padding: 6,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 4,
     },
 });

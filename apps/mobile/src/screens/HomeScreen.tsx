@@ -3,7 +3,6 @@ import {
     View,
     Text,
     StyleSheet,
-    ActivityIndicator,
     FlatList,
     RefreshControl,
     TouchableOpacity,
@@ -12,11 +11,21 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { io, Socket } from "socket.io-client";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../components/PostCard";
 import NotesStrip from "../components/NotesStrip";
 import { PostType } from "../components/PostCard/types";
 import { API_URL, SOCKET_URL } from "../lib/config";
+
+import AppScreen from "../components/ui/AppScreen";
+import AppCard from "../components/ui/AppCard";
+import AppHeader from "../components/ui/AppHeader";
+import AppButton from "../components/ui/AppButton";
+import AppSectionLoader from "../components/ui/AppSectionLoader";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import { useUser } from "../context/UserContext";
 
 type SuggestedUser = {
@@ -75,31 +84,35 @@ function SuggestionCard({
     onHide: () => void;
 }) {
     return (
-        <View style={styles.suggestionCard}>
+        <AppCard style={styles.suggestionCard}>
             <TouchableOpacity
                 style={styles.suggestionHideBtn}
                 onPress={onHide}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
             >
-                <Ionicons name="close" size={14} color="#888" />
+                <Ionicons name="close" size={12} color={colors.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity
                 activeOpacity={0.9}
                 onPress={() => navigation.navigate("UserProfile", { userId: user._id })}
             >
-                <Image
-                    source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                    style={styles.suggestionAvatar}
-                />
+                <View style={styles.suggestionTopRow}>
+                    <Image
+                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
+                        style={styles.suggestionAvatar}
+                    />
 
-                <Text style={styles.suggestionPseudo} numberOfLines={1}>
-                    {user.pseudo}
-                </Text>
+                    <View style={styles.suggestionIdentity}>
+                        <Text style={styles.suggestionPseudo} numberOfLines={1}>
+                            {user.pseudo}
+                        </Text>
 
-                <Text style={styles.suggestionBio} numberOfLines={2}>
-                    {user.bio?.trim() || "Découvrir ce profil"}
-                </Text>
+                        <Text style={styles.suggestionBio} numberOfLines={1}>
+                            {user.bio?.trim() || "Découvrir ce profil"}
+                        </Text>
+                    </View>
+                </View>
 
                 <View style={styles.suggestionMetaRow}>
                     <Text style={styles.suggestionMetaText}>
@@ -112,26 +125,23 @@ function SuggestionCard({
                 </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-                style={[
-                    styles.suggestionBtn,
-                    following && styles.suggestionBtnFollowing,
-                    followLoading && { opacity: 0.7 },
-                ]}
+            <AppButton
+                label={followLoading ? "..." : following ? "Suivi" : "Suivre"}
                 onPress={onFollow}
-                activeOpacity={0.85}
                 disabled={followLoading}
-            >
-                <Text style={styles.suggestionBtnText}>
-                    {followLoading ? "..." : following ? "Suivi" : "Suivre"}
-                </Text>
-            </TouchableOpacity>
-        </View>
+                variant={following ? "secondary" : "primary"}
+                style={styles.suggestionAction}
+            />
+        </AppCard>
     );
 }
 
 export default function HomeScreen({ navigation }: any) {
     const { toggleFollow, me } = useUser();
+
+    const tabBarHeight = useBottomTabBarHeight();
+    const insets = useSafeAreaInsets();
+    const bottomSpacing = tabBarHeight + Math.max(insets.bottom, 10) + 20;
 
     const [posts, setPosts] = useState<PostType[]>([]);
     const [initialLoading, setInitialLoading] = useState(true);
@@ -438,21 +448,37 @@ export default function HomeScreen({ navigation }: any) {
 
     const ListHeader = () => (
         <View>
-            <NotesStrip navigation={navigation} />
+            <View style={styles.heroIntro}>
+                <Text style={styles.heroEyebrow}>TrueBPM</Text>
+                <Text style={styles.heroTitle}>Ton feed musical</Text>
+                <Text style={styles.heroSubtitle}>
+                    Découvre les notes, avis et reposts de ta communauté.
+                </Text>
+            </View>
 
-            <View style={styles.suggestionsBlock}>
+            <View style={styles.notesWrap}>
+                <NotesStrip navigation={navigation} />
+            </View>
+
+            <AppCard style={styles.suggestionsBlock}>
                 <View style={styles.suggestionsHeader}>
                     <TouchableOpacity
                         style={styles.suggestionsHeaderLeft}
                         onPress={toggleSuggestionsCollapsed}
                         activeOpacity={0.85}
                     >
-                        <Text style={styles.suggestionsTitle}>Suggestions pour toi</Text>
-                        <Ionicons
-                            name={suggestionsCollapsed ? "chevron-down" : "chevron-up"}
-                            size={18}
-                            color="#aaa"
-                        />
+                        <View style={styles.suggestionsTitleWrap}>
+                            <Text style={styles.suggestionsEyebrow}>Découverte</Text>
+                            <Text style={styles.suggestionsTitle}>Suggestions</Text>
+                        </View>
+
+                        <View style={styles.suggestionsChevronWrap}>
+                            <Ionicons
+                                name={suggestionsCollapsed ? "chevron-down" : "chevron-up"}
+                                size={16}
+                                color={colors.textMuted}
+                            />
+                        </View>
                     </TouchableOpacity>
 
                     {hiddenSuggestionIds.length > 0 ? (
@@ -471,7 +497,7 @@ export default function HomeScreen({ navigation }: any) {
 
                 {!suggestionsCollapsed ? (
                     loadingSuggestions ? (
-                        <ActivityIndicator color="#9B5CFF" style={{ marginVertical: 16 }} />
+                        <AppSectionLoader />
                     ) : visibleSuggestions.length > 0 ? (
                         <FlatList
                             data={visibleSuggestions}
@@ -488,111 +514,137 @@ export default function HomeScreen({ navigation }: any) {
                                     onHide={() => hideSuggestion(String(item._id))}
                                 />
                             )}
-                            contentContainerStyle={{ paddingRight: 6 }}
+                            contentContainerStyle={styles.suggestionsListContent}
                         />
                     ) : (
                         <View style={styles.emptySuggestionsBox}>
+                            <View style={styles.emptySuggestionsIconWrap}>
+                                <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+                            </View>
                             <Text style={styles.emptySuggestionsText}>
                                 Plus aucune suggestion pour le moment.
                             </Text>
                         </View>
                     )
                 ) : null}
+            </AppCard>
+
+            <View style={styles.feedHeader}>
+                <View>
+                    <Text style={styles.feedEyebrow}>Feed</Text>
+                    <Text style={styles.feedTitle}>Derniers posts</Text>
+                </View>
             </View>
         </View>
     );
 
     if (initialLoading && posts.length === 0) {
-        return (
-            <View style={styles.loader}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement du feed..." />;
     }
 
     return (
-        <View style={styles.container}>
-            <View style={styles.topBar}>
-                <Text style={styles.title}>Accueil</Text>
+        <AppScreen>
+            <AppHeader
+                title="Accueil"
+                subtitle="La musique notée par ta communauté"
+                right={
+                    <TouchableOpacity
+                        style={styles.notifButton}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                            setNotifUnread(0);
+                            navigation.navigate("SocialNotifications");
+                        }}
+                    >
+                        <Ionicons name="notifications-outline" size={22} color={colors.text} />
 
-                <TouchableOpacity
-                    style={styles.notifButton}
-                    activeOpacity={0.85}
-                    onPress={() => {
-                        setNotifUnread(0);
-                        navigation.navigate("SocialNotifications");
-                    }}
-                >
-                    <Ionicons name="notifications-outline" size={24} color="#fff" />
-
-                    {notifUnread > 0 ? (
-                        <View style={styles.notifBadge}>
-                            <Text style={styles.notifBadgeText}>
-                                {notifUnread > 99 ? "99+" : notifUnread}
-                            </Text>
-                        </View>
-                    ) : null}
-                </TouchableOpacity>
-            </View>
+                        {notifUnread > 0 ? (
+                            <View style={styles.notifBadge}>
+                                <Text style={styles.notifBadgeText}>
+                                    {notifUnread > 99 ? "99+" : notifUnread}
+                                </Text>
+                            </View>
+                        ) : null}
+                    </TouchableOpacity>
+                }
+            />
 
             <FlatList
                 data={posts}
                 keyExtractor={(item) => item._id}
                 renderItem={({ item }) => <PostCard post={item} onDeleted={handleDeleted} />}
                 ListHeaderComponent={ListHeader}
-                contentContainerStyle={{ paddingBottom: 40 }}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                    styles.listContent,
+                    { paddingBottom: bottomSpacing },
+                ]}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor="#9B5CFF"
+                        tintColor={colors.primary}
                     />
                 }
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
                 ListFooterComponent={
-                    loadingMore ? (
-                        <ActivityIndicator
-                            size="small"
-                            color="#9B5CFF"
-                            style={{ marginVertical: 14 }}
-                        />
-                    ) : null
+                    loadingMore ? <AppSectionLoader /> : <View style={{ height: spacing.sm }} />
                 }
             />
-        </View>
+        </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#000",
-        paddingTop: 50,
-        paddingHorizontal: 16,
+    listContent: {
+        paddingBottom: spacing.xxxl,
     },
-    topBar: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 16,
+
+    heroIntro: {
+        marginBottom: spacing.lg,
+        paddingTop: spacing.xs,
     },
-    title: {
-        color: "#fff",
-        fontSize: 22,
-        fontWeight: "700",
+
+    heroEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginBottom: 4,
     },
+
+    heroTitle: {
+        color: colors.text,
+        fontSize: 26,
+        fontWeight: fontWeights.black,
+        lineHeight: 30,
+    },
+
+    heroSubtitle: {
+        color: colors.textMuted,
+        fontSize: typography.body,
+        lineHeight: 20,
+        marginTop: 6,
+    },
+
+    notesWrap: {
+        marginBottom: spacing.lg,
+    },
+
     notifButton: {
         width: 42,
         height: 42,
-        borderRadius: 12,
-        backgroundColor: "#141414",
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#222",
+        borderColor: colors.border,
         justifyContent: "center",
         alignItems: "center",
         position: "relative",
     },
+
     notifBadge: {
         position: "absolute",
         top: -4,
@@ -600,135 +652,209 @@ const styles = StyleSheet.create({
         minWidth: 18,
         height: 18,
         paddingHorizontal: 4,
-        borderRadius: 9,
-        backgroundColor: "#9B5CFF",
+        borderRadius: radius.pill,
+        backgroundColor: colors.primary,
         alignItems: "center",
         justifyContent: "center",
+        borderWidth: 2,
+        borderColor: colors.bg,
     },
+
     notifBadgeText: {
-        color: "#000",
+        color: colors.bg,
         fontSize: 10,
-        fontWeight: "900",
+        fontWeight: fontWeights.black,
     },
 
     suggestionsBlock: {
-        marginBottom: 18,
+        marginBottom: spacing.xl,
+        padding: spacing.md,
+        backgroundColor: colors.surface,
     },
+
     suggestionsHeader: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 12,
+        marginBottom: spacing.sm,
+        gap: spacing.md,
     },
+
     suggestionsHeaderLeft: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
+        gap: spacing.sm,
+        flex: 1,
+        justifyContent: "space-between",
     },
+
+    suggestionsTitleWrap: {
+        flex: 1,
+        paddingRight: spacing.sm,
+    },
+
+    suggestionsChevronWrap: {
+        width: 28,
+        height: 28,
+        borderRadius: radius.pill,
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    suggestionsEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        marginBottom: 2,
+        letterSpacing: 1,
+    },
+
     suggestionsTitle: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "800",
+        color: colors.text,
+        fontSize: 17,
+        fontWeight: fontWeights.black,
     },
+
     suggestionsLink: {
-        color: "#9B5CFF",
-        fontSize: 13,
-        fontWeight: "800",
+        color: colors.primary,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    suggestionsListContent: {
+        paddingRight: 4,
     },
 
     suggestionCard: {
-        width: 190,
-        backgroundColor: "#111",
-        borderWidth: 1,
-        borderColor: "#222",
-        borderRadius: 16,
-        padding: 14,
-        marginRight: 12,
+        width: 176,
+        marginRight: spacing.sm,
         position: "relative",
+        padding: spacing.md,
+        backgroundColor: colors.surface3,
     },
+
     suggestionHideBtn: {
         position: "absolute",
-        top: 10,
-        right: 10,
+        top: 8,
+        right: 8,
         zIndex: 2,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: "#181818",
+        width: 22,
+        height: 22,
+        borderRadius: radius.pill,
+        backgroundColor: colors.surface4,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "#242424",
+        borderColor: colors.border,
     },
+
+    suggestionTopRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: spacing.sm,
+        paddingRight: 12,
+    },
+
     suggestionAvatar: {
-        width: 54,
-        height: 54,
-        borderRadius: 27,
-        marginBottom: 12,
-        backgroundColor: "#1a1a1a",
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: colors.surface4,
+        marginRight: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
+
+    suggestionIdentity: {
+        flex: 1,
+        minWidth: 0,
+    },
+
     suggestionPseudo: {
-        color: "#fff",
-        fontSize: 15,
-        fontWeight: "900",
-        paddingRight: 18,
+        color: colors.text,
+        fontSize: 14,
+        fontWeight: fontWeights.black,
     },
+
     suggestionBio: {
-        color: "#999",
-        fontSize: 12,
-        lineHeight: 17,
-        marginTop: 6,
-        minHeight: 34,
+        color: colors.textMuted,
+        fontSize: 11,
+        lineHeight: 15,
+        marginTop: 3,
     },
+
     suggestionMetaRow: {
         flexDirection: "row",
         alignItems: "center",
-        marginTop: 10,
-    },
-    suggestionMetaText: {
-        color: "#777",
-        fontSize: 11,
-        fontWeight: "700",
-    },
-    suggestionMetaDot: {
-        color: "#555",
-        marginHorizontal: 6,
-    },
-    suggestionBtn: {
-        marginTop: 14,
-        backgroundColor: "#5E17EB",
-        borderRadius: 10,
-        paddingVertical: 10,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    suggestionBtnFollowing: {
-        backgroundColor: "#242424",
-        borderWidth: 1,
-        borderColor: "#333",
-    },
-    suggestionBtnText: {
-        color: "#fff",
-        fontSize: 13,
-        fontWeight: "900",
-    },
-    emptySuggestionsBox: {
-        backgroundColor: "#111",
-        borderWidth: 1,
-        borderColor: "#222",
-        borderRadius: 14,
-        padding: 16,
-    },
-    emptySuggestionsText: {
-        color: "#777",
-        fontSize: 13,
-        textAlign: "center",
+        marginTop: spacing.xs,
+        marginBottom: spacing.sm,
     },
 
-    loader: {
-        flex: 1,
-        backgroundColor: "#000",
-        justifyContent: "center",
+    suggestionMetaText: {
+        color: colors.textFaint,
+        fontSize: 11,
+        fontWeight: fontWeights.bold,
+    },
+
+    suggestionMetaDot: {
+        color: colors.textFaint,
+        marginHorizontal: 6,
+        fontSize: 11,
+    },
+
+    suggestionAction: {
+        marginTop: spacing.sm,
+    },
+
+    emptySuggestionsBox: {
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.xl,
+        padding: spacing.md,
+        flexDirection: "row",
         alignItems: "center",
+        gap: spacing.sm,
+    },
+
+    emptySuggestionsIconWrap: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+
+    emptySuggestionsText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        flex: 1,
+    },
+
+    feedHeader: {
+        marginBottom: spacing.md,
+        paddingHorizontal: spacing.xs,
+    },
+
+    feedEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginBottom: 2,
+    },
+
+    feedTitle: {
+        color: colors.text,
+        fontSize: 20,
+        fontWeight: fontWeights.black,
     },
 });

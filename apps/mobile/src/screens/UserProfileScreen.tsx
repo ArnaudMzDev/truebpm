@@ -11,6 +11,7 @@ import {
     Alert,
     ScrollView,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { API_URL } from "../lib/config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +20,14 @@ import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 import { useUser } from "../context/UserContext";
 import { usePlayer } from "../context/PlayerContext";
+import {
+    colors,
+    spacing,
+    radius,
+    typography,
+    fontWeights,
+    shadows,
+} from "../theme";
 
 type MusicRef = {
     entityId: string;
@@ -64,8 +73,8 @@ function MusicHorizontalCard({
                                     ? "disc"
                                     : "musical-notes"
                         }
-                        size={18}
-                        color="#9a9a9a"
+                        size={20}
+                        color={colors.textMuted}
                     />
                 </View>
             )}
@@ -92,7 +101,9 @@ function SectionBlock({
     return (
         <View style={styles.sectionBlock}>
             <View style={styles.sectionHeader}>
-                <Ionicons name={icon} size={16} color="#9B5CFF" />
+                <View style={styles.sectionIconWrap}>
+                    <Ionicons name={icon} size={15} color={colors.primary} />
+                </View>
                 <Text style={styles.sectionBlockTitle}>{title}</Text>
             </View>
             {children}
@@ -103,7 +114,7 @@ function SectionBlock({
 function EmptyMusicState({ text }: { text: string }) {
     return (
         <View style={styles.emptyBox}>
-            <Ionicons name="sparkles-outline" size={16} color="#777" />
+            <Ionicons name="sparkles-outline" size={16} color={colors.textMuted} />
             <Text style={styles.emptyText}>{text}</Text>
         </View>
     );
@@ -119,7 +130,7 @@ function EmptyPostsState({ tab }: { tab: ProfileTab }) {
 
     return (
         <View style={styles.emptyPostsBox}>
-            <Ionicons name="albums-outline" size={18} color="#777" />
+            <Ionicons name="albums-outline" size={18} color={colors.textMuted} />
             <Text style={styles.emptyPostsText}>{text}</Text>
         </View>
     );
@@ -143,7 +154,10 @@ function PrivateLockedState({
 
     return (
         <View style={styles.privateBox}>
-            <Ionicons name="lock-closed" size={20} color="#fff" />
+            <View style={styles.privateIconWrap}>
+                <Ionicons name="lock-closed" size={18} color={colors.text} />
+            </View>
+
             <Text style={styles.privateTitle}>Ce compte est privé</Text>
             <Text style={styles.privateText}>
                 Tu dois être accepté pour voir les posts, les reposts et les likes de ce profil.
@@ -161,10 +175,30 @@ function PrivateLockedState({
     );
 }
 
+function MiniWave({ active }: { active: boolean }) {
+    return (
+        <View style={styles.waveWrap}>
+            {[0, 1, 2].map((i) => (
+                <View
+                    key={i}
+                    style={[
+                        styles.waveBar,
+                        {
+                            height: i === 1 ? 16 : i === 0 ? 11 : 8,
+                            backgroundColor: active ? colors.primary : colors.textFaint,
+                            opacity: active ? 0.95 : 0.45,
+                        },
+                    ]}
+                />
+            ))}
+        </View>
+    );
+}
+
 export default function UserProfileScreen({ route, navigation }: any) {
     const { userId } = route.params;
 
-    const { me, toggleFollow, subscribe } = useUser();
+    const { me, toggleFollow, subscribe, refreshMe } = useUser();
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const [user, setUser] = useState<any>(null);
@@ -181,6 +215,9 @@ export default function UserProfileScreen({ route, navigation }: any) {
     const [openingChat, setOpeningChat] = useState(false);
     const [followLoading, setFollowLoading] = useState(false);
     const [isPrivateLocked, setIsPrivateLocked] = useState(false);
+
+    const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+    const [requestActionLoading, setRequestActionLoading] = useState(false);
 
     const LIMIT = 15;
 
@@ -208,6 +245,43 @@ export default function UserProfileScreen({ route, navigation }: any) {
         setUser(json?.user ?? null);
     }, [userId]);
 
+    const fetchPendingRequestForProfile = useCallback(async () => {
+        if (isSelf) {
+            setPendingRequestId(null);
+            return;
+        }
+
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+            setPendingRequestId(null);
+            return;
+        }
+
+        const res = await fetch(`${API_URL}/api/follow/requests`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const json = await safeJson(res);
+        if (!res.ok) {
+            console.log("fetchPendingRequestForProfile error:", res.status, json);
+            setPendingRequestId(null);
+            return;
+        }
+
+        const requests = Array.isArray(json?.requests) ? json.requests : [];
+
+        const match = requests.find((r: any) => {
+            const requester =
+                typeof r?.requesterId === "string"
+                    ? r.requesterId
+                    : r?.requesterId?._id || r?.requesterId;
+
+            return String(requester) === String(userId);
+        });
+
+        setPendingRequestId(match?._id ? String(match._id) : null);
+    }, [isSelf, userId]);
+
     const fetchTabPosts = useCallback(async (uid: string, tab: ProfileTab) => {
         const token = await AsyncStorage.getItem("token");
 
@@ -232,15 +306,32 @@ export default function UserProfileScreen({ route, navigation }: any) {
     useEffect(() => {
         (async () => {
             setLoadingInitial(true);
-            await Promise.all([fetchUser(), fetchTabPosts(userId, activeTab)]);
+            await Promise.all([
+                fetchUser(),
+                fetchTabPosts(userId, activeTab),
+                fetchPendingRequestForProfile(),
+            ]);
             setLoadingInitial(false);
         })();
-    }, [fetchUser, fetchTabPosts, userId]);
+    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, userId, activeTab]);
 
     useEffect(() => {
         if (!userId) return;
         fetchTabPosts(userId, activeTab);
     }, [activeTab, userId, fetchTabPosts]);
+
+    useFocusEffect(
+        useCallback(() => {
+            (async () => {
+                await Promise.all([
+                    fetchUser(),
+                    fetchTabPosts(userId, activeTab),
+                    fetchPendingRequestForProfile(),
+                    refreshMe(),
+                ]);
+            })();
+        }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, refreshMe, userId, activeTab])
+    );
 
     useEffect(() => {
         const unsub = subscribe((event) => {
@@ -295,9 +386,14 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await Promise.all([fetchUser(), fetchTabPosts(userId, activeTab)]);
+        await Promise.all([
+            fetchUser(),
+            fetchTabPosts(userId, activeTab),
+            fetchPendingRequestForProfile(),
+            refreshMe(),
+        ]);
         setRefreshing(false);
-    }, [fetchUser, fetchTabPosts, userId, activeTab]);
+    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, refreshMe, userId, activeTab]);
 
     const handleFollowToggle = useCallback(async () => {
         if (isSelf || followLoading) return;
@@ -333,15 +429,89 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 return {
                     ...prev,
                     followStatus: "none",
-                    followers: prev.followStatus === "following" ? Math.max(0, prevFollowers - 1) : prevFollowers,
+                    followers:
+                        prev.followStatus === "following"
+                            ? Math.max(0, prevFollowers - 1)
+                            : prevFollowers,
                 };
             });
 
-            await fetchTabPosts(userId, activeTab);
+            await Promise.all([
+                fetchTabPosts(userId, activeTab),
+                fetchPendingRequestForProfile(),
+                refreshMe(),
+            ]);
         } finally {
             setFollowLoading(false);
         }
-    }, [isSelf, followLoading, toggleFollow, userId, fetchTabPosts, activeTab]);
+    }, [
+        isSelf,
+        followLoading,
+        toggleFollow,
+        userId,
+        fetchTabPosts,
+        activeTab,
+        fetchPendingRequestForProfile,
+        refreshMe,
+    ]);
+
+    const handleRequestAction = useCallback(
+        async (action: "accept" | "decline") => {
+            if (!pendingRequestId || requestActionLoading) return;
+
+            const token = await AsyncStorage.getItem("token");
+            if (!token) {
+                Alert.alert("Erreur", "Tu n'es pas connecté.");
+                return;
+            }
+
+            setRequestActionLoading(true);
+            try {
+                const res = await fetch(
+                    `${API_URL}/api/follow/requests/${pendingRequestId}`,
+                    {
+                        method: "PATCH",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ action }),
+                    }
+                );
+
+                const json = await safeJson(res);
+                if (!res.ok) {
+                    Alert.alert("Erreur", json?.error || "Impossible de traiter la demande.");
+                    return;
+                }
+
+                setPendingRequestId(null);
+
+                await Promise.all([
+                    fetchUser(),
+                    fetchTabPosts(userId, activeTab),
+                    fetchPendingRequestForProfile(),
+                    refreshMe(),
+                ]);
+
+                if (action === "accept") {
+                    setIsPrivateLocked(false);
+                }
+            } finally {
+                setRequestActionLoading(false);
+            }
+        },
+        [
+            pendingRequestId,
+            requestActionLoading,
+            fetchUser,
+            fetchTabPosts,
+            fetchPendingRequestForProfile,
+            refreshMe,
+            userId,
+            activeTab,
+        ]
+    );
 
     const canMessage = useMemo(() => {
         if (isSelf) return true;
@@ -451,7 +621,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
     if (loadingInitial || !user) {
         return (
             <View style={styles.loading}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
+                <ActivityIndicator size="large" color={colors.primary} />
             </View>
         );
     }
@@ -480,19 +650,24 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
     const Header = () => (
         <View>
-            <View style={styles.bannerBox}>
-                <Image
-                    source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
-                    style={styles.banner}
-                />
-                <View style={styles.bannerOverlay} />
+            <View style={styles.heroWrap}>
+                <View style={styles.bannerBox}>
+                    <Image
+                        source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
+                        style={styles.banner}
+                    />
+                    <View style={styles.bannerOverlay} />
+                    <View style={styles.bannerShade} />
+                </View>
             </View>
 
             <View style={styles.identityBlock}>
-                <Image
-                    source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                    style={styles.avatar}
-                />
+                <View style={styles.avatarWrap}>
+                    <Image
+                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
+                        style={styles.avatar}
+                    />
+                </View>
 
                 <Text style={styles.pseudo}>{user.pseudo}</Text>
                 <Text style={styles.bio}>{user.bio || "Aucune bio."}</Text>
@@ -500,14 +675,18 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 <View style={styles.badgesRow}>
                     {user?.isPrivate ? (
                         <View style={styles.badge}>
-                            <Ionicons name="lock-closed" size={12} color="#fff" />
+                            <Ionicons name="lock-closed" size={12} color={colors.text} />
                             <Text style={styles.badgeText}>Compte privé</Text>
                         </View>
                     ) : null}
 
                     {user?.messagePrivacy === "following" ? (
                         <View style={styles.badgeSecondary}>
-                            <Ionicons name="chatbubble-ellipses-outline" size={12} color="#fff" />
+                            <Ionicons
+                                name="chatbubble-ellipses-outline"
+                                size={12}
+                                color={colors.text}
+                            />
                             <Text style={styles.badgeText}>Messages abonnements</Text>
                         </View>
                     ) : null}
@@ -539,7 +718,44 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 </View>
             </View>
 
-            {!isSelf && (
+            {!isSelf && pendingRequestId ? (
+                <View style={styles.requestCard}>
+                    <View style={styles.requestHeader}>
+                        <View style={styles.requestIconWrap}>
+                            <Ionicons name="person-add-outline" size={15} color={colors.primary} />
+                        </View>
+                        <Text style={styles.requestTitle}>Demande en attente</Text>
+                    </View>
+
+                    <Text style={styles.requestText}>
+                        {user.pseudo} a demandé à te suivre.
+                    </Text>
+
+                    <View style={styles.requestActionsRow}>
+                        <TouchableOpacity
+                            style={[styles.requestDeclineBtn, requestActionLoading && { opacity: 0.7 }]}
+                            activeOpacity={0.85}
+                            disabled={requestActionLoading}
+                            onPress={() => handleRequestAction("decline")}
+                        >
+                            <Text style={styles.requestDeclineText}>
+                                {requestActionLoading ? "..." : "Refuser"}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.requestAcceptBtn, requestActionLoading && { opacity: 0.7 }]}
+                            activeOpacity={0.85}
+                            disabled={requestActionLoading}
+                            onPress={() => handleRequestAction("accept")}
+                        >
+                            <Text style={styles.requestAcceptText}>
+                                {requestActionLoading ? "..." : "Accepter"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            ) : !isSelf ? (
                 <View style={styles.actionsRow}>
                     <TouchableOpacity
                         onPress={openChat}
@@ -574,24 +790,27 @@ export default function UserProfileScreen({ route, navigation }: any) {
                         <Text style={styles.followText}>{followButtonLabel}</Text>
                     </TouchableOpacity>
                 </View>
-            )}
+            ) : null}
 
             <SectionBlock title="Son épinglé" icon="musical-notes-outline">
                 {pinnedTrack ? (
                     <TouchableOpacity
                         activeOpacity={canPlayPinned ? 0.9 : 1}
                         onPress={canPlayPinned ? handlePlayPinned : undefined}
-                        style={[styles.pinnedCard, isPinnedCurrent && isPlaying && styles.pinnedCardPlaying]}
+                        style={[
+                            styles.pinnedCard,
+                            isPinnedCurrent && isPlaying && styles.pinnedCardPlaying,
+                        ]}
                     >
                         {pinnedTrack.coverUrl ? (
                             <Image source={{ uri: pinnedTrack.coverUrl }} style={styles.pinnedCover} />
                         ) : (
                             <View style={[styles.pinnedCover, styles.musicPlaceholder]}>
-                                <Ionicons name="musical-notes" size={22} color="#999" />
+                                <Ionicons name="musical-notes" size={22} color={colors.textMuted} />
                             </View>
                         )}
 
-                        <View style={{ flex: 1 }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
                             <Text style={styles.pinnedLabel}>Titre du moment</Text>
                             <Text style={styles.pinnedTitle} numberOfLines={1}>
                                 {pinnedTrack.title}
@@ -602,14 +821,21 @@ export default function UserProfileScreen({ route, navigation }: any) {
                         </View>
 
                         {canPlayPinned ? (
-                            <View style={[styles.pinnedPlayBtn, isPinnedCurrent && isPlaying && styles.pinnedPlayBtnActive]}>
+                            <View
+                                style={[
+                                    styles.pinnedPlayBtn,
+                                    isPinnedCurrent && isPlaying && styles.pinnedPlayBtnActive,
+                                ]}
+                            >
                                 <Ionicons
                                     name={isPinnedCurrent && isPlaying ? "pause" : "play"}
-                                    size={18}
-                                    color="#fff"
+                                    size={17}
+                                    color={colors.text}
                                 />
                             </View>
                         ) : null}
+
+                        {canPlayPinned ? <MiniWave active={!!(isPinnedCurrent && isPlaying)} /> : null}
                     </TouchableOpacity>
                 ) : (
                     <EmptyMusicState text="Aucun son épinglé pour le moment." />
@@ -618,7 +844,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
             <SectionBlock title="Artistes favoris" icon="person-outline">
                 {favoriteArtists.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.horizontalList}
+                    >
                         {favoriteArtists.map((item) => (
                             <MusicHorizontalCard key={`artist:${item.entityId}`} item={item} compact />
                         ))}
@@ -630,7 +860,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
             <SectionBlock title="Albums favoris" icon="disc-outline">
                 {favoriteAlbums.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.horizontalList}
+                    >
                         {favoriteAlbums.map((item) => (
                             <MusicHorizontalCard key={`album:${item.entityId}`} item={item} compact />
                         ))}
@@ -642,7 +876,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
             <SectionBlock title="Morceaux favoris" icon="headset-outline">
                 {favoriteTracks.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.horizontalList}
+                    >
                         {favoriteTracks.map((item) => (
                             <MusicHorizontalCard key={`track:${item.entityId}`} item={item} compact />
                         ))}
@@ -674,15 +912,16 @@ export default function UserProfileScreen({ route, navigation }: any) {
                         loading={followLoading}
                     />
                 }
-                contentContainerStyle={{ paddingBottom: 60 }}
-                style={{ backgroundColor: "#000" }}
+                contentContainerStyle={styles.listContentPrivate}
+                style={styles.list}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor="#9B5CFF"
+                        tintColor={colors.primary}
                     />
                 }
+                showsVerticalScrollIndicator={false}
             />
         );
     }
@@ -692,67 +931,116 @@ export default function UserProfileScreen({ route, navigation }: any) {
             ListHeaderComponent={Header}
             data={posts}
             keyExtractor={(item) => item._id}
-            renderItem={({ item }) => <PostCard post={item} />}
+            renderItem={({ item }) => (
+                <View style={styles.postRow}>
+                    <PostCard post={item} />
+                </View>
+            )}
             ListEmptyComponent={<EmptyPostsState tab={activeTab} />}
-            contentContainerStyle={{ paddingBottom: 60 }}
-            style={{ backgroundColor: "#000" }}
+            contentContainerStyle={styles.listContent}
+            style={styles.list}
             onEndReached={loadMore}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
-                loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginVertical: 12 }} /> : null
+                loadingMore ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} /> : null
             }
             refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9B5CFF" />
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
             }
+            showsVerticalScrollIndicator={false}
         />
     );
 }
 
 const styles = StyleSheet.create({
+    list: {
+        backgroundColor: colors.bg,
+        flex: 1,
+    },
+
+    listContent: {
+        paddingBottom: 60,
+    },
+
+    listContentPrivate: {
+        paddingBottom: 60,
+    },
+
+    postRow: {
+        paddingHorizontal: 16,
+    },
+
     loading: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         justifyContent: "center",
         alignItems: "center",
     },
 
-    bannerBox: {
-        width: "100%",
-        height: 190,
-        backgroundColor: "#111",
+    heroWrap: {
         position: "relative",
     },
+
+    bannerBox: {
+        width: "100%",
+        height: 220,
+        backgroundColor: colors.surface2,
+        position: "relative",
+        overflow: "hidden",
+    },
+
     banner: {
         width: "100%",
         height: "100%",
     },
+
     bannerOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: "rgba(0,0,0,0.18)",
     },
 
+    bannerShade: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 90,
+        backgroundColor: "rgba(0,0,0,0.45)",
+    },
+
     identityBlock: {
-        marginTop: -48,
+        marginTop: -52,
         paddingHorizontal: 20,
     },
+
+    avatarWrap: {
+        alignSelf: "flex-start",
+        borderRadius: 999,
+        padding: 4,
+        backgroundColor: colors.bg,
+    },
+
     avatar: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        borderWidth: 4,
-        borderColor: "#000",
-        backgroundColor: "#111",
+        width: 104,
+        height: 104,
+        borderRadius: 52,
+        borderWidth: 3,
+        borderColor: colors.surface4,
+        backgroundColor: colors.surface2,
     },
+
     pseudo: {
-        fontSize: 24,
-        color: "#fff",
-        fontWeight: "800",
+        fontSize: 28,
+        color: colors.text,
+        fontWeight: fontWeights.black,
         marginTop: 12,
+        lineHeight: 32,
     },
+
     bio: {
-        color: "#c9c9c9",
-        fontSize: 14,
-        lineHeight: 20,
+        color: colors.textSoft,
+        fontSize: typography.body,
+        lineHeight: 21,
         marginTop: 8,
         marginRight: 16,
     },
@@ -763,32 +1051,35 @@ const styles = StyleSheet.create({
         gap: 8,
         marginTop: 12,
     },
+
     badge: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        backgroundColor: "#2A1A1A",
+        backgroundColor: "#1B1217",
         borderWidth: 1,
-        borderColor: "#4B2A2A",
-        borderRadius: 999,
+        borderColor: "#38212D",
+        borderRadius: radius.pill,
         paddingHorizontal: 10,
         paddingVertical: 6,
     },
+
     badgeSecondary: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        backgroundColor: "#151515",
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#272727",
-        borderRadius: 999,
+        borderColor: colors.border,
+        borderRadius: radius.pill,
         paddingHorizontal: 10,
         paddingVertical: 6,
     },
+
     badgeText: {
-        color: "#fff",
-        fontSize: 12,
-        fontWeight: "700",
+        color: colors.text,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
     },
 
     statsRow: {
@@ -796,27 +1087,30 @@ const styles = StyleSheet.create({
         marginTop: 22,
         marginHorizontal: 16,
         paddingVertical: 8,
-        backgroundColor: "#0f0f0f",
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: "#1c1c1c",
-        borderRadius: 16,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
     },
+
     statBox: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 10,
     },
+
     statNumber: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "800",
+        color: colors.text,
+        fontSize: 20,
+        fontWeight: fontWeights.black,
     },
+
     statLabel: {
-        color: "#8f8f8f",
-        fontSize: 12,
+        color: colors.textMuted,
+        fontSize: typography.caption,
         marginTop: 4,
-        fontWeight: "600",
+        fontWeight: fontWeights.medium,
     },
 
     actionsRow: {
@@ -825,166 +1119,287 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginTop: 14,
     },
+
     msgBtn: {
         flex: 1,
-        backgroundColor: "#191919",
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#2a2a2a",
+        borderColor: colors.border,
         paddingVertical: 12,
-        borderRadius: 12,
+        borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
     },
+
     msgBtnDisabled: {
         backgroundColor: "#101010",
         borderColor: "#202020",
     },
+
     msgText: {
-        color: "#fff",
-        fontWeight: "800",
+        color: colors.text,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
     },
+
     followBtn: {
         flex: 1,
         paddingVertical: 12,
-        borderRadius: 12,
+        borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
     },
+
     following: {
-        backgroundColor: "#330000",
+        backgroundColor: "#251216",
         borderWidth: 1,
-        borderColor: "#FF4444",
+        borderColor: "#4A1F29",
     },
+
     notFollowing: {
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
+        ...shadows.glowPrimary,
     },
+
     requestedBtn: {
-        backgroundColor: "#26203A",
+        backgroundColor: "#1D1830",
         borderWidth: 1,
-        borderColor: "#5E17EB",
+        borderColor: colors.borderAccent,
     },
+
     followText: {
-        color: "#fff",
-        fontWeight: "800",
+        color: colors.text,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
+    },
+
+    requestCard: {
+        marginHorizontal: 16,
+        marginTop: 14,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        borderRadius: radius.xl,
+        padding: 14,
+    },
+
+    requestHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 8,
+    },
+
+    requestIconWrap: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+
+    requestTitle: {
+        color: colors.text,
+        fontSize: 15,
+        fontWeight: fontWeights.black,
+    },
+
+    requestText: {
+        color: colors.textSoft,
+        fontSize: 13,
+        lineHeight: 18,
+    },
+
+    requestActionsRow: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 14,
+    },
+
+    requestDeclineBtn: {
+        flex: 1,
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        paddingVertical: 12,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    requestAcceptBtn: {
+        flex: 1,
+        backgroundColor: colors.primaryDark,
+        paddingVertical: 12,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        ...shadows.glowPrimary,
+    },
+
+    requestDeclineText: {
+        color: colors.text,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
+    },
+
+    requestAcceptText: {
+        color: colors.text,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
     },
 
     sectionBlock: {
         marginTop: 22,
         marginHorizontal: 16,
-        backgroundColor: "#0d0d0d",
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: "#1c1c1c",
-        borderRadius: 18,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xxl,
         padding: 14,
     },
+
     sectionHeader: {
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
         marginBottom: 12,
     },
+
+    sectionIconWrap: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+
     sectionBlockTitle: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 16,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
 
     pinnedCard: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#131313",
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#242424",
-        borderRadius: 16,
+        borderColor: colors.border,
+        borderRadius: radius.xl,
         padding: 12,
         gap: 12,
     },
+
     pinnedCardPlaying: {
-        borderColor: "#6f37f0",
+        borderColor: colors.borderAccent,
         backgroundColor: "#151022",
+        ...shadows.glowPrimary,
     },
+
     pinnedCover: {
-        width: 60,
-        height: 60,
-        borderRadius: 12,
-        backgroundColor: "#1a1a1a",
+        width: 64,
+        height: 64,
+        borderRadius: 14,
+        backgroundColor: colors.surface4,
     },
+
     pinnedLabel: {
-        color: "#9B5CFF",
-        fontSize: 12,
-        fontWeight: "800",
+        color: colors.primary,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
         marginBottom: 4,
+        letterSpacing: 0.6,
     },
+
     pinnedTitle: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
+
     pinnedArtist: {
-        color: "#a6a6a6",
-        fontSize: 13,
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
         marginTop: 4,
     },
+
     pinnedPlayBtn: {
         width: 42,
         height: 42,
         borderRadius: 21,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
     },
+
     pinnedPlayBtnActive: {
-        backgroundColor: "#7B3DFF",
+        backgroundColor: colors.primary,
     },
 
     horizontalList: {
-        paddingRight: 6,
+        paddingRight: 8,
     },
+
     musicCard: {
-        width: 132,
-        marginRight: 10,
-        backgroundColor: "#131313",
+        width: 148,
+        marginRight: 12,
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#232323",
-        borderRadius: 14,
-        padding: 10,
+        borderColor: colors.border,
+        borderRadius: radius.xl,
+        padding: 12,
     },
+
     musicCardCompact: {
-        width: 128,
+        width: 148,
     },
+
     musicCardCover: {
         width: "100%",
-        height: 108,
-        borderRadius: 10,
-        backgroundColor: "#1b1b1b",
-        marginBottom: 10,
+        height: 124,
+        borderRadius: 14,
+        backgroundColor: colors.surface4,
+        marginBottom: 12,
     },
+
     musicPlaceholder: {
         alignItems: "center",
         justifyContent: "center",
     },
+
     musicCardTitle: {
-        color: "#fff",
-        fontSize: 13,
-        fontWeight: "800",
+        color: colors.text,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
+        lineHeight: 18,
     },
+
     musicCardArtist: {
-        color: "#8d8d8d",
-        fontSize: 12,
+        color: colors.textMuted,
+        fontSize: typography.caption,
         marginTop: 4,
+        lineHeight: 16,
     },
 
     emptyBox: {
         alignItems: "flex-start",
         gap: 8,
-        backgroundColor: "#131313",
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#232323",
-        borderRadius: 14,
+        borderColor: colors.border,
+        borderRadius: radius.lg,
         padding: 14,
     },
+
     emptyText: {
-        color: "#8c8c8c",
+        color: colors.textMuted,
         fontSize: 13,
         lineHeight: 18,
     },
@@ -992,36 +1407,53 @@ const styles = StyleSheet.create({
     privateBox: {
         marginHorizontal: 16,
         marginTop: 8,
-        padding: 18,
-        borderRadius: 18,
-        backgroundColor: "#111",
+        padding: 20,
+        borderRadius: radius.xxl,
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: "#232323",
+        borderColor: colors.borderSoft,
         alignItems: "center",
     },
+
+    privateIconWrap: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+
     privateTitle: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 16,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
         marginTop: 12,
     },
+
     privateText: {
-        color: "#888",
+        color: colors.textMuted,
         fontSize: 13,
         lineHeight: 19,
         marginTop: 8,
         textAlign: "center",
     },
+
     privateBtn: {
         marginTop: 16,
-        backgroundColor: "#5E17EB",
-        borderRadius: 12,
+        backgroundColor: colors.primaryDark,
+        borderRadius: radius.lg,
         paddingVertical: 12,
         paddingHorizontal: 18,
+        ...shadows.glowPrimary,
     },
+
     privateBtnText: {
-        color: "#fff",
-        fontWeight: "800",
+        color: colors.text,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
     },
 
     tabsRow: {
@@ -1031,43 +1463,61 @@ const styles = StyleSheet.create({
         marginTop: 24,
         marginBottom: 12,
     },
+
     tabBtn: {
         flex: 1,
-        backgroundColor: "#111",
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#232323",
-        borderRadius: 12,
+        borderColor: colors.border,
+        borderRadius: radius.lg,
         paddingVertical: 11,
         alignItems: "center",
     },
+
     tabBtnActive: {
-        backgroundColor: "#5E17EB",
-        borderColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
+        borderColor: colors.primaryDark,
     },
+
     tabBtnText: {
-        color: "#b8b8b8",
-        fontWeight: "800",
-        fontSize: 13,
+        color: colors.textMuted,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
     },
+
     tabBtnTextActive: {
-        color: "#fff",
+        color: colors.text,
     },
 
     emptyPostsBox: {
         marginHorizontal: 16,
         marginTop: 6,
         padding: 16,
-        borderRadius: 16,
-        backgroundColor: "#111",
+        borderRadius: radius.xl,
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#1f1f1f",
+        borderColor: colors.borderSoft,
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
     },
+
     emptyPostsText: {
-        color: "#8b8b8b",
-        fontSize: 13,
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
         flex: 1,
+    },
+
+    waveWrap: {
+        width: 18,
+        height: 16,
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+    },
+
+    waveBar: {
+        width: 3,
+        borderRadius: 999,
     },
 });

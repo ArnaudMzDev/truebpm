@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import User from "@/models/User";
 import FollowRequest from "@/models/FollowRequest";
+import { createNotification } from "@/lib/notifications";
 
 function isObjectId(id: string) {
     return mongoose.Types.ObjectId.isValid(id);
@@ -108,6 +109,12 @@ export async function POST(req: Request) {
                     setDefaultsOnInsert: true,
                 }
             );
+
+            await createNotification({
+                recipientId: String(targetUserId),
+                actorId: String(meId),
+                type: "follow_request",
+            });
 
             return NextResponse.json(
                 { success: true, status: "requested" },

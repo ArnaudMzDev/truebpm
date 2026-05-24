@@ -1,12 +1,15 @@
 import React from "react";
 import { View, Text, StyleSheet, Image } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { EntityType } from "./types";
+import { colors, spacing, typography, fontWeights, radius } from "../../theme";
 
 type Props = {
     coverUrl?: string | null;
     title?: string;
     artist?: string;
     entityType?: EntityType;
+    isPlaying?: boolean;
 };
 
 function getEntityLabel(entityType?: EntityType) {
@@ -15,7 +18,19 @@ function getEntityLabel(entityType?: EntityType) {
     return "SON";
 }
 
-export default function TrackInfo({ coverUrl, title, artist, entityType }: Props) {
+function getEntityIcon(entityType?: EntityType) {
+    if (entityType === "album") return "disc-outline";
+    if (entityType === "artist") return "person-outline";
+    return "musical-notes-outline";
+}
+
+export default function TrackInfo({
+                                      coverUrl,
+                                      title,
+                                      artist,
+                                      entityType,
+                                      isPlaying = false,
+                                  }: Props) {
     const cleanTitle =
         typeof title === "string" && title.trim().length > 0
             ? title.trim()
@@ -32,23 +47,31 @@ export default function TrackInfo({ coverUrl, title, artist, entityType }: Props
             : "";
 
     return (
-        <View style={styles.row}>
+        <View style={styles.wrap}>
             <View style={styles.coverWrap}>
                 {cleanCover ? (
                     <Image source={{ uri: cleanCover }} style={styles.cover} />
                 ) : (
-                    <View style={styles.coverPlaceholder} />
+                    <View style={styles.coverPlaceholder}>
+                        <Ionicons
+                            name={getEntityIcon(entityType) as any}
+                            size={20}
+                            color={colors.textMuted}
+                        />
+                    </View>
                 )}
             </View>
 
             <View style={styles.meta}>
-                <View style={styles.topLine}>
+                <View style={styles.titleRow}>
                     <Text numberOfLines={1} style={styles.title}>
                         {cleanTitle}
                     </Text>
 
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{getEntityLabel(entityType)}</Text>
+                    <View style={styles.entityPill}>
+                        <Text style={styles.entityPillText}>
+                            {getEntityLabel(entityType)}
+                        </Text>
                     </View>
                 </View>
 
@@ -61,64 +84,78 @@ export default function TrackInfo({ coverUrl, title, artist, entityType }: Props
 }
 
 const styles = StyleSheet.create({
-    row: {
+    wrap: {
         flexDirection: "row",
         alignItems: "center",
-        marginTop: 12,
         width: "100%",
+        marginTop: spacing.xs,
+        marginBottom: spacing.md,
     },
+
     coverWrap: {
-        width: 54,
-        height: 54,
-        borderRadius: 10,
+        width: 72,
+        height: 72,
+        borderRadius: 22,
         overflow: "hidden",
-        backgroundColor: "#151515",
+        backgroundColor: "#171720",
         borderWidth: 1,
-        borderColor: "#232323",
+        borderColor: "#262634",
     },
+
     cover: {
         width: "100%",
         height: "100%",
     },
+
     coverPlaceholder: {
         width: "100%",
         height: "100%",
-        backgroundColor: "#1b1b1b",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#171720",
     },
+
     meta: {
         flex: 1,
-        marginLeft: 12,
+        marginLeft: 14,
         minWidth: 0,
     },
-    topLine: {
+
+    titleRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 10,
+        gap: 8,
     },
+
     title: {
-        flex: 1,
-        color: "#fff",
-        fontSize: 15,
-        fontWeight: "800",
+        flexShrink: 1,
+        color: colors.text,
+        fontSize: 18,
+        lineHeight: 24,
+        fontWeight: fontWeights.black,
     },
-    artist: {
-        color: "#aaa",
-        marginTop: 3,
-        fontSize: 13,
-        fontWeight: "600",
-    },
-    badge: {
-        backgroundColor: "#141414",
-        borderWidth: 1,
-        borderColor: "#2a2a2a",
-        paddingHorizontal: 8,
+
+    entityPill: {
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 999,
+        borderRadius: radius.pill,
+        borderWidth: 1,
+        borderColor: "#2A2A35",
+        backgroundColor: "transparent",
     },
-    badgeText: {
-        color: "#cfcfcf",
+
+    entityPillText: {
+        color: colors.textFaint,
         fontSize: 11,
-        fontWeight: "800",
-        letterSpacing: 0.4,
+        fontWeight: fontWeights.black,
+        letterSpacing: 0.8,
+        textTransform: "uppercase",
+    },
+
+    artist: {
+        marginTop: 4,
+        color: colors.textMuted,
+        fontSize: 15,
+        fontWeight: fontWeights.medium,
     },
 });

@@ -3,7 +3,6 @@ import {
     View,
     Text,
     StyleSheet,
-    ActivityIndicator,
     FlatList,
     TextInput,
     TouchableOpacity,
@@ -12,11 +11,13 @@ import {
     Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
 
+import { API_URL } from "../lib/config";
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
 
 type CommentUser = { pseudo: string; avatarUrl?: string; _id: string };
 
@@ -25,12 +26,8 @@ type BaseNode = {
     text: string;
     createdAt: string;
     userId: CommentUser;
-
-    // replies
-    repliesCount?: number;        // total descendants (optionnel)
-    directRepliesCount?: number;  // ✅ pour "Voir X réponses" sur chaque node
-
-    // likes
+    repliesCount?: number;
+    directRepliesCount?: number;
     likesCount?: number;
     likedByMe?: boolean;
 };
@@ -59,6 +56,22 @@ async function safeJson(res: Response) {
     }
 }
 
+function formatRelativeDate(dateString: string) {
+    const date = new Date(dateString);
+    const now = new Date();
+
+    const diffMs = now.getTime() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffH = Math.floor(diffMin / 60);
+    const diffD = Math.floor(diffH / 24);
+
+    if (diffMin < 1) return "à l'instant";
+    if (diffMin < 60) return `il y a ${diffMin} min`;
+    if (diffH < 24) return `il y a ${diffH} h`;
+    if (diffD < 7) return `il y a ${diffD} j`;
+    return date.toLocaleDateString("fr-FR");
+}
+
 export default function PostScreen({ route, navigation }: any) {
     const { postId } = route.params;
 
@@ -68,7 +81,6 @@ export default function PostScreen({ route, navigation }: any) {
     const [comments, setComments] = useState<CommentType[]>([]);
     const [loadingComments, setLoadingComments] = useState(true);
 
-    // composer
     const [text, setText] = useState("");
     const [replyTo, setReplyTo] = useState<(CommentType | ReplyType) | null>(null);
 
@@ -77,7 +89,6 @@ export default function PostScreen({ route, navigation }: any) {
         [replyTo]
     );
 
-    // ✅ Cascade state (par parentId)
     const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
     const [childrenMap, setChildrenMap] = useState<Record<string, ReplyType[]>>({});
     const [cursorMap, setCursorMap] = useState<Record<string, string | null>>({});
@@ -89,7 +100,6 @@ export default function PostScreen({ route, navigation }: any) {
         cursorRef.current = cursorMap;
     }, [cursorMap]);
 
-    // anti double tap likes
     const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({});
 
     const openUserProfile = useCallback(
@@ -111,6 +121,10 @@ export default function PostScreen({ route, navigation }: any) {
             },
         });
     }, [navigation, post?._id]);
+
+    const handleDeleted = useCallback(() => {
+        navigation.goBack();
+    }, [navigation]);
 
     const fetchPost = useCallback(async () => {
         setLoadingPost(true);
@@ -143,7 +157,6 @@ export default function PostScreen({ route, navigation }: any) {
         fetchComments();
     }, [fetchPost, fetchComments]);
 
-    // ✅ Fetch direct replies d’un parent (comment OU reply)
     const fetchReplies = useCallback(
         async (parentId: string, mode: "initial" | "more" = "initial") => {
             if (loadingMap[parentId]) return;
@@ -170,7 +183,6 @@ export default function PostScreen({ route, navigation }: any) {
                 const newItems: ReplyType[] = json?.replies ?? [];
                 const next: string | null = json?.nextCursor ?? null;
 
-                // ✅ merge stable en évitant les doublons
                 setChildrenMap((m) => {
                     const prev = m[parentId] ?? [];
                     const merged = mode === "more" ? [...prev, ...newItems] : newItems;
@@ -184,7 +196,6 @@ export default function PostScreen({ route, navigation }: any) {
                         unique.push(it);
                     }
 
-                    // Tri ASC naturel : ObjectId (ou createdAt)
                     unique.sort((a, b) => String(a._id).localeCompare(String(b._id)));
 
                     return { ...m, [parentId]: unique };
@@ -216,7 +227,6 @@ export default function PostScreen({ route, navigation }: any) {
         [openMap, childrenMap, fetchReplies]
     );
 
-    // ✅ Like (comment ou reply) : on ne dépend pas du rootId ici
     const toggleLike = useCallback(
         async (nodeId: string, where: { type: "comment" } | { type: "reply"; parentId: string }) => {
             if (likeLoading[nodeId]) return;
@@ -239,7 +249,9 @@ export default function PostScreen({ route, navigation }: any) {
                     const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
 
                     setComments((prev) =>
-                        prev.map((c) => (c._id === nodeId ? { ...c, likedByMe: nextLiked, likesCount: nextCount } : c))
+                        prev.map((c) =>
+                            c._id === nodeId ? { ...c, likedByMe: nextLiked, likesCount: nextCount } : c
+                        )
                     );
                 } else {
                     const arr = childrenMap[where.parentId] ?? [];
@@ -262,7 +274,9 @@ export default function PostScreen({ route, navigation }: any) {
             const rollback = () => {
                 if (where.type === "comment") {
                     setComments((prev) =>
-                        prev.map((c) => (c._id === nodeId ? { ...c, likedByMe: prevLiked, likesCount: prevCount } : c))
+                        prev.map((c) =>
+                            c._id === nodeId ? { ...c, likedByMe: prevLiked, likesCount: prevCount } : c
+                        )
                     );
                 } else {
                     setChildrenMap((prev) => ({
@@ -295,7 +309,11 @@ export default function PostScreen({ route, navigation }: any) {
                     setComments((prev) =>
                         prev.map((c) =>
                             c._id === nodeId
-                                ? { ...c, likedByMe: serverLiked ?? c.likedByMe, likesCount: serverCount ?? c.likesCount }
+                                ? {
+                                    ...c,
+                                    likedByMe: serverLiked ?? c.likedByMe,
+                                    likesCount: serverCount ?? c.likesCount,
+                                }
                                 : c
                         )
                     );
@@ -304,7 +322,11 @@ export default function PostScreen({ route, navigation }: any) {
                         ...prev,
                         [where.parentId]: (prev[where.parentId] ?? []).map((r) =>
                             r._id === nodeId
-                                ? { ...r, likedByMe: serverLiked ?? r.likedByMe, likesCount: serverCount ?? r.likesCount }
+                                ? {
+                                    ...r,
+                                    likedByMe: serverLiked ?? r.likedByMe,
+                                    likesCount: serverCount ?? r.likesCount,
+                                }
                                 : r
                         ),
                     }));
@@ -316,7 +338,6 @@ export default function PostScreen({ route, navigation }: any) {
         [comments, childrenMap, likeLoading]
     );
 
-    // ✅ submit : la reply est ajoutée DANS childrenMap[parentId] (donc sous le parent)
     const submit = useCallback(async () => {
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
@@ -324,10 +345,9 @@ export default function PostScreen({ route, navigation }: any) {
         const clean = text.trim();
         if (!clean) return;
 
-        const target = replyTo; // snapshot
+        const target = replyTo;
         setText("");
 
-        // Reply (à un commentaire OU à une reply)
         if (target && isObject(target) && target._id) {
             const parentId = String(target._id);
 
@@ -345,15 +365,12 @@ export default function PostScreen({ route, navigation }: any) {
 
             const created: ReplyType | undefined = json?.reply;
             if (created?._id) {
-                // ✅ ouvrir le parent
                 setOpenMap((m) => ({ ...m, [parentId]: true }));
 
-                // ✅ insert sous le parent (en bas)
                 setChildrenMap((m) => {
                     const prev = m[parentId] ?? [];
                     const next = [...prev, created];
 
-                    // uniq + tri ASC
                     const seen = new Set<string>();
                     const unique: ReplyType[] = [];
                     for (const it of next) {
@@ -367,16 +384,18 @@ export default function PostScreen({ route, navigation }: any) {
                     return { ...m, [parentId]: unique };
                 });
 
-                // ✅ incrémenter directRepliesCount du parent localement (si présent)
-                // parent dans comments ?
                 setComments((prev) =>
                     prev.map((c) =>
                         c._id === parentId
-                            ? { ...c, directRepliesCount: (c.directRepliesCount || 0) + 1, repliesCount: (c.repliesCount || 0) + 1 }
+                            ? {
+                                ...c,
+                                directRepliesCount: (c.directRepliesCount || 0) + 1,
+                                repliesCount: (c.repliesCount || 0) + 1,
+                            }
                             : c
                     )
                 );
-                // parent dans childrenMap ? (si c’est une reply)
+
                 setChildrenMap((prev) => {
                     const out = { ...prev };
                     for (const key of Object.keys(out)) {
@@ -393,15 +412,12 @@ export default function PostScreen({ route, navigation }: any) {
                     return out;
                 });
 
-                // ✅ post counter
                 setPost((p) => (p ? { ...p, commentsCount: (p.commentsCount || 0) + 1 } : p));
-
                 setReplyTo(null);
             }
             return;
         }
 
-        // Top-level comment
         const res = await fetch(`${API_URL}/api/posts/${postId}/comments`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -421,28 +437,42 @@ export default function PostScreen({ route, navigation }: any) {
         }
     }, [postId, replyTo, text]);
 
-    const UserLine = ({ u }: { u: CommentUser }) => {
+    const UserLine = ({ u, createdAt }: { u: CommentUser; createdAt?: string }) => {
         const uri = u.avatarUrl || "https://picsum.photos/200";
+
         return (
-            <TouchableOpacity onPress={() => openUserProfile(u._id)} activeOpacity={0.85} style={styles.userLine}>
-                <Image source={{ uri }} style={styles.avatar} />
-                <Text style={styles.pseudo}>{u.pseudo || "Utilisateur"}</Text>
-            </TouchableOpacity>
+            <View style={styles.userLine}>
+                <TouchableOpacity onPress={() => openUserProfile(u._id)} activeOpacity={0.85}>
+                    <Image source={{ uri }} style={styles.avatar} />
+                </TouchableOpacity>
+
+                <View style={styles.userMeta}>
+                    <TouchableOpacity onPress={() => openUserProfile(u._id)} activeOpacity={0.85}>
+                        <Text style={styles.pseudo}>{u.pseudo || "Utilisateur"}</Text>
+                    </TouchableOpacity>
+
+                    {createdAt ? <Text style={styles.commentDate}>{formatRelativeDate(createdAt)}</Text> : null}
+                </View>
+            </View>
         );
     };
 
     const LikeChip = ({ liked, count, onPress, disabled }: any) => (
-        <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.likeBtn} disabled={disabled}>
+        <TouchableOpacity
+            onPress={onPress}
+            activeOpacity={0.85}
+            style={[styles.likeBtn, liked && styles.likeBtnActive]}
+            disabled={disabled}
+        >
             <Ionicons
                 name={(liked ? "heart" : "heart-outline") as any}
-                size={16}
-                color={liked ? "#ff4d6d" : "#bbb"}
+                size={15}
+                color={liked ? colors.danger : colors.textMuted}
             />
-            <Text style={styles.likeCount}>{count}</Text>
+            <Text style={[styles.likeCount, liked && styles.likeCountActive]}>{count}</Text>
         </TouchableOpacity>
     );
 
-    // ✅ rendu récursif des replies d’un parent
     const renderChildren = (parentId: string, depthBase: number) => {
         const open = !!openMap[parentId];
         if (!open) return null;
@@ -454,28 +484,52 @@ export default function PostScreen({ route, navigation }: any) {
         return (
             <View style={styles.threadBox}>
                 {loading ? (
-                    <ActivityIndicator color="#9B5CFF" style={{ paddingVertical: 10 }} />
+                    <View style={{ paddingVertical: 10 }}>
+                        <Text style={styles.threadLoading}>Chargement...</Text>
+                    </View>
                 ) : (
                     <>
                         {list.map((r) => (
-                            <View key={r._id} style={[styles.replyRow, { marginLeft: Math.min(60, 12 + (depthBase + 1) * 12) }]}>
-                                <UserLine u={r.userId} />
+                            <View
+                                key={r._id}
+                                style={[
+                                    styles.replyRow,
+                                    { marginLeft: Math.min(56, 10 + (depthBase + 1) * 10) },
+                                ]}
+                            >
+                                <UserLine u={r.userId} createdAt={r.createdAt} />
 
                                 {r.replyToUserId?.pseudo ? (
-                                    <Text style={styles.replyTo}>{"en réponse à "}@{r.replyToUserId.pseudo}</Text>
+                                    <Text style={styles.replyTo}>en réponse à @{r.replyToUserId.pseudo}</Text>
                                 ) : null}
 
                                 <Text style={styles.replyText}>{r.text}</Text>
 
                                 <View style={styles.rowActions}>
-                                    <TouchableOpacity onPress={() => setReplyTo(r)} activeOpacity={0.8}>
+                                    <TouchableOpacity
+                                        onPress={() => setReplyTo(r)}
+                                        activeOpacity={0.8}
+                                        style={styles.metaAction}
+                                    >
+                                        <Ionicons name="arrow-undo-outline" size={13} color={colors.primary} />
                                         <Text style={styles.replyBtn}>Répondre</Text>
                                     </TouchableOpacity>
 
                                     {(r.directRepliesCount || 0) > 0 ? (
-                                        <TouchableOpacity onPress={() => toggleOpen(r._id)} activeOpacity={0.8}>
+                                        <TouchableOpacity
+                                            onPress={() => toggleOpen(r._id)}
+                                            activeOpacity={0.8}
+                                            style={styles.metaAction}
+                                        >
+                                            <Ionicons
+                                                name={openMap[r._id] ? "chevron-up" : "chevron-down"}
+                                                size={13}
+                                                color={colors.textMuted}
+                                            />
                                             <Text style={styles.threadBtn}>
-                                                {openMap[r._id] ? "Masquer" : `Voir ${r.directRepliesCount} réponse(s)`}
+                                                {openMap[r._id]
+                                                    ? "Masquer"
+                                                    : `Voir ${r.directRepliesCount} réponse(s)`}
                                             </Text>
                                         </TouchableOpacity>
                                     ) : null}
@@ -488,7 +542,6 @@ export default function PostScreen({ route, navigation }: any) {
                                     />
                                 </View>
 
-                                {/* ✅ replies des replies */}
                                 {renderChildren(r._id, depthBase + 1)}
                             </View>
                         ))}
@@ -499,6 +552,7 @@ export default function PostScreen({ route, navigation }: any) {
                                 activeOpacity={0.85}
                                 style={styles.moreBtn}
                             >
+                                <Ionicons name="add-circle-outline" size={14} color={colors.primary} />
                                 <Text style={styles.moreText}>Voir plus</Text>
                             </TouchableOpacity>
                         ) : null}
@@ -512,20 +566,36 @@ export default function PostScreen({ route, navigation }: any) {
         const open = !!openMap[item._id];
 
         return (
-            <View style={styles.commentRow}>
-                <UserLine u={item.userId} />
+            <View style={styles.commentCard}>
+                <UserLine u={item.userId} createdAt={item.createdAt} />
 
                 <Text style={styles.commentText}>{item.text}</Text>
 
                 <View style={styles.rowActions}>
-                    <TouchableOpacity onPress={() => setReplyTo(item)} activeOpacity={0.8}>
+                    <TouchableOpacity
+                        onPress={() => setReplyTo(item)}
+                        activeOpacity={0.8}
+                        style={styles.metaAction}
+                    >
+                        <Ionicons name="arrow-undo-outline" size={13} color={colors.primary} />
                         <Text style={styles.replyBtn}>Répondre</Text>
                     </TouchableOpacity>
 
                     {(item.directRepliesCount || item.repliesCount || 0) > 0 ? (
-                        <TouchableOpacity onPress={() => toggleOpen(item._id)} activeOpacity={0.8}>
+                        <TouchableOpacity
+                            onPress={() => toggleOpen(item._id)}
+                            activeOpacity={0.8}
+                            style={styles.metaAction}
+                        >
+                            <Ionicons
+                                name={open ? "chevron-up" : "chevron-down"}
+                                size={13}
+                                color={colors.textMuted}
+                            />
                             <Text style={styles.threadBtn}>
-                                {open ? "Masquer" : `Voir ${(item.directRepliesCount ?? item.repliesCount) || 0} réponse(s)`}
+                                {open
+                                    ? "Masquer"
+                                    : `Voir ${(item.directRepliesCount ?? item.repliesCount) || 0} réponse(s)`}
                             </Text>
                         </TouchableOpacity>
                     ) : null}
@@ -538,45 +608,54 @@ export default function PostScreen({ route, navigation }: any) {
                     />
                 </View>
 
-                {/* ✅ replies du commentaire */}
                 {renderChildren(item._id, 0)}
             </View>
         );
     };
 
     if (loadingPost && !post) {
-        return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement du post..." />;
     }
 
     return (
         <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: "#000" }}
+            style={styles.keyboard}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
             <View style={styles.screen}>
                 <View style={styles.topBar}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 8 }}>
-                        <Ionicons name="arrow-back" size={22} color="#fff" />
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.topBarBtn}>
+                        <Ionicons name="arrow-back" size={20} color={colors.text} />
                     </TouchableOpacity>
 
-                    <Text style={styles.topTitle}>Post</Text>
+                    <View style={styles.topBarCenter}>
+                        <Text style={styles.topEyebrow}>POST</Text>
+                        <Text style={styles.topTitle}>Détail du post</Text>
+                    </View>
 
-                    <TouchableOpacity onPress={openShare} style={{ padding: 8 }} activeOpacity={0.85}>
-                        <Ionicons name="paper-plane-outline" size={22} color="#fff" />
+                    <TouchableOpacity onPress={openShare} style={styles.topBarBtn} activeOpacity={0.85}>
+                        <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
                     </TouchableOpacity>
                 </View>
 
-                {post ? <PostCard post={post} /> : null}
+                {post ? <PostCard post={post} onDeleted={handleDeleted} disableOpenDetail /> : null}
 
-                <Text style={styles.sectionTitle}>Commentaires</Text>
+                <View style={styles.sectionHeader}>
+                    <View>
+                        <Text style={styles.sectionEyebrow}>Discussion</Text>
+                        <Text style={styles.sectionTitle}>Commentaires</Text>
+                    </View>
+
+                    <View style={styles.sectionBadge}>
+                        <Text style={styles.sectionBadgeText}>{comments.length}</Text>
+                    </View>
+                </View>
 
                 {loadingComments ? (
-                    <ActivityIndicator color="#9B5CFF" style={{ marginTop: 10 }} />
+                    <View style={{ marginTop: 14 }}>
+                        <Text style={styles.threadLoading}>Chargement des commentaires...</Text>
+                    </View>
                 ) : (
                     <FlatList
                         data={comments}
@@ -584,16 +663,21 @@ export default function PostScreen({ route, navigation }: any) {
                         renderItem={renderComment}
                         style={{ flex: 1 }}
                         keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={{ paddingBottom: 140 }}
+                        contentContainerStyle={{ paddingBottom: 150 }}
+                        showsVerticalScrollIndicator={false}
                     />
                 )}
 
                 <View style={styles.composer}>
                     {replyTo ? (
                         <View style={styles.replyingTo}>
-                            <Text style={styles.replyingToText}>Réponse à {replyTo.userId?.pseudo}</Text>
-                            <TouchableOpacity onPress={() => setReplyTo(null)} style={{ padding: 6 }}>
-                                <Ionicons name="close" size={18} color="#aaa" />
+                            <View style={styles.replyingToLeft}>
+                                <Ionicons name="return-up-forward-outline" size={14} color={colors.primary} />
+                                <Text style={styles.replyingToText}>Réponse à {replyTo.userId?.pseudo}</Text>
+                            </View>
+
+                            <TouchableOpacity onPress={() => setReplyTo(null)} style={styles.replyingClose}>
+                                <Ionicons name="close" size={16} color={colors.textMuted} />
                             </TouchableOpacity>
                         </View>
                     ) : null}
@@ -603,12 +687,18 @@ export default function PostScreen({ route, navigation }: any) {
                             value={text}
                             onChangeText={setText}
                             placeholder={placeholder}
-                            placeholderTextColor="#666"
+                            placeholderTextColor={colors.textFaint}
                             style={styles.input}
                             multiline
                         />
-                        <TouchableOpacity onPress={submit} style={styles.sendBtn} activeOpacity={0.85}>
-                            <Ionicons name="send" size={18} color="#fff" />
+
+                        <TouchableOpacity
+                            onPress={submit}
+                            style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+                            activeOpacity={0.85}
+                            disabled={!text.trim()}
+                        >
+                            <Ionicons name="send" size={17} color="#fff" />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -618,58 +708,317 @@ export default function PostScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: "#000", paddingTop: 40, paddingHorizontal: 14 },
-    loading: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
+    keyboard: {
+        flex: 1,
+        backgroundColor: colors.bg,
+    },
 
-    topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-    topTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
+    screen: {
+        flex: 1,
+        backgroundColor: colors.bg,
+        paddingTop: 40,
+        paddingHorizontal: 14,
+    },
 
-    sectionTitle: { color: "#fff", fontSize: 16, fontWeight: "800", marginTop: 10, marginBottom: 8 },
+    topBar: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 10,
+    },
 
-    commentRow: { paddingVertical: 12, borderBottomWidth: 1, borderColor: "#151515" },
+    topBarBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
+    },
 
-    userLine: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-    avatar: { width: 28, height: 28, borderRadius: 14, marginRight: 10, backgroundColor: "#111" },
-    pseudo: { color: "#fff", fontWeight: "900" },
+    topBarCenter: {
+        flex: 1,
+        alignItems: "center",
+        paddingHorizontal: spacing.md,
+    },
 
-    commentText: { color: "#d0d0d0", fontSize: 14, marginTop: 2 },
+    topEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 1,
+        marginBottom: 2,
+    },
 
-    rowActions: { flexDirection: "row", alignItems: "center", marginTop: 10, gap: 14 },
-    replyBtn: { color: "#9B5CFF", fontWeight: "800", fontSize: 12 },
-    threadBtn: { color: "#bbb", fontWeight: "700", fontSize: 12 },
+    topTitle: {
+        color: colors.text,
+        fontSize: 16,
+        fontWeight: fontWeights.black,
+    },
 
-    likeBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginLeft: "auto" },
-    likeCount: { color: "#bbb", fontWeight: "800", fontSize: 12 },
+    sectionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 8,
+        marginBottom: 10,
+    },
 
-    threadBox: { marginTop: 10, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: "#222" },
+    sectionEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginBottom: 2,
+    },
 
-    replyRow: { paddingVertical: 10, borderBottomWidth: 1, borderColor: "#111" },
-    replyTo: { color: "#777", fontWeight: "700", fontSize: 12, marginBottom: 4 },
-    replyText: { color: "#cfcfcf", fontSize: 13, marginTop: 2 },
+    sectionTitle: {
+        color: colors.text,
+        fontSize: 17,
+        fontWeight: fontWeights.black,
+    },
 
-    moreBtn: { paddingVertical: 10 },
-    moreText: { color: "#9B5CFF", fontWeight: "900" },
+    sectionBadge: {
+        minWidth: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: "#171122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 8,
+    },
+
+    sectionBadgeText: {
+        color: colors.primary,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
+    },
+
+    commentCard: {
+        padding: spacing.md,
+        marginBottom: spacing.sm,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+    },
+
+    userLine: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 8,
+    },
+
+    userMeta: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    avatar: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        marginRight: 10,
+        backgroundColor: colors.surface4,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
+    pseudo: {
+        color: colors.text,
+        fontWeight: fontWeights.black,
+        fontSize: typography.body,
+    },
+
+    commentDate: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        marginTop: 1,
+    },
+
+    commentText: {
+        color: colors.textSoft,
+        fontSize: 14,
+        lineHeight: 21,
+        marginTop: 2,
+    },
+
+    rowActions: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        marginTop: 12,
+        flexWrap: "wrap",
+    },
+
+    metaAction: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+    },
+
+    replyBtn: {
+        color: colors.primary,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.caption,
+    },
+
+    threadBtn: {
+        color: colors.textMuted,
+        fontWeight: fontWeights.bold,
+        fontSize: typography.caption,
+    },
+
+    likeBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginLeft: "auto",
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+        borderRadius: radius.pill,
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
+    likeBtnActive: {
+        backgroundColor: "#1D1118",
+        borderColor: "#3A1C2A",
+    },
+
+    likeCount: {
+        color: colors.textMuted,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.caption,
+    },
+
+    likeCountActive: {
+        color: colors.danger,
+    },
+
+    threadBox: {
+        marginTop: 12,
+        paddingLeft: 10,
+        borderLeftWidth: 2,
+        borderLeftColor: "#231A35",
+    },
+
+    replyRow: {
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+        marginBottom: 8,
+        backgroundColor: "#0F0F12",
+        borderWidth: 1,
+        borderColor: "#18181C",
+        borderRadius: radius.lg,
+    },
+
+    replyTo: {
+        color: colors.textMuted,
+        fontWeight: fontWeights.bold,
+        fontSize: typography.caption,
+        marginBottom: 4,
+    },
+
+    replyText: {
+        color: colors.textSoft,
+        fontSize: typography.bodySm,
+        lineHeight: 19,
+        marginTop: 2,
+    },
+
+    moreBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingVertical: 8,
+        paddingLeft: 4,
+    },
+
+    moreText: {
+        color: colors.primary,
+        fontWeight: fontWeights.black,
+        fontSize: typography.caption,
+    },
+
+    threadLoading: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        textAlign: "center",
+    },
 
     composer: {
-        backgroundColor: "#0f0f0f",
+        backgroundColor: "#0F0F12",
         borderWidth: 1,
-        borderColor: "#202020",
-        borderRadius: 14,
+        borderColor: colors.border,
+        borderRadius: radius.xxl,
         padding: 10,
         marginTop: 10,
         marginBottom: 14,
     },
-    replyingTo: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-    replyingToText: { color: "#aaa", fontSize: 12, fontWeight: "700" },
 
-    inputRow: { flexDirection: "row", alignItems: "flex-end" },
-    input: { flex: 1, color: "#fff", minHeight: 40, maxHeight: 120, paddingRight: 10 },
+    replyingTo: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 8,
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: "#1B1B1F",
+    },
+
+    replyingToLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+
+    replyingToText: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
+    },
+
+    replyingClose: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.surface3,
+    },
+
+    inputRow: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+    },
+
+    input: {
+        flex: 1,
+        color: colors.text,
+        minHeight: 42,
+        maxHeight: 120,
+        paddingRight: 10,
+        fontSize: typography.body,
+    },
+
     sendBtn: {
-        backgroundColor: "#9B5CFF",
-        width: 42,
-        height: 42,
-        borderRadius: 12,
+        backgroundColor: colors.primary,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         justifyContent: "center",
         alignItems: "center",
+        ...shadows.glowPrimary,
+    },
+
+    sendBtnDisabled: {
+        opacity: 0.45,
     },
 });

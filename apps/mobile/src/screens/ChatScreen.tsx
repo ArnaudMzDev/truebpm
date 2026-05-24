@@ -11,12 +11,18 @@ import {
     Platform,
     Image,
     Alert,
+    Keyboard,
+    TouchableWithoutFeedback,
+    Modal,
+    Pressable,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL, SOCKET_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { io, Socket } from "socket.io-client";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
 
 type OtherUser = {
     _id: string;
@@ -52,6 +58,7 @@ async function safeJson(res: Response): Promise<any | null> {
 function pad2(n: number) {
     return String(n).padStart(2, "0");
 }
+
 function formatTimeHHMM(dateString: string) {
     const d = new Date(dateString);
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -136,6 +143,8 @@ async function uploadMessageImage(uri: string, bearerToken: string) {
 }
 
 export default function ChatScreen({ route, navigation }: any) {
+    const insets = useSafeAreaInsets();
+
     const conversationId: string = route?.params?.conversationId;
     const initialOtherUser: OtherUser = route?.params?.otherUser ?? null;
     const sharePostId: string | null = route?.params?.sharePostId ?? null;
@@ -164,6 +173,11 @@ export default function ChatScreen({ route, navigation }: any) {
     const typingTimeoutRef = useRef<any>(null);
     const lastTypingSentRef = useRef(0);
 
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+    const [viewerVisible, setViewerVisible] = useState(false);
+    const [viewerUri, setViewerUri] = useState<string | null>(null);
+
     const LIMIT = 30;
     const listRef = useRef<FlatList<Msg> | null>(null);
 
@@ -184,6 +198,23 @@ export default function ChatScreen({ route, navigation }: any) {
     useEffect(() => {
         navigation.setOptions?.({ headerShown: false });
     }, [navigation]);
+
+    useEffect(() => {
+        const showSub = Keyboard.addListener(
+            Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+            () => setKeyboardVisible(true)
+        );
+
+        const hideSub = Keyboard.addListener(
+            Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+            () => setKeyboardVisible(false)
+        );
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     const loadMeId = useCallback(async () => {
         const raw = await AsyncStorage.getItem("user");
@@ -258,7 +289,6 @@ export default function ChatScreen({ route, navigation }: any) {
 
         const json = await safeJson(res);
         if (!res.ok) {
-            console.log("fetch messages error:", res.status, json);
             setMessages([]);
             setHasMore(false);
             setLoading(false);
@@ -292,9 +322,7 @@ export default function ChatScreen({ route, navigation }: any) {
         setLoadingMore(true);
         try {
             const res = await fetch(
-                `${API_URL}/api/conversations/${conversationId}/messages?limit=${LIMIT}&cursor=${encodeURIComponent(
-                    cursor
-                )}`,
+                `${API_URL}/api/conversations/${conversationId}/messages?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
                 { headers: { Authorization: bearer } }
             );
 
@@ -365,10 +393,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
                 const stored = await AsyncStorage.getItem("token");
                 const rawToken = toRawToken(stored);
-                if (!rawToken) {
-                    console.log("socket: no token");
-                    return;
-                }
+                if (!rawToken) return;
 
                 const s = io(SOCKET_URL, {
                     transports: ["websocket", "polling"],
@@ -383,17 +408,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
                 s.on("connect", () => {
                     if (!alive) return;
-                    console.log("socket connected", s.id);
                     s.emit("conversation:join", { conversationId });
                     s.emit("read:mark", { conversationId });
-                });
-
-                s.on("connect_error", (e: any) => {
-                    console.log("socket connect_error:", e?.message || e);
-                });
-
-                s.on("disconnect", (reason) => {
-                    console.log("socket disconnected:", reason);
                 });
 
                 s.on("message:new", ({ conversationId: cid, message }: any) => {
@@ -418,7 +434,6 @@ export default function ChatScreen({ route, navigation }: any) {
                     });
 
                     scrollBottomRef.current(true);
-
                     markAsReadRef.current().catch(() => {});
                     s.emit("read:mark", { conversationId: cid });
                 });
@@ -445,7 +460,6 @@ export default function ChatScreen({ route, navigation }: any) {
                     setReadAtOther(readAt || null);
                 });
 
-                // ✅ présence uniquement ici
                 s.on("presence:update", ({ userId, isOnline, lastSeenAt }: any) => {
                     if (!alive) return;
                     const otherId = otherIdRef.current;
@@ -462,9 +476,7 @@ export default function ChatScreen({ route, navigation }: any) {
                             : prev
                     );
                 });
-            } catch (e: any) {
-                console.log("socket init error:", e?.message || e);
-            }
+            } catch {}
         })();
 
         return () => {
@@ -546,7 +558,6 @@ export default function ChatScreen({ route, navigation }: any) {
 
             const json = await safeJson(res);
             if (!res.ok) {
-                console.log("send message error:", res.status, json);
                 setMessages((prev) => prev.filter((m) => m._id !== tempId));
                 setText(t);
                 return;
@@ -616,7 +627,7 @@ export default function ChatScreen({ route, navigation }: any) {
             });
 
             const json = await safeJson(res);
-            if (!res.ok) throw new Error(json?.error || "send image failed");
+            if (!res.ok) throw new Error();
 
             const created = json?.message as Msg;
             if (created?._id) {
@@ -624,8 +635,7 @@ export default function ChatScreen({ route, navigation }: any) {
             }
 
             setTimeout(() => fetchReadState(), 400);
-        } catch (e: any) {
-            console.log("sendImage error:", e?.message || e);
+        } catch {
             setMessages((prev) => prev.filter((m) => m._id !== tempId));
             Alert.alert("Erreur", "Impossible d’envoyer l’image.");
         } finally {
@@ -666,7 +676,6 @@ export default function ChatScreen({ route, navigation }: any) {
 
                 const json = await safeJson(res);
                 if (!res.ok) {
-                    console.log("sendPost error:", res.status, json);
                     setMessages((prev) => prev.filter((m) => m._id !== tempId));
                     return;
                 }
@@ -692,6 +701,12 @@ export default function ChatScreen({ route, navigation }: any) {
         });
     }, [sendPost, sharePostId]);
 
+    const openImageViewer = useCallback((uri?: string | null) => {
+        if (!uri) return;
+        setViewerUri(uri);
+        setViewerVisible(true);
+    }, []);
+
     const renderItem = ({ item }: { item: Msg }) => {
         const mine = String(item?.senderId?._id) === String(meId);
         const time = formatTimeHHMM(item.createdAt);
@@ -713,13 +728,22 @@ export default function ChatScreen({ route, navigation }: any) {
 
             return (
                 <View style={[styles.row, mine ? styles.rowMine : styles.rowOther]}>
-                    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
+                    <TouchableOpacity
+                        activeOpacity={0.92}
+                        onPress={() => openImageViewer(item.imageUrl)}
+                        style={[styles.bubble, styles.imageBubble, mine ? styles.bubbleMine : styles.bubbleOther]}
+                    >
                         <Image
                             source={{ uri: item.imageUrl }}
-                            style={{ width: w, height: Math.min(320, Math.max(160, h)), borderRadius: 12 }}
+                            style={{
+                                width: w,
+                                height: Math.min(320, Math.max(160, h)),
+                                borderRadius: 12,
+                            }}
                             resizeMode="cover"
                         />
-                    </View>
+                    </TouchableOpacity>
+
                     <View style={[styles.metaRow, mine ? styles.metaMine : styles.metaOther]}>
                         <Text style={[styles.time, mine ? styles.timeMine : styles.timeOther]}>{time}</Text>
                         {Status}
@@ -752,9 +776,9 @@ export default function ChatScreen({ route, navigation }: any) {
             })();
             const ratingToShow = isGeneral ? ratingSimple : ratingAvg;
 
-            const openPost = (postId: string) => {
-                if (!postId) return;
-                navigation.navigate("PostDetail", { postId });
+            const openPost = (id: string) => {
+                if (!id) return;
+                navigation.navigate("PostDetail", { postId: id });
             };
 
             return (
@@ -789,7 +813,7 @@ export default function ChatScreen({ route, navigation }: any) {
                                 </Text>
                                 {artist || album ? (
                                     <Text
-                                        style={[styles.postArtist, mine ? { color: "#eee" } : { color: "#aaa" }]}
+                                        style={[styles.postArtist, mine ? { color: "#EEE" } : { color: colors.textMuted }]}
                                         numberOfLines={1}
                                     >
                                         {artist}
@@ -827,195 +851,451 @@ export default function ChatScreen({ route, navigation }: any) {
     if (loading) {
         return (
             <View style={styles.loading}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
+                <ActivityIndicator size="large" color={colors.primary} />
             </View>
         );
     }
 
+    const composerBottom = keyboardVisible ? 8 : 16 + insets.bottom + 72;
+
     return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
-        >
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} activeOpacity={0.85}>
-                    <Ionicons name="chevron-back" size={22} color="#fff" />
-                </TouchableOpacity>
+        <>
+            <KeyboardAvoidingView
+                style={styles.container}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View style={styles.flex}>
+                        <View style={styles.header}>
+                            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} activeOpacity={0.85}>
+                                <Ionicons name="chevron-back" size={22} color={colors.text} />
+                            </TouchableOpacity>
 
-                <View style={styles.headerCenter}>
-                    <Image source={{ uri: otherUser?.avatarUrl || "https://picsum.photos/200" }} style={styles.headerAvatar} />
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.headerTitle} numberOfLines={1}>
-                            {title}
-                        </Text>
+                            <View style={styles.headerCenter}>
+                                <Image
+                                    source={{ uri: otherUser?.avatarUrl || "https://picsum.photos/200" }}
+                                    style={styles.headerAvatar}
+                                />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.headerTitle} numberOfLines={1}>
+                                        {title}
+                                    </Text>
 
-                        {otherTyping ? (
-                            <Text style={styles.typing}>écrit…</Text>
-                        ) : (
-                            <Text style={[styles.presence, otherUser?.isOnline ? styles.presenceOnline : styles.presenceOffline]}>
-                                {presenceLabel}
-                            </Text>
-                        )}
+                                    {otherTyping ? (
+                                        <Text style={styles.typing}>écrit…</Text>
+                                    ) : (
+                                        <Text
+                                            style={[
+                                                styles.presence,
+                                                otherUser?.isOnline ? styles.presenceOnline : styles.presenceOffline,
+                                            ]}
+                                        >
+                                            {presenceLabel}
+                                        </Text>
+                                    )}
+                                </View>
+                            </View>
+
+                            <View style={{ width: 40 }} />
+                        </View>
+
+                        <FlatList
+                            ref={(r) => (listRef.current = r)}
+                            data={messages}
+                            keyExtractor={(m) => String(m._id)}
+                            renderItem={renderItem}
+                            contentContainerStyle={[
+                                styles.messagesContent,
+                                { paddingBottom: composerBottom + 88 },
+                            ]}
+                            onEndReached={loadMore}
+                            onEndReachedThreshold={0.2}
+                            ListHeaderComponent={
+                                loadingMore ? (
+                                    <ActivityIndicator color={colors.primary} style={{ marginBottom: 10 }} />
+                                ) : null
+                            }
+                            keyboardShouldPersistTaps="handled"
+                            maintainVisibleContentPosition={{
+                                minIndexForVisible: 1,
+                            }}
+                            showsVerticalScrollIndicator={false}
+                            onScrollBeginDrag={Keyboard.dismiss}
+                        />
+
+                        <View
+                            style={[
+                                styles.inputDock,
+                                { bottom: composerBottom },
+                            ]}
+                        >
+                            <View style={styles.inputRow}>
+                                <TouchableOpacity
+                                    onPress={sendImage}
+                                    style={[styles.attachBtn, sending && { opacity: 0.6 }]}
+                                    activeOpacity={0.85}
+                                    disabled={sending}
+                                >
+                                    <Ionicons name="attach" size={18} color={colors.text} />
+                                </TouchableOpacity>
+
+                                <TextInput
+                                    style={styles.input}
+                                    value={text}
+                                    onChangeText={onChangeText}
+                                    placeholder="Message..."
+                                    placeholderTextColor={colors.textFaint}
+                                    multiline
+                                />
+
+                                <TouchableOpacity
+                                    onPress={sendText}
+                                    style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.6 }]}
+                                    activeOpacity={0.85}
+                                    disabled={!text.trim() || sending}
+                                >
+                                    <Ionicons name="send" size={18} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                     </View>
+                </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+
+            <Modal visible={viewerVisible} transparent animationType="fade">
+                <View style={styles.viewerOverlay}>
+                    <Pressable style={styles.viewerClose} onPress={() => setViewerVisible(false)}>
+                        <Ionicons name="close" size={26} color="#fff" />
+                    </Pressable>
+
+                    <Pressable style={styles.viewerBackdrop} onPress={() => setViewerVisible(false)}>
+                        {viewerUri ? (
+                            <Image
+                                source={{ uri: viewerUri }}
+                                style={styles.viewerImage}
+                                resizeMode="contain"
+                            />
+                        ) : null}
+                    </Pressable>
                 </View>
-
-                <View style={{ width: 36 }} />
-            </View>
-
-            <FlatList
-                ref={(r) => (listRef.current = r)}
-                data={messages}
-                keyExtractor={(m) => String(m._id)}
-                renderItem={renderItem}
-                contentContainerStyle={{ padding: 16, paddingBottom: 12 }}
-                onEndReached={loadMore}
-                onEndReachedThreshold={0.2}
-                ListHeaderComponent={
-                    loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginBottom: 10 }} /> : null
-                }
-                keyboardShouldPersistTaps="handled"
-                maintainVisibleContentPosition={{
-                    minIndexForVisible: 1,
-                }}
-            />
-
-            <View style={styles.inputRow}>
-                <TouchableOpacity
-                    onPress={sendImage}
-                    style={[styles.attachBtn, sending && { opacity: 0.6 }]}
-                    activeOpacity={0.85}
-                    disabled={sending}
-                >
-                    <Ionicons name="attach" size={18} color="#fff" />
-                </TouchableOpacity>
-
-                <TextInput
-                    style={styles.input}
-                    value={text}
-                    onChangeText={onChangeText}
-                    placeholder="Message..."
-                    placeholderTextColor="#666"
-                    multiline
-                />
-
-                <TouchableOpacity
-                    onPress={sendText}
-                    style={[styles.sendBtn, (!text.trim() || sending) && { opacity: 0.6 }]}
-                    activeOpacity={0.85}
-                    disabled={!text.trim() || sending}
-                >
-                    <Ionicons name="send" size={18} color="#fff" />
-                </TouchableOpacity>
-            </View>
-        </KeyboardAvoidingView>
+            </Modal>
+        </>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#000" },
-    loading: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
+    flex: {
+        flex: 1,
+    },
+
+    container: {
+        flex: 1,
+        backgroundColor: colors.bg,
+    },
+
+    loading: {
+        flex: 1,
+        backgroundColor: colors.bg,
+        justifyContent: "center",
+        alignItems: "center",
+    },
 
     header: {
         paddingTop: 50,
         paddingHorizontal: 12,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "#111",
+        borderBottomColor: colors.borderSoft,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        backgroundColor: colors.bg,
     },
-    headerBtn: { padding: 8 },
-    headerCenter: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, marginLeft: 6 },
-    headerAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#111" },
-    headerTitle: { color: "#fff", fontWeight: "900", fontSize: 16, flexShrink: 1 },
-    typing: { color: "#9B5CFF", fontWeight: "800", fontSize: 12, marginTop: 2 },
-    presence: { fontWeight: "700", fontSize: 12, marginTop: 2 },
-    presenceOnline: { color: "#2dd36f" },
-    presenceOffline: { color: "#888" },
 
-    row: { marginVertical: 6 },
-    rowMine: { alignItems: "flex-end" },
-    rowOther: { alignItems: "flex-start" },
+    headerBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
 
-    bubble: { maxWidth: "82%", paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14 },
-    bubbleMine: { backgroundColor: "#5E17EB" },
-    bubbleOther: { backgroundColor: "#111", borderWidth: 1, borderColor: "#1e1e1e" },
-
-    msgText: { fontSize: 14, fontWeight: "600" },
-    textMine: { color: "#fff" },
-    textOther: { color: "#ddd" },
-
-    metaRow: { flexDirection: "row", gap: 10, marginTop: 4, alignItems: "center" },
-    metaMine: { justifyContent: "flex-end" },
-    metaOther: { justifyContent: "flex-start" },
-
-    time: { fontSize: 11, fontWeight: "700" },
-    timeMine: { color: "#dcd3ff" },
-    timeOther: { color: "#777" },
-
-    status: { fontSize: 11, fontWeight: "800" },
-    statusMine: { color: "#e7ddff" },
-    statusOther: { color: "#777" },
-
-    postCard: { flexDirection: "row", gap: 10, alignItems: "center" },
-    postCover: { width: 46, height: 46, borderRadius: 10, backgroundColor: "#0f0f0f" },
-    postArtist: { marginTop: 2, fontSize: 12, fontWeight: "700" },
-
-    inputRow: {
+    headerCenter: {
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "center",
         gap: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderTopColor: "#111",
-        backgroundColor: "#000",
-    },
-    attachBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: "#222",
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: "#2a2a2a",
-    },
-    input: {
         flex: 1,
-        minHeight: 44,
-        maxHeight: 120,
-        color: "#fff",
-        backgroundColor: "#111",
-        borderWidth: 1,
-        borderColor: "#222",
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        fontSize: 15,
-    },
-    sendBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: "#5E17EB",
-        alignItems: "center",
-        justifyContent: "center",
+        marginLeft: 8,
     },
 
-    postHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-    postAuthorAvatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#0f0f0f" },
-    postAuthorName: { fontSize: 13, fontWeight: "900", flex: 1, color: "#fff" },
+    headerAvatar: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: colors.surface3,
+    },
+
+    headerTitle: {
+        color: colors.text,
+        fontWeight: fontWeights.black,
+        fontSize: 16,
+        flexShrink: 1,
+    },
+
+    typing: {
+        color: colors.primary,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.caption,
+        marginTop: 2,
+    },
+
+    presence: {
+        fontWeight: fontWeights.bold,
+        fontSize: typography.caption,
+        marginTop: 2,
+    },
+
+    presenceOnline: {
+        color: "#2DD36F",
+    },
+
+    presenceOffline: {
+        color: colors.textMuted,
+    },
+
+    messagesContent: {
+        padding: 16,
+        paddingBottom: 12,
+    },
+
+    row: {
+        marginVertical: 6,
+    },
+
+    rowMine: {
+        alignItems: "flex-end",
+    },
+
+    rowOther: {
+        alignItems: "flex-start",
+    },
+
+    bubble: {
+        maxWidth: "82%",
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+    },
+
+    imageBubble: {
+        padding: 6,
+    },
+
+    bubbleMine: {
+        backgroundColor: colors.primaryDark,
+        ...shadows.glowPrimary,
+    },
+
+    bubbleOther: {
+        backgroundColor: colors.surface2,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+    },
+
+    msgText: {
+        fontSize: 14,
+        fontWeight: fontWeights.bold,
+    },
+
+    textMine: {
+        color: colors.text,
+    },
+
+    textOther: {
+        color: colors.textSoft,
+    },
+
+    metaRow: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 4,
+        alignItems: "center",
+    },
+
+    metaMine: {
+        justifyContent: "flex-end",
+    },
+
+    metaOther: {
+        justifyContent: "flex-start",
+    },
+
+    time: {
+        fontSize: 11,
+        fontWeight: fontWeights.bold,
+    },
+
+    timeMine: {
+        color: "#DDD2FF",
+    },
+
+    timeOther: {
+        color: colors.textMuted,
+    },
+
+    status: {
+        fontSize: 11,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    statusMine: {
+        color: "#E7DDFF",
+    },
+
+    statusOther: {
+        color: colors.textMuted,
+    },
+
+    postHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        marginBottom: 10,
+    },
+
+    postAuthorAvatar: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: colors.surface4,
+    },
+
+    postAuthorName: {
+        fontSize: 13,
+        fontWeight: fontWeights.black,
+        flex: 1,
+        color: colors.text,
+    },
+
     postRatingPill: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
         paddingHorizontal: 10,
         paddingVertical: 6,
-        borderRadius: 999,
-        backgroundColor: "rgba(255,255,255,0.18)",
+        borderRadius: radius.pill,
+        backgroundColor: "rgba(255,255,255,0.16)",
     },
-    postRatingText: { color: "#fff", fontWeight: "900", fontSize: 12 },
+
+    postRatingText: {
+        color: colors.text,
+        fontWeight: fontWeights.black,
+        fontSize: 12,
+    },
+
+    postCard: {
+        flexDirection: "row",
+        gap: 10,
+        alignItems: "center",
+    },
+
+    postCover: {
+        width: 46,
+        height: 46,
+        borderRadius: 10,
+        backgroundColor: colors.surface4,
+    },
+
+    postArtist: {
+        marginTop: 2,
+        fontSize: 12,
+        fontWeight: fontWeights.bold,
+    },
+
+    inputDock: {
+        position: "absolute",
+        left: 12,
+        right: 12,
+        zIndex: 20,
+    },
+
+    inputRow: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 10,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.bg,
+        borderRadius: radius.xxl,
+    },
+
+    attachBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: colors.surface3,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
+    input: {
+        flex: 1,
+        minHeight: 44,
+        maxHeight: 120,
+        color: colors.text,
+        backgroundColor: colors.surface2,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 15,
+    },
+
+    sendBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: colors.primaryDark,
+        alignItems: "center",
+        justifyContent: "center",
+        ...shadows.glowPrimary,
+    },
+
+    viewerOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.96)",
+    },
+
+    viewerClose: {
+        position: "absolute",
+        top: 56,
+        right: 20,
+        zIndex: 10,
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(255,255,255,0.08)",
+    },
+
+    viewerBackdrop: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 16,
+    },
+
+    viewerImage: {
+        width: "100%",
+        height: "80%",
+    },
 });

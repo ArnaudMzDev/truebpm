@@ -5,7 +5,15 @@ import { sendPushToUser } from "@/lib/push";
 type CreateNotificationInput = {
     recipientId: string;
     actorId: string;
-    type: "follow" | "like_post" | "comment_post" | "reply_comment" | "repost_post";
+    type:
+        | "follow"
+        | "follow_request"
+        | "follow_accept"
+        | "like_post"
+        | "comment_post"
+        | "reply_comment"
+        | "like_comment"
+        | "repost_post";
     postId?: string | null;
     commentId?: string | null;
 };
@@ -14,12 +22,18 @@ function buildBody(actorPseudo: string, type: CreateNotificationInput["type"]) {
     switch (type) {
         case "follow":
             return `${actorPseudo} a commencé à te suivre`;
+        case "follow_request":
+            return `${actorPseudo} a demandé à te suivre`;
+        case "follow_accept":
+            return `${actorPseudo} a accepté ta demande d'abonnement`;
         case "like_post":
             return `${actorPseudo} a aimé ton post`;
         case "comment_post":
             return `${actorPseudo} a commenté ton post`;
         case "reply_comment":
             return `${actorPseudo} a répondu à ton commentaire`;
+        case "like_comment":
+            return `${actorPseudo} a aimé ton commentaire`;
         case "repost_post":
             return `${actorPseudo} a reposté ton post`;
         default:

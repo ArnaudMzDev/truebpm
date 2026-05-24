@@ -1,10 +1,9 @@
-// App.tsx
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { View } from "react-native";
+import { View, StatusBar } from "react-native";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -44,9 +43,13 @@ import { UserProvider } from "./src/context/UserContext";
 import { registerPushTokenOnBackend } from "./src/lib/pushNotifications";
 import { API_URL, SOCKET_URL } from "./src/lib/config";
 
-const Stack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+
+const HomeStack = createNativeStackNavigator();
+const SearchStack = createNativeStackNavigator();
 const MessagesStack = createNativeStackNavigator();
+const ProfileStack = createNativeStackNavigator();
 
 export const navigationRef = createNavigationContainerRef<any>();
 
@@ -84,16 +87,71 @@ async function safeJson(res: Response): Promise<any | null> {
     }
 }
 
+function HomeNavigator() {
+    return (
+        <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+            <HomeStack.Screen name="HomeIndex" component={HomeScreen} />
+            <HomeStack.Screen name="PostDetail" component={PostScreen} />
+            <HomeStack.Screen name="UserProfile" component={UserProfileScreen} />
+            <HomeStack.Screen name="FollowersList" component={FollowersListScreen} />
+            <HomeStack.Screen name="FollowingList" component={FollowingListScreen} />
+            <HomeStack.Screen name="SocialNotifications" component={NotificationsScreen} />
+            <HomeStack.Screen name="MusicSearch" component={SearchScreen} />
+            <HomeStack.Screen name="CreatePost" component={CreatePostScreen} />
+            <HomeStack.Screen name="CreateNote" component={CreateNoteScreen} />
+        </HomeStack.Navigator>
+    );
+}
+
+function SearchNavigator() {
+    return (
+        <SearchStack.Navigator screenOptions={{ headerShown: false }}>
+            <SearchStack.Screen name="ExploreIndex" component={ExploreSearchScreen} />
+            <SearchStack.Screen name="MusicSearch" component={SearchScreen} />
+            <SearchStack.Screen name="CreatePost" component={CreatePostScreen} />
+            <SearchStack.Screen name="CreateNote" component={CreateNoteScreen} />
+            <SearchStack.Screen name="PostDetail" component={PostScreen} />
+            <SearchStack.Screen name="UserProfile" component={UserProfileScreen} />
+            <SearchStack.Screen name="FollowersList" component={FollowersListScreen} />
+            <SearchStack.Screen name="FollowingList" component={FollowingListScreen} />
+        </SearchStack.Navigator>
+    );
+}
+
 function MessagesNavigator() {
     return (
         <MessagesStack.Navigator screenOptions={{ headerShown: false }}>
             <MessagesStack.Screen name="Conversations" component={ConversationsScreen} />
             <MessagesStack.Screen name="Chat" component={ChatScreen} />
+            <MessagesStack.Screen name="UserProfile" component={UserProfileScreen} />
+            <MessagesStack.Screen name="PostDetail" component={PostScreen} />
+            <MessagesStack.Screen name="FollowersList" component={FollowersListScreen} />
+            <MessagesStack.Screen name="FollowingList" component={FollowingListScreen} />
         </MessagesStack.Navigator>
     );
 }
 
+function ProfileNavigator() {
+    return (
+        <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+            <ProfileStack.Screen name="ProfileIndex" component={ProfileScreen} />
+            <ProfileStack.Screen name="EditProfile" component={EditProfileScreen} />
+            <ProfileStack.Screen name="Settings" component={SettingsScreen} />
+            <ProfileStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+            <ProfileStack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+            <ProfileStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+            <ProfileStack.Screen name="FollowRequests" component={FollowRequestsScreen} />
+            <ProfileStack.Screen name="FollowersList" component={FollowersListScreen} />
+            <ProfileStack.Screen name="FollowingList" component={FollowingListScreen} />
+            <ProfileStack.Screen name="UserProfile" component={UserProfileScreen} />
+            <ProfileStack.Screen name="PostDetail" component={PostScreen} />
+            <ProfileStack.Screen name="SocialNotifications" component={NotificationsScreen} />
+        </ProfileStack.Navigator>
+    );
+}
+
 function MainTabs() {
+    const insets = useSafeAreaInsets();
     const [messagesUnread, setMessagesUnread] = useState(0);
     const socketRef = useRef<Socket | null>(null);
 
@@ -147,10 +205,6 @@ function MainTabs() {
                 if (!alive) return;
                 await fetchMessagesUnread();
             });
-
-            s.on("connect", () => {
-                console.log("tabs socket connected", s.id);
-            });
         })();
 
         return () => {
@@ -164,55 +218,126 @@ function MainTabs() {
         };
     }, [fetchMessagesUnread]);
 
+    const tabBarHeight = 62 + insets.bottom;
+
     return (
         <Tabs.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
-                tabBarStyle: {
-                    backgroundColor: "#111",
-                    borderTopColor: "#222",
-                    height: 70,
-                    paddingBottom: 12,
-                    paddingTop: 8,
+                tabBarHideOnKeyboard: true,
+                tabBarActiveTintColor: "#FFFFFF",
+                tabBarInactiveTintColor: "#6F6F78",
+                tabBarLabelStyle: {
+                    fontSize: 10,
+                    fontWeight: "800",
+                    marginTop: 2,
+                    paddingBottom: 0,
                 },
-                tabBarActiveTintColor: "#9B5CFF",
-                tabBarInactiveTintColor: "#777",
-                tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+                tabBarStyle: {
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: tabBarHeight,
+                    paddingTop: 8,
+                    paddingBottom: Math.max(insets.bottom, 8),
+                    paddingHorizontal: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: "#23232A",
+                    backgroundColor: "#0F0F13",
+                    borderTopLeftRadius: 24,
+                    borderTopRightRadius: 24,
+                },
+                tabBarItemStyle: {
+                    borderRadius: 16,
+                },
                 tabBarBadgeStyle: {
                     backgroundColor: "#9B5CFF",
                     color: "#000",
                     fontWeight: "900",
+                    fontSize: 10,
+                    minWidth: 18,
+                    height: 18,
                 },
-                tabBarIcon: ({ color }) => {
-                    let icon: keyof typeof Ionicons.glyphMap = "home";
+                tabBarIcon: ({ color, focused }) => {
+                    let icon: keyof typeof Ionicons.glyphMap = "home-outline";
 
-                    if (route.name === "Home") icon = "home";
-                    if (route.name === "ExploreSearch") icon = "search";
-                    if (route.name === "CreatePostTab") icon = "add-circle";
-                    if (route.name === "Notifications") icon = "chatbubbles";
-                    if (route.name === "ProfileTab") icon = "person";
+                    if (route.name === "HomeTab") icon = focused ? "home" : "home-outline";
+                    if (route.name === "SearchTab") icon = focused ? "search" : "search-outline";
+                    if (route.name === "CreatePostTab") icon = "add";
+                    if (route.name === "MessagesTab") icon = focused ? "chatbubbles" : "chatbubbles-outline";
+                    if (route.name === "ProfileTab") icon = focused ? "person" : "person-outline";
 
-                    return <Ionicons name={icon} size={26} color={color} />;
+                    if (route.name === "CreatePostTab") {
+                        return (
+                            <View
+                                style={{
+                                    width: 38,
+                                    height: 38,
+                                    borderRadius: 19,
+                                    backgroundColor: "#5E17EB",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    marginTop: -1,
+                                    shadowColor: "#9B5CFF",
+                                    shadowOpacity: 0.25,
+                                    shadowRadius: 8,
+                                    shadowOffset: { width: 0, height: 0 },
+                                }}
+                            >
+                                <Ionicons name={icon} size={19} color="#fff" />
+                            </View>
+                        );
+                    }
+
+                    return (
+                        <View
+                            style={{
+                                minWidth: 42,
+                                height: 32,
+                                borderRadius: 16,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: focused ? "#1A1327" : "transparent",
+                                borderWidth: focused ? 1 : 0,
+                                borderColor: focused ? "#2E2050" : "transparent",
+                            }}
+                        >
+                            <Ionicons name={icon} size={21} color={focused ? "#FFFFFF" : color} />
+                        </View>
+                    );
                 },
             })}
         >
-            <Tabs.Screen name="Home" component={HomeScreen} options={{ title: "Accueil" }} />
-            <Tabs.Screen name="ExploreSearch" component={ExploreSearchScreen} options={{ title: "Recherche" }} />
+            <Tabs.Screen
+                name="HomeTab"
+                component={HomeNavigator}
+                options={{ title: "Accueil" }}
+            />
+
+            <Tabs.Screen
+                name="SearchTab"
+                component={SearchNavigator}
+                options={{ title: "Recherche" }}
+            />
 
             <Tabs.Screen
                 name="CreatePostTab"
                 component={EmptyScreen}
-                options={{ title: "Créer" }}
+                options={{ title: "" }}
                 listeners={({ navigation }) => ({
                     tabPress: (e) => {
                         e.preventDefault();
-                        navigation.navigate("MusicSearch" as never, { mode: "pickTrack" } as never);
+                        navigation.navigate("SearchTab", {
+                            screen: "MusicSearch",
+                            params: { mode: "pickTrack" },
+                        });
                     },
                 })}
             />
 
             <Tabs.Screen
-                name="Notifications"
+                name="MessagesTab"
                 component={MessagesNavigator}
                 options={{
                     title: "Messages",
@@ -233,7 +358,11 @@ function MainTabs() {
                 }}
             />
 
-            <Tabs.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Profil" }} />
+            <Tabs.Screen
+                name="ProfileTab"
+                component={ProfileNavigator}
+                options={{ title: "Profil" }}
+            />
         </Tabs.Navigator>
     );
 }
@@ -258,7 +387,7 @@ function PushBootstrap() {
 
             if (data?.type === "message" && data?.conversationId) {
                 navigationRef.navigate("Main", {
-                    screen: "Notifications",
+                    screen: "MessagesTab",
                     params: {
                         screen: "Chat",
                         params: {
@@ -271,23 +400,31 @@ function PushBootstrap() {
 
             if (data?.type === "social") {
                 if (data?.postId) {
-                    navigationRef.navigate("PostDetail", { postId: data.postId });
+                    navigationRef.navigate("Main", {
+                        screen: "HomeTab",
+                        params: {
+                            screen: "PostDetail",
+                            params: { postId: data.postId },
+                        },
+                    });
                     return;
                 }
 
                 if (data?.actorId) {
-                    navigationRef.navigate("UserProfile", { userId: data.actorId });
+                    navigationRef.navigate("Main", {
+                        screen: "HomeTab",
+                        params: {
+                            screen: "UserProfile",
+                            params: { userId: data.actorId },
+                        },
+                    });
                 }
             }
         });
 
         return () => {
-            if (receivedListener.current) {
-                Notifications.removeNotificationSubscription(receivedListener.current);
-            }
-            if (responseListener.current) {
-                Notifications.removeNotificationSubscription(responseListener.current);
-            }
+            receivedListener.current?.remove?.();
+            responseListener.current?.remove?.();
         };
     }, []);
 
@@ -297,36 +434,19 @@ function PushBootstrap() {
 export default function App() {
     return (
         <SafeAreaProvider>
+            <StatusBar barStyle="light-content" backgroundColor="#000000" />
             <UserProvider>
                 <PlayerProvider>
                     <NavigationContainer ref={navigationRef}>
                         <PushBootstrap />
 
-                        <Stack.Navigator screenOptions={{ headerShown: false }}>
-                            <Stack.Screen name="Splash" component={SplashScreen} />
-                            <Stack.Screen name="Login" component={LoginScreen} />
-                            <Stack.Screen name="Register" component={RegisterScreen} />
-                            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-
-                            <Stack.Screen name="FollowersList" component={FollowersListScreen} />
-                            <Stack.Screen name="FollowingList" component={FollowingListScreen} />
-
-                            <Stack.Screen name="Main" component={MainTabs} />
-
-                            <Stack.Screen name="MusicSearch" component={SearchScreen} />
-                            <Stack.Screen name="CreatePost" component={CreatePostScreen} />
-                            <Stack.Screen name="CreateNote" component={CreateNoteScreen} />
-                            <Stack.Screen name="PostDetail" component={PostScreen} />
-                            <Stack.Screen name="SocialNotifications" component={NotificationsScreen} />
-
-                            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-                            <Stack.Screen name="Settings" component={SettingsScreen} />
-                            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-                            <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-                            <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
-                            <Stack.Screen name="FollowRequests" component={FollowRequestsScreen} />
-                            <Stack.Screen name="UserProfile" component={UserProfileScreen} />
-                        </Stack.Navigator>
+                        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                            <RootStack.Screen name="Splash" component={SplashScreen} />
+                            <RootStack.Screen name="Login" component={LoginScreen} />
+                            <RootStack.Screen name="Register" component={RegisterScreen} />
+                            <RootStack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                            <RootStack.Screen name="Main" component={MainTabs} />
+                        </RootStack.Navigator>
                     </NavigationContainer>
 
                     <PlayerBar />

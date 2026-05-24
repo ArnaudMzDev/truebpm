@@ -1,4 +1,3 @@
-// apps/mobile/src/components/PostCard/index.tsx
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,13 +12,20 @@ import CommentBox from "./CommentBox";
 import AudioPreview from "./AudioPreview";
 import ActionsBar from "./ActionsBar";
 import { useUser } from "../../context/UserContext";
+import AppCard from "../ui/AppCard";
+import { colors, spacing, radius, typography, fontWeights } from "../../theme";
 
 type Props = {
     post: PostType;
     onDeleted?: (postId: string) => void;
+    disableOpenDetail?: boolean;
 };
 
-export default function PostCard({ post, onDeleted }: Props) {
+export default function PostCard({
+                                     post,
+                                     onDeleted,
+                                     disableOpenDetail = false,
+                                 }: Props) {
     const navigation = useNavigation<any>();
     const { me } = useUser();
 
@@ -36,7 +42,6 @@ export default function PostCard({ post, onDeleted }: Props) {
     }, [post]);
 
     const isRepost = localPost.type === "repost" && !!localPost.repostOf;
-
     const originalPost: PostType = (isRepost ? localPost.repostOf : localPost) as PostType;
     const reposter = localPost.repostedBy ?? null;
 
@@ -56,7 +61,8 @@ export default function PostCard({ post, onDeleted }: Props) {
     const canDelete =
         localPost.type !== "repost" &&
         !!me?._id &&
-        localPost.userId?._id?.toString?.() === me._id?.toString?.();
+        !!localPost.userId?._id &&
+        localPost.userId._id.toString() === me._id.toString();
 
     const isSimple = originalPost.mode === "general";
 
@@ -78,7 +84,11 @@ export default function PostCard({ post, onDeleted }: Props) {
         return Number((legacy.reduce((a, b) => a + b, 0) / legacy.length).toFixed(1));
     }, [originalPost, isSimple]);
 
-    const openDetail = () => navigation.push("PostDetail", { postId: originalPost._id });
+    const openDetail = useCallback(() => {
+        if (disableOpenDetail) return;
+        if (!originalPost?._id) return;
+        navigation.push("PostDetail", { postId: originalPost._id });
+    }, [disableOpenDetail, navigation, originalPost?._id]);
 
     const onLocalUpdate = (patch: Partial<PostType>) => {
         setLocalPost((p) => {
@@ -98,7 +108,7 @@ export default function PostCard({ post, onDeleted }: Props) {
         if (!originalPost?._id) return;
 
         navigation.navigate("Main", {
-            screen: "Notifications",
+            screen: "MessagesTab",
             params: {
                 screen: "Conversations",
                 params: { sharePostId: originalPost._id },
@@ -106,79 +116,98 @@ export default function PostCard({ post, onDeleted }: Props) {
         });
     }, [navigation, originalPost?._id]);
 
+    const MainContent = (
+        <View style={styles.content}>
+            <TrackInfo
+                coverUrl={originalPost.coverUrl}
+                title={originalPost.trackTitle}
+                artist={originalPost.artist}
+                entityType={originalPost.entityType}
+            />
+
+            <View style={styles.ratingWrap}>
+                {isSimple ? (
+                    <RatingSimple rating={originalPost.rating ?? null} />
+                ) : (
+                    <RatingMulti
+                        entityType={originalPost.entityType}
+                        average={average}
+                        ratings={originalPost.ratings ?? null}
+                        prod={originalPost.prod ?? null}
+                        lyrics={originalPost.lyrics ?? null}
+                        emotion={originalPost.emotion ?? null}
+                    />
+                )}
+            </View>
+
+            {originalPost.comment?.trim().length ? (
+                <View style={styles.commentWrap}>
+                    <CommentBox text={originalPost.comment} />
+                </View>
+            ) : null}
+
+            <AudioPreview
+                previewUrl={originalPost.previewUrl}
+                title={originalPost.trackTitle}
+                artist={originalPost.artist}
+                coverUrl={originalPost.coverUrl}
+            />
+        </View>
+    );
+
     return (
         <View style={styles.outer}>
-            <TouchableOpacity activeOpacity={0.95} onPress={openDetail}>
-                <View style={styles.card}>
-                    {isRepost && reposter ? (
-                        <View style={styles.repostBanner}>
-                            <Ionicons name="repeat" size={16} color="#9B5CFF" />
-                            <Text style={styles.repostText}>
-                                <Text style={styles.reposterName}>{reposter.pseudo}</Text> a reposté
-                            </Text>
-                        </View>
-                    ) : null}
+            <AppCard style={styles.card}>
+                {isRepost && reposter ? (
+                    <TouchableOpacity
+                        style={styles.repostBanner}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                            if (reposter?._id) {
+                                navigation.navigate("UserProfile", { userId: reposter._id });
+                            }
+                        }}
+                    >
+                        <Ionicons name="repeat" size={14} color={colors.primary} />
+                        <Text style={styles.repostText}>
+                            <Text style={styles.reposterName}>{reposter.pseudo}</Text> a reposté
+                        </Text>
+                    </TouchableOpacity>
+                ) : null}
 
-                    {isRepost && localPost.repostComment?.trim()?.length ? (
-                        <View style={{ marginBottom: 10 }}>
-                            <CommentBox text={localPost.repostComment} />
-                        </View>
-                    ) : null}
-
-                    <View style={isRepost ? styles.quoted : undefined}>
-                        <Header
-                            pseudo={originalPost.userId?.pseudo || "Utilisateur"}
-                            avatarUrl={originalPost.userId?.avatarUrl || ""}
-                            createdAt={originalPost.createdAt}
-                            userId={originalPost.userId?._id || ""}
-                            repostByPseudo={reposter?.pseudo}
-                            repostByUserId={reposter?._id}
-                            postId={localPost._id}
-                            canDelete={canDelete}
-                            onDeleted={(id) => onDeleted?.(id)}
-                        />
-
-                        <TrackInfo
-                            coverUrl={originalPost.coverUrl}
-                            title={originalPost.trackTitle}
-                            artist={originalPost.artist}
-                            entityType={originalPost.entityType}
-                        />
-
-                        {isSimple ? (
-                            <RatingSimple rating={originalPost.rating ?? null} />
-                        ) : (
-                            <RatingMulti
-                                entityType={originalPost.entityType}
-                                average={average}
-                                ratings={originalPost.ratings ?? null}
-                                prod={originalPost.prod ?? null}
-                                lyrics={originalPost.lyrics ?? null}
-                                emotion={originalPost.emotion ?? null}
-                            />
-                        )}
-
-                        {originalPost.comment?.trim().length ? (
-                            <CommentBox text={originalPost.comment} />
-                        ) : null}
-
-
-                        <AudioPreview
-                            previewUrl={originalPost.previewUrl}
-                            title={originalPost.trackTitle}
-                            artist={originalPost.artist}
-                            coverUrl={originalPost.coverUrl}
-                        />
-
-                        <ActionsBar
-                            post={socialPost}
-                            onLocalUpdate={onLocalUpdate}
-                            onOpenComments={openDetail}
-                            onShare={onShare}
-                        />
+                {isRepost && localPost.repostComment?.trim()?.length ? (
+                    <View style={styles.repostCommentWrap}>
+                        <CommentBox text={localPost.repostComment} />
                     </View>
-                </View>
-            </TouchableOpacity>
+                ) : null}
+
+                <Header
+                    pseudo={originalPost.userId?.pseudo || "Utilisateur"}
+                    avatarUrl={originalPost.userId?.avatarUrl || ""}
+                    createdAt={originalPost.createdAt}
+                    userId={originalPost.userId?._id || ""}
+                    repostByPseudo={reposter?.pseudo}
+                    repostByUserId={reposter?._id}
+                    postId={localPost._id}
+                    canDelete={canDelete}
+                    onDeleted={(id) => onDeleted?.(id)}
+                />
+
+                {disableOpenDetail ? (
+                    MainContent
+                ) : (
+                    <TouchableOpacity activeOpacity={0.96} onPress={openDetail}>
+                        {MainContent}
+                    </TouchableOpacity>
+                )}
+
+                <ActionsBar
+                    post={socialPost}
+                    onLocalUpdate={onLocalUpdate}
+                    onOpenComments={openDetail}
+                    onShare={onShare}
+                />
+            </AppCard>
         </View>
     );
 }
@@ -186,41 +215,50 @@ export default function PostCard({ post, onDeleted }: Props) {
 const styles = StyleSheet.create({
     outer: {
         width: "100%",
+        marginBottom: spacing.lg,
     },
 
     card: {
         width: "100%",
-        backgroundColor: "#111",
-        padding: 16,
-        borderRadius: 14,
+        backgroundColor: colors.surface2,
+        borderRadius: radius.xxl,
+        padding: spacing.lg,
         borderWidth: 1,
-        borderColor: "#222",
-        marginBottom: 16,
-        alignSelf: "stretch",
+        borderColor: colors.borderSoft,
     },
 
     repostBanner: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
-        marginBottom: 10,
-    },
-    repostText: {
-        color: "#bbb",
-        fontWeight: "700",
-        fontSize: 12,
-    },
-    reposterName: {
-        color: "#fff",
-        fontWeight: "900",
+        alignSelf: "flex-start",
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
     },
 
-    quoted: {
-        width: "100%",
-        borderWidth: 1,
-        borderColor: "#1e1e1e",
-        borderRadius: 14,
-        padding: 12,
-        backgroundColor: "#0d0d0d",
+    repostText: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
+    },
+
+    reposterName: {
+        color: colors.text,
+        fontWeight: fontWeights.black,
+    },
+
+    repostCommentWrap: {
+        marginBottom: spacing.sm,
+    },
+
+    content: {
+        marginTop: spacing.xs,
+    },
+
+    ratingWrap: {
+        marginTop: spacing.md,
+    },
+
+    commentWrap: {
+        marginTop: spacing.md,
     },
 });

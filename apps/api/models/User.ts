@@ -113,7 +113,6 @@ const UserSchema = new Schema(
             default: [],
         },
 
-        // ✅ CONFIDENTIALITÉ
         isPrivate: {
             type: Boolean,
             default: false,

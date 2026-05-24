@@ -1,13 +1,11 @@
-// apps/mobile/src/components/PostCard/ActionsBar.tsx
 import React from "react";
 import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { PostType } from "./types";
-
 import { API_URL } from "../../lib/config";
-
+import { colors, spacing, typography, fontWeights } from "../../theme";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -24,25 +22,78 @@ type Props = {
     post: PostType;
     onLocalUpdate: (patch: Partial<PostType>) => void;
     onOpenComments: () => void;
-
-    // ✅ NEW
     onShare?: () => void;
 };
 
-export default function ActionsBar({ post, onLocalUpdate, onOpenComments, onShare }: Props) {
+type ActionButtonProps = {
+    icon: keyof typeof Ionicons.glyphMap;
+    activeIcon?: keyof typeof Ionicons.glyphMap;
+    active?: boolean;
+    count?: number;
+    loading?: boolean;
+    activeColor?: string;
+    onPress?: () => void;
+    onlyIcon?: boolean;
+};
+
+function ActionButton({
+                          icon,
+                          activeIcon,
+                          active = false,
+                          count,
+                          loading = false,
+                          activeColor = colors.primary,
+                          onPress,
+                          onlyIcon = false,
+                      }: ActionButtonProps) {
+    const iconColor = active ? activeColor : colors.textMuted;
+    const textColor = active ? colors.text : colors.textMuted;
+
+    return (
+        <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={onPress}
+            style={styles.actionBtn}
+        >
+            {loading ? (
+                <ActivityIndicator size="small" color={iconColor} />
+            ) : (
+                <Ionicons
+                    name={active && activeIcon ? activeIcon : icon}
+                    size={20}
+                    color={iconColor}
+                />
+            )}
+
+            {!onlyIcon && typeof count === "number" ? (
+                <Text style={[styles.actionCount, { color: textColor }]}>
+                    {count}
+                </Text>
+            ) : null}
+        </TouchableOpacity>
+    );
+}
+
+export default function ActionsBar({
+                                       post,
+                                       onLocalUpdate,
+                                       onOpenComments,
+                                       onShare,
+                                   }: Props) {
     const [liking, setLiking] = React.useState(false);
     const [reposting, setReposting] = React.useState(false);
 
     const toggleLike = async () => {
         if (liking) return;
+
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
 
         setLiking(true);
+
         const prevLiked = !!post.likedByMe;
         const prevCount = post.likesCount ?? 0;
 
-        // optimistic
         onLocalUpdate({
             likedByMe: !prevLiked,
             likesCount: Math.max(0, prevCount + (!prevLiked ? 1 : -1)),
@@ -55,14 +106,20 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments, onShar
             });
 
             const json = await safeJson(res);
+
             if (!res.ok) {
-                // rollback
-                onLocalUpdate({ likedByMe: prevLiked, likesCount: prevCount });
+                onLocalUpdate({
+                    likedByMe: prevLiked,
+                    likesCount: prevCount,
+                });
                 return;
             }
 
             if (typeof json?.likesCount === "number") {
-                onLocalUpdate({ likesCount: json.likesCount, likedByMe: json?.status === "liked" });
+                onLocalUpdate({
+                    likesCount: json.likesCount,
+                    likedByMe: json?.status === "liked",
+                });
             }
         } finally {
             setLiking(false);
@@ -71,18 +128,18 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments, onShar
 
     const toggleRepost = async () => {
         if (reposting) return;
+
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
 
         setReposting(true);
 
-        const prev = !!post.repostedByMe;
+        const prevReposted = !!post.repostedByMe;
         const prevCount = post.repostsCount ?? 0;
 
-        // optimistic
         onLocalUpdate({
-            repostedByMe: !prev,
-            repostsCount: Math.max(0, prevCount + (!prev ? 1 : -1)),
+            repostedByMe: !prevReposted,
+            repostsCount: Math.max(0, prevCount + (!prevReposted ? 1 : -1)),
         });
 
         try {
@@ -92,8 +149,12 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments, onShar
             });
 
             const json = await safeJson(res);
+
             if (!res.ok) {
-                onLocalUpdate({ repostedByMe: prev, repostsCount: prevCount });
+                onLocalUpdate({
+                    repostedByMe: prevReposted,
+                    repostsCount: prevCount,
+                });
                 return;
             }
 
@@ -110,78 +171,66 @@ export default function ActionsBar({ post, onLocalUpdate, onOpenComments, onShar
 
     return (
         <View style={styles.row}>
-            {/* ❤️ Like */}
-            <TouchableOpacity style={styles.btn} onPress={toggleLike} activeOpacity={0.85}>
-                {liking ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                    <Ionicons name={post.likedByMe ? "heart" : "heart-outline"} size={18} color={post.likedByMe ? "#ff4d6d" : "#fff"} />
-                )}
-                <Text style={styles.count}>{post.likesCount ?? 0}</Text>
-            </TouchableOpacity>
+            <View style={styles.leftGroup}>
+                <ActionButton
+                    icon="heart-outline"
+                    activeIcon="heart"
+                    active={!!post.likedByMe}
+                    count={post.likesCount ?? 0}
+                    loading={liking}
+                    activeColor={colors.danger}
+                    onPress={toggleLike}
+                />
 
-            {/* 💬 Comments */}
-            <TouchableOpacity style={styles.btn} onPress={onOpenComments} activeOpacity={0.85}>
-                <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-                <Text style={styles.count}>{post.commentsCount ?? 0}</Text>
-            </TouchableOpacity>
+                <ActionButton
+                    icon="chatbubble-outline"
+                    count={post.commentsCount ?? 0}
+                    onPress={onOpenComments}
+                />
 
-            {/* 🔁 Repost */}
-            <TouchableOpacity style={styles.btn} onPress={toggleRepost} activeOpacity={0.85}>
-                {reposting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                    <Ionicons name={post.repostedByMe ? "repeat" : "repeat-outline"} size={18} color={post.repostedByMe ? "#9B5CFF" : "#fff"} />
-                )}
-                <Text style={styles.count}>{post.repostsCount ?? 0}</Text>
-            </TouchableOpacity>
+                <ActionButton
+                    icon="repeat-outline"
+                    activeIcon="repeat"
+                    active={!!post.repostedByMe}
+                    count={post.repostsCount ?? 0}
+                    loading={reposting}
+                    activeColor={colors.primary}
+                    onPress={toggleRepost}
+                />
+            </View>
 
-            {/* ✈️ Share (NEW) */}
-            <TouchableOpacity
-                style={[styles.btn, styles.shareBtn]}
+            <ActionButton
+                icon="paper-plane-outline"
                 onPress={onShare}
-                activeOpacity={0.85}
-                disabled={!onShare}
-            >
-                <Ionicons name="paper-plane-outline" size={18} color="#fff" />
-                <Text style={styles.shareText}>Partager</Text>
-            </TouchableOpacity>
+                onlyIcon
+            />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     row: {
+        marginTop: spacing.lg,
         flexDirection: "row",
         alignItems: "center",
-        gap: 14,
-        marginTop: 12,
+        justifyContent: "space-between",
     },
-    btn: {
+
+    leftGroup: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        borderRadius: 12,
-        backgroundColor: "#161616",
-        borderWidth: 1,
-        borderColor: "#222",
+        gap: spacing.lg,
     },
-    count: {
-        color: "#fff",
-        fontWeight: "800",
-        fontSize: 12,
+
+    actionBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingVertical: 4,
     },
-    shareBtn: {
-        marginLeft: "auto",
-        backgroundColor: "#222",
-        borderColor: "#2a2a2a",
-        paddingHorizontal: 12,
-    },
-    shareText: {
-        color: "#fff",
-        fontWeight: "900",
-        fontSize: 12,
+
+    actionCount: {
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
     },
 });

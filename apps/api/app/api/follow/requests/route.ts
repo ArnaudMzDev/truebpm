@@ -23,7 +23,7 @@ export async function GET(req: Request) {
 
         return NextResponse.json({ requests }, { status: 200 });
     } catch (e) {
-        console.error("❌ GET /api/follow/requests error:", e);
+        console.error("❌ GET /api/user/follow-requests error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });
     }
 }

@@ -4,14 +4,20 @@ import {
     Text,
     StyleSheet,
     FlatList,
-    ActivityIndicator,
     TouchableOpacity,
     Image,
     RefreshControl,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_URL, SOCKET_URL } from "../lib/config";
 import { io, Socket } from "socket.io-client";
+import { Ionicons } from "@expo/vector-icons";
+
+import { API_URL, SOCKET_URL } from "../lib/config";
+import AppScreen from "../components/ui/AppScreen";
+import AppHeader from "../components/ui/AppHeader";
+import AppCard from "../components/ui/AppCard";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -59,6 +65,10 @@ function getNotificationText(item: any) {
     switch (item.type) {
         case "follow":
             return `${actor} a commencé à te suivre`;
+        case "follow_request":
+            return `${actor} a demandé à te suivre`;
+        case "follow_accept":
+            return `${actor} a accepté ta demande d'abonnement`;
         case "like_post":
             return `${actor} a aimé ton post`;
         case "comment_post":
@@ -74,6 +84,84 @@ function getNotificationText(item: any) {
     }
 }
 
+function getTypeMeta(type: string) {
+    switch (type) {
+        case "follow":
+            return {
+                icon: "person-add" as keyof typeof Ionicons.glyphMap,
+                pill: "Nouveau follow",
+                accent: "#4ADE80",
+                bg: "#0F1A12",
+                border: "#1D3322",
+                soft: "rgba(74, 222, 128, 0.12)",
+            };
+        case "follow_request":
+            return {
+                icon: "mail-open-outline" as keyof typeof Ionicons.glyphMap,
+                pill: "Demande",
+                accent: colors.primary,
+                bg: "#151022",
+                border: colors.borderAccent,
+                soft: "rgba(155, 92, 255, 0.12)",
+            };
+        case "follow_accept":
+            return {
+                icon: "checkmark-circle-outline" as keyof typeof Ionicons.glyphMap,
+                pill: "Acceptée",
+                accent: "#22C55E",
+                bg: "#101A13",
+                border: "#1E3826",
+                soft: "rgba(34, 197, 94, 0.12)",
+            };
+        case "like_post":
+        case "like_comment":
+            return {
+                icon: "heart" as keyof typeof Ionicons.glyphMap,
+                pill: "Like",
+                accent: colors.danger,
+                bg: "#1A1013",
+                border: "#352027",
+                soft: "rgba(255, 77, 109, 0.12)",
+            };
+        case "comment_post":
+            return {
+                icon: "chatbubble-ellipses" as keyof typeof Ionicons.glyphMap,
+                pill: "Commentaire",
+                accent: colors.info,
+                bg: "#0E1720",
+                border: "#1E3142",
+                soft: "rgba(56, 189, 248, 0.12)",
+            };
+        case "reply_comment":
+            return {
+                icon: "return-up-forward" as keyof typeof Ionicons.glyphMap,
+                pill: "Réponse",
+                accent: colors.warning,
+                bg: "#1A140A",
+                border: "#3B2C12",
+                soft: "rgba(245, 158, 11, 0.12)",
+            };
+        case "repost_post":
+            return {
+                icon: "repeat" as keyof typeof Ionicons.glyphMap,
+                pill: "Repost",
+                accent: "#A78BFA",
+                bg: "#14111E",
+                border: "#2E2742",
+                soft: "rgba(167, 139, 250, 0.12)",
+            };
+        default:
+            return {
+                icon: "notifications-outline" as keyof typeof Ionicons.glyphMap,
+                pill: "Activité",
+                accent: colors.primary,
+                bg: colors.surface,
+                border: colors.border,
+                soft: "rgba(155, 92, 255, 0.12)",
+            };
+    }
+}
+
 function uniqById(list: any[]) {
     const seen = new Set<string>();
     const out: any[] = [];
@@ -84,6 +172,122 @@ function uniqById(list: any[]) {
         out.push(item);
     }
     return out;
+}
+
+function NotificationCard({
+                              item,
+                              onPress,
+                          }: {
+    item: any;
+    onPress: () => void;
+}) {
+    const meta = getTypeMeta(item?.type);
+    const actorAvatar = item?.actorId?.avatarUrl || "https://picsum.photos/200";
+    const postCover = item?.postId?.coverUrl || null;
+    const postTitle = item?.postId?.trackTitle || "";
+    const postArtist = item?.postId?.artist || "";
+
+    return (
+        <TouchableOpacity activeOpacity={0.92} onPress={onPress}>
+            <AppCard
+                style={[
+                    styles.card,
+                    {
+                        backgroundColor: meta.bg,
+                        borderColor: meta.border,
+                    },
+                ]}
+            >
+                <View style={styles.cardTop}>
+                    <View style={styles.leftBlock}>
+                        <View style={styles.avatarWrap}>
+                            <Image source={{ uri: actorAvatar }} style={styles.avatar} />
+                            <View style={[styles.iconBadge, { backgroundColor: meta.accent }]}>
+                                <Ionicons name={meta.icon} size={12} color="#fff" />
+                            </View>
+                        </View>
+
+                        <View style={styles.mainContent}>
+                            <View style={styles.topLine}>
+                                <View
+                                    style={[
+                                        styles.pill,
+                                        {
+                                            borderColor: meta.accent,
+                                            backgroundColor: meta.soft,
+                                        },
+                                    ]}
+                                >
+                                    <Text style={[styles.pillText, { color: meta.accent }]}>
+                                        {meta.pill}
+                                    </Text>
+                                </View>
+
+                                <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+                            </View>
+
+                            <Text style={styles.text}>{getNotificationText(item)}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.chevronWrap}>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                    </View>
+                </View>
+
+                {item?.commentId?.text ? (
+                    <View style={styles.commentPreview}>
+                        <View style={styles.previewHead}>
+                            <Ionicons
+                                name="chatbubble-ellipses-outline"
+                                size={13}
+                                color={colors.primary}
+                            />
+                            <Text style={styles.commentPreviewLabel}>Commentaire</Text>
+                        </View>
+
+                        <Text style={styles.commentPreviewText} numberOfLines={2}>
+                            {item.commentId.text}
+                        </Text>
+                    </View>
+                ) : null}
+
+                {item?.postId?._id ? (
+                    <View style={styles.postPreview}>
+                        {postCover ? (
+                            <Image source={{ uri: postCover }} style={styles.postCover} />
+                        ) : (
+                            <View style={styles.postCoverFallback}>
+                                <Ionicons
+                                    name="musical-notes"
+                                    size={16}
+                                    color={colors.textMuted}
+                                />
+                            </View>
+                        )}
+
+                        <View style={styles.postPreviewContent}>
+                            <View style={styles.previewHead}>
+                                <Ionicons
+                                    name="musical-notes-outline"
+                                    size={13}
+                                    color={colors.primary}
+                                />
+                                <Text style={styles.postPreviewLabel}>Post concerné</Text>
+                            </View>
+
+                            <Text style={styles.postTitle} numberOfLines={1}>
+                                {postTitle || "Post musical"}
+                            </Text>
+                            <Text style={styles.postArtist} numberOfLines={1}>
+                                {postArtist || "Voir le post"}
+                            </Text>
+                        </View>
+                    </View>
+                ) : null}
+            </AppCard>
+        </TouchableOpacity>
+    );
 }
 
 export default function NotificationsScreen({ navigation }: any) {
@@ -186,74 +390,259 @@ export default function NotificationsScreen({ navigation }: any) {
     );
 
     if (loading) {
-        return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement des notifications..." />;
     }
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Notifications</Text>
+        <AppScreen>
+            <AppHeader
+                title="Notifications"
+                subtitle="Toute l’activité autour de ton univers musical"
+            />
 
             <FlatList
                 data={items}
                 keyExtractor={(item) => item._id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor="#9B5CFF"
+                        tintColor={colors.primary}
                     />
                 }
-                ListEmptyComponent={<Text style={styles.empty}>Aucune notification pour l’instant.</Text>}
-                renderItem={({ item }) => (
-                    <TouchableOpacity style={styles.row} activeOpacity={0.85} onPress={() => openItem(item)}>
-                        <Image
-                            source={{ uri: item?.actorId?.avatarUrl || "https://picsum.photos/200" }}
-                            style={styles.avatar}
-                        />
-
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.text}>{getNotificationText(item)}</Text>
-                            <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+                ListEmptyComponent={
+                    <View style={styles.emptyBox}>
+                        <View style={styles.emptyIconWrap}>
+                            <Ionicons
+                                name="notifications-off-outline"
+                                size={20}
+                                color={colors.primary}
+                            />
                         </View>
-                    </TouchableOpacity>
+                        <Text style={styles.emptyTitle}>Aucune notification</Text>
+                        <Text style={styles.emptyText}>
+                            Les interactions autour de tes posts apparaîtront ici.
+                        </Text>
+                    </View>
+                }
+                renderItem={({ item }) => (
+                    <NotificationCard item={item} onPress={() => openItem(item)} />
                 )}
             />
-        </View>
+        </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#000", paddingTop: 50, paddingHorizontal: 16 },
-    title: { color: "#fff", fontSize: 22, fontWeight: "800", marginBottom: 14 },
-    loading: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
-    empty: { color: "#777", textAlign: "center", marginTop: 30 },
+    listContent: {
+        paddingBottom: 120,
+    },
 
-    row: {
+    card: {
+        marginBottom: spacing.md,
+        ...shadows.glowPrimary,
+        shadowOpacity: 0.08,
+    },
+
+    cardTop: {
         flexDirection: "row",
-        gap: 12,
-        alignItems: "center",
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#111",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: spacing.sm,
     },
+
+    leftBlock: {
+        flexDirection: "row",
+        flex: 1,
+        gap: spacing.md,
+    },
+
+    avatarWrap: {
+        position: "relative",
+        width: 50,
+        height: 50,
+    },
+
     avatar: {
-        width: 46,
-        height: 46,
-        borderRadius: 23,
-        backgroundColor: "#111",
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: colors.surface3,
     },
+
+    iconBadge: {
+        position: "absolute",
+        right: -2,
+        bottom: -2,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: colors.bg,
+    },
+
+    mainContent: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    topLine: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: spacing.sm,
+        marginBottom: 8,
+    },
+
+    pill: {
+        borderWidth: 1,
+        borderRadius: radius.pill,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+    },
+
+    pillText: {
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+    },
+
     text: {
-        color: "#fff",
-        fontSize: 14,
-        fontWeight: "700",
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.bold,
+        lineHeight: 20,
     },
+
     date: {
-        color: "#777",
-        fontSize: 12,
-        marginTop: 4,
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        flexShrink: 0,
+    },
+
+    chevronWrap: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(255,255,255,0.04)",
+    },
+
+    commentPreview: {
+        marginTop: spacing.md,
+        backgroundColor: "#0C0C0F",
+        borderWidth: 1,
+        borderColor: "#1E1E24",
+        borderRadius: radius.lg,
+        padding: spacing.md,
+    },
+
+    previewHead: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 6,
+    },
+
+    commentPreviewLabel: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+    },
+
+    commentPreviewText: {
+        color: colors.textSoft,
+        fontSize: typography.bodySm,
+        lineHeight: 18,
+    },
+
+    postPreview: {
+        marginTop: spacing.md,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        backgroundColor: "#0C0C0F",
+        borderWidth: 1,
+        borderColor: "#1E1E24",
+        borderRadius: radius.lg,
+        padding: 10,
+    },
+
+    postPreviewContent: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    postCover: {
+        width: 52,
+        height: 52,
+        borderRadius: 10,
+        backgroundColor: colors.surface3,
+    },
+
+    postCoverFallback: {
+        width: 52,
+        height: 52,
+        borderRadius: 10,
+        backgroundColor: colors.surface3,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    postPreviewLabel: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+    },
+
+    postTitle: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    postArtist: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        marginTop: 3,
+    },
+
+    emptyBox: {
+        marginTop: 44,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: spacing.xl,
+    },
+
+    emptyIconWrap: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        marginBottom: 14,
+    },
+
+    emptyTitle: {
+        color: colors.text,
+        fontSize: typography.subtitle,
+        fontWeight: fontWeights.black,
+        marginBottom: 6,
+    },
+
+    emptyText: {
+        color: colors.textMuted,
+        textAlign: "center",
+        fontSize: typography.body,
+        lineHeight: 20,
     },
 });

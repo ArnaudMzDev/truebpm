@@ -2,41 +2,47 @@ import React, { useMemo, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayer } from "../../context/PlayerContext";
+import { colors, spacing, typography, fontWeights } from "../../theme";
 
 type Props = {
-    previewUrl: string | null | undefined;
-    title: string | undefined;
-    artist: string | undefined;
-    coverUrl: string | null | undefined;
+    previewUrl: string | null;
+    title: string;
+    artist: string;
+    coverUrl: string | null;
 };
+
+function MiniWave({ active }: { active: boolean }) {
+    return (
+        <View style={styles.waveWrap}>
+            {[0, 1, 2].map((i) => (
+                <View
+                    key={i}
+                    style={[
+                        styles.waveBar,
+                        active ? styles.waveBarActive : styles.waveBarInactive,
+                        {
+                            height: i === 1 ? 12 : i === 0 ? 9 : 7,
+                        },
+                    ]}
+                />
+            ))}
+        </View>
+    );
+}
 
 export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     const player = usePlayer();
 
-    const cleanPreviewUrl =
-        typeof previewUrl === "string" ? previewUrl.trim() : "";
-
-    const cleanTitle =
-        typeof title === "string" && title.trim().length > 0
-            ? title.trim()
-            : "Titre inconnu";
-
-    const cleanArtist =
-        typeof artist === "string" && artist.trim().length > 0
-            ? artist.trim()
-            : "Artiste inconnu";
-
-    const cleanCoverUrl =
-        typeof coverUrl === "string" ? coverUrl.trim() : "";
-
-    if (!cleanPreviewUrl) return null;
+    if (!previewUrl) return null;
 
     const currentTrack = player?.currentTrack ?? null;
     const isPlaying = !!player?.isPlaying;
 
     const isCurrentTrack = useMemo(() => {
-        return !!currentTrack && currentTrack.url === cleanPreviewUrl;
-    }, [currentTrack, cleanPreviewUrl]);
+        return !!currentTrack && currentTrack.url === previewUrl;
+    }, [currentTrack, previewUrl]);
+
+    const isActive = isCurrentTrack && isPlaying;
 
     const togglePlay = useCallback(async () => {
         try {
@@ -51,56 +57,94 @@ export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Pr
 
             if (typeof (player as any)?.playPreview === "function") {
                 await (player as any).playPreview({
-                    title: cleanTitle,
-                    artist: cleanArtist,
-                    coverUrl: cleanCoverUrl,
-                    cover: cleanCoverUrl,
-                    url: cleanPreviewUrl,
+                    title,
+                    artist,
+                    coverUrl: coverUrl || "",
+                    cover: coverUrl || "",
+                    url: previewUrl,
                 });
             }
         } catch (e) {
             console.log("AudioPreview togglePlay error:", e);
         }
-    }, [player, isCurrentTrack, isPlaying, cleanTitle, cleanArtist, cleanCoverUrl, cleanPreviewUrl]);
+    }, [player, isCurrentTrack, isPlaying, title, artist, coverUrl, previewUrl]);
 
     return (
-        <View style={styles.container}>
-            <TouchableOpacity style={styles.button} onPress={togglePlay} activeOpacity={0.85}>
-                <Ionicons
-                    name={isCurrentTrack && isPlaying ? "pause" : "play"}
-                    size={18}
-                    color="#fff"
-                />
-            </TouchableOpacity>
+        <View style={styles.wrap}>
+            <TouchableOpacity
+                style={styles.button}
+                onPress={togglePlay}
+                activeOpacity={0.82}
+            >
+                <View style={styles.left}>
+                    <Ionicons
+                        name={isActive ? "pause-circle" : "play-circle"}
+                        size={30}
+                        color={isActive ? colors.primary : colors.text}
+                    />
 
-            <Text style={styles.label}>
-                {isCurrentTrack && isPlaying ? "Lecture en cours" : "Écouter l'extrait"}
-            </Text>
+                    <Text style={[styles.titleText, isActive && styles.titleTextActive]}>
+                        {isActive ? "Lecture en cours" : "Écouter l'extrait"}
+                    </Text>
+                </View>
+
+                <MiniWave active={isActive} />
+            </TouchableOpacity>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
+    wrap: {
+        marginTop: 10,
+    },
+
+    button: {
+        minHeight: 34,
         flexDirection: "row",
         alignItems: "center",
-        marginTop: 8,
+        justifyContent: "space-between",
     },
-    button: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: "#9B5CFF",
-        justifyContent: "center",
+
+    left: {
+        flexDirection: "row",
         alignItems: "center",
-        marginRight: 10,
-        shadowColor: "#9B5CFF",
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 0 },
+        flex: 1,
+        minWidth: 0,
     },
-    label: {
-        color: "#ccc",
-        fontSize: 14,
+
+    titleText: {
+        marginLeft: 10,
+        color: colors.text,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    titleTextActive: {
+        color: colors.primary,
+    },
+
+    waveWrap: {
+        width: 18,
+        height: 14,
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        marginLeft: spacing.sm,
+    },
+
+    waveBar: {
+        width: 3,
+        borderRadius: 999,
+    },
+
+    waveBarInactive: {
+        backgroundColor: colors.textFaint,
+        opacity: 0.4,
+    },
+
+    waveBarActive: {
+        backgroundColor: colors.primary,
+        opacity: 0.95,
     },
 });

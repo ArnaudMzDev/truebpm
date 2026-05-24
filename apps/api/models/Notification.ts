@@ -17,6 +17,8 @@ const NotificationSchema = new Schema(
             type: String,
             enum: [
                 "follow",
+                "follow_request",
+                "follow_accept",
                 "like_post",
                 "comment_post",
                 "reply_comment",

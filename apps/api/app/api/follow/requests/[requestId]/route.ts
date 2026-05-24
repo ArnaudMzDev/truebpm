@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import FollowRequest from "@/models/FollowRequest";
 import User from "@/models/User";
+import { createNotification } from "@/lib/notifications";
 
 export async function PATCH(
     req: Request,
@@ -40,39 +41,71 @@ export async function PATCH(
         }
 
         if (requestDoc.status !== "pending") {
-            return NextResponse.json({ error: "Cette demande a déjà été traitée." }, { status: 400 });
+            return NextResponse.json(
+                { error: "Cette demande a déjà été traitée." },
+                { status: 400 }
+            );
         }
 
         if (action === "decline") {
             requestDoc.status = "declined";
             await requestDoc.save();
 
-            return NextResponse.json({ success: true, status: "declined" }, { status: 200 });
+            return NextResponse.json(
+                { success: true, status: "declined" },
+                { status: 200 }
+            );
         }
+
+        const requesterObjectId = new mongoose.Types.ObjectId(String(requestDoc.requesterId));
+        const targetObjectId = new mongoose.Types.ObjectId(String(meId));
 
         await Promise.all([
             User.updateOne(
-                { _id: requestDoc.requesterId },
+                { _id: requesterObjectId },
                 {
-                    $addToSet: { followingList: new mongoose.Types.ObjectId(String(meId)) },
-                    $inc: { following: 1 },
+                    $addToSet: { followingList: targetObjectId },
                 }
             ),
             User.updateOne(
-                { _id: meId },
+                { _id: targetObjectId },
                 {
-                    $addToSet: { followersList: new mongoose.Types.ObjectId(String(requestDoc.requesterId)) },
-                    $inc: { followers: 1 },
+                    $addToSet: { followersList: requesterObjectId },
                 }
+            ),
+        ]);
+
+        const [requester, target] = await Promise.all([
+            User.findById(requesterObjectId).select("followingList").lean(),
+            User.findById(targetObjectId).select("followersList").lean(),
+        ]);
+
+        await Promise.all([
+            User.updateOne(
+                { _id: requesterObjectId },
+                { $set: { following: Array.isArray(requester?.followingList) ? requester.followingList.length : 0 } }
+            ),
+            User.updateOne(
+                { _id: targetObjectId },
+                { $set: { followers: Array.isArray(target?.followersList) ? target.followersList.length : 0 } }
             ),
         ]);
 
         requestDoc.status = "accepted";
         await requestDoc.save();
 
-        return NextResponse.json({ success: true, status: "accepted" }, { status: 200 });
+        await createNotification({
+            recipientId: String(requestDoc.requesterId),
+            actorId: String(meId),
+            type: "follow_accept",
+        });
+
+        return NextResponse.json(
+            { success: true, status: "accepted" },
+            { status: 200 }
+        );
     } catch (e) {
-        console.error("❌ PATCH /api/follow/requests/[requestId] error:", e);
+        console.error("❌ PATCH /api/user/follow-requests/[requestId] error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });
     }
 }

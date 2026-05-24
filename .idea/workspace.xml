@@ -6,11 +6,33 @@
   <component name="ChangeListManager">
     <list default="true" id="b7041585-3975-4118-bd64-fec653cf918c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/route.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apps/api/app/api/posts/user/[id]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/posts/user/[id]/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/follow/requests/[requestId]/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/follow/requests/[requestId]/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/follow/requests/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/follow/requests/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/follow/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/follow/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/app/api/follow/toggle/route.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/app/api/follow/toggle/route.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/lib/notifications.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/lib/notifications.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/models/Notification.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/Notification.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/api/models/User.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/models/User.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PlayerBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PlayerBar.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/ActionsBar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/ActionsBar.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/AudioPreview.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/AudioPreview.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/CommentBox.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/CommentBox.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/Header.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/Header.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/RatingMulti.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/RatingMulti.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/RatingSimple.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/RatingSimple.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/TrackInfo.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/TrackInfo.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/components/PostCard/index.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/context/PlayerContext.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/context/PlayerContext.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/lib/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/lib/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/lib/config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/lib/config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ChatScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ChatScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ConversationsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ConversationsScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/HomeScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/NotificationsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/NotificationsScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/PostScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/PostScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/ProfileScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/mobile/src/screens/UserProfileScreen.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -94,7 +116,10 @@
       <workItem from="1772323263488" duration="11084000" />
       <workItem from="1772899933648" duration="21470000" />
       <workItem from="1773503749587" duration="8828000" />
-      <workItem from="1773848773524" duration="1353000" />
+      <workItem from="1773848773524" duration="2090000" />
+      <workItem from="1774704498759" duration="1402000" />
+      <workItem from="1776007027759" duration="2471000" />
+      <workItem from="1777054051843" duration="23233000" />
     </task>
     <servers />
   </component>
