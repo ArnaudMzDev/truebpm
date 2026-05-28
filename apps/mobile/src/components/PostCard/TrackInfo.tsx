@@ -24,13 +24,13 @@ function getEntityIcon(entityType?: EntityType) {
     return "musical-notes-outline";
 }
 
-export default function TrackInfo({
-                                      coverUrl,
-                                      title,
-                                      artist,
-                                      entityType,
-                                      isPlaying = false,
-                                  }: Props) {
+function TrackInfo({
+                       coverUrl,
+                       title,
+                       artist,
+                       entityType,
+                       isPlaying = false,
+                   }: Props) {
     const cleanTitle =
         typeof title === "string" && title.trim().length > 0
             ? title.trim()
@@ -50,7 +50,7 @@ export default function TrackInfo({
         <View style={styles.wrap}>
             <View style={styles.coverWrap}>
                 {cleanCover ? (
-                    <Image source={{ uri: cleanCover }} style={styles.cover} />
+                    <Image source={{ uri: cleanCover }} style={styles.cover} resizeMode="cover" />
                 ) : (
                     <View style={styles.coverPlaceholder}>
                         <Ionicons
@@ -60,19 +60,27 @@ export default function TrackInfo({
                         />
                     </View>
                 )}
+                <View style={styles.coverSheen} pointerEvents="none" />
             </View>
 
             <View style={styles.meta}>
-                <View style={styles.titleRow}>
-                    <Text numberOfLines={1} style={styles.title}>
-                        {cleanTitle}
-                    </Text>
-
+                <View style={styles.entityLine}>
                     <View style={styles.entityPill}>
+                        <Ionicons
+                            name={getEntityIcon(entityType) as any}
+                            size={12}
+                            color={colors.primary}
+                        />
                         <Text style={styles.entityPillText}>
                             {getEntityLabel(entityType)}
                         </Text>
                     </View>
+                </View>
+
+                <View style={styles.titleRow}>
+                    <Text numberOfLines={1} style={styles.title}>
+                        {cleanTitle}
+                    </Text>
                 </View>
 
                 <Text numberOfLines={1} style={styles.artist}>
@@ -83,23 +91,30 @@ export default function TrackInfo({
     );
 }
 
+export default React.memo(TrackInfo);
+
 const styles = StyleSheet.create({
     wrap: {
         flexDirection: "row",
         alignItems: "center",
         width: "100%",
-        marginTop: spacing.xs,
-        marginBottom: spacing.md,
+        marginTop: 0,
+        marginBottom: spacing.sm,
+        backgroundColor: "rgba(8, 10, 14, 0.58)",
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: 10,
     },
 
     coverWrap: {
-        width: 72,
-        height: 72,
-        borderRadius: 22,
+        width: 88,
+        height: 88,
+        borderRadius: radius.xl,
         overflow: "hidden",
-        backgroundColor: "#171720",
+        backgroundColor: colors.surface4,
         borderWidth: 1,
-        borderColor: "#262634",
+        borderColor: colors.borderStrong,
     },
 
     cover: {
@@ -107,55 +122,71 @@ const styles = StyleSheet.create({
         height: "100%",
     },
 
+    coverSheen: {
+        ...StyleSheet.absoluteFillObject,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.08)",
+        borderRadius: radius.xl,
+    },
+
     coverPlaceholder: {
         width: "100%",
         height: "100%",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#171720",
+        backgroundColor: colors.surface4,
     },
 
     meta: {
         flex: 1,
-        marginLeft: 14,
+        marginLeft: spacing.md,
         minWidth: 0,
+        paddingRight: spacing.xs,
+    },
+
+    entityLine: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 7,
     },
 
     titleRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
     },
 
     title: {
         flexShrink: 1,
         color: colors.text,
-        fontSize: 18,
-        lineHeight: 24,
+        fontSize: 20,
+        lineHeight: 25,
         fontWeight: fontWeights.black,
     },
 
     entityPill: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
         borderRadius: radius.pill,
         borderWidth: 1,
-        borderColor: "#2A2A35",
-        backgroundColor: "transparent",
+        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
     },
 
     entityPillText: {
-        color: colors.textFaint,
+        color: colors.primary,
         fontSize: 11,
         fontWeight: fontWeights.black,
-        letterSpacing: 0.8,
+        letterSpacing: 0.7,
         textTransform: "uppercase",
     },
 
     artist: {
         marginTop: 4,
         color: colors.textMuted,
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: fontWeights.medium,
     },
 });

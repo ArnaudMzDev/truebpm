@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import FollowRequest from "@/models/FollowRequest";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
     try {
         await connectDB();

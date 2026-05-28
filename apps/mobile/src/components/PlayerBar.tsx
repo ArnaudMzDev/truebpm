@@ -362,7 +362,7 @@ export default function PlayerBar() {
                                     value={Math.min(positionMs, durationMs || 1)}
                                     onSlidingComplete={seekTo}
                                     minimumTrackTintColor={colors.primary}
-                                    maximumTrackTintColor="#2A2A31"
+                                    maximumTrackTintColor={colors.border}
                                     thumbTintColor={colors.primary}
                                 />
 
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
 
     progressTrack: {
         height: 3,
-        backgroundColor: "#1E1E24",
+        backgroundColor: colors.surface4,
         overflow: "hidden",
     },
 
@@ -409,9 +409,9 @@ const styles = StyleSheet.create({
     },
 
     bar: {
-        backgroundColor: "#0F0F13",
+        backgroundColor: colors.surface,
         borderTopWidth: 1,
-        borderTopColor: "#23232A",
+        borderTopColor: colors.border,
         paddingTop: 10,
         paddingBottom: 10,
         paddingHorizontal: 12,
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
 
     modalOverlay: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.55)",
+        backgroundColor: "rgba(0,0,0,0.72)",
         justifyContent: "flex-end",
     },
 
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 5,
         borderRadius: 999,
-        backgroundColor: "#3A3A44",
+        backgroundColor: colors.border,
     },
 
     fullTopBar: {

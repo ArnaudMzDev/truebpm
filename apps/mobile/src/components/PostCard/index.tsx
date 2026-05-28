@@ -21,11 +21,11 @@ type Props = {
     disableOpenDetail?: boolean;
 };
 
-export default function PostCard({
-                                     post,
-                                     onDeleted,
-                                     disableOpenDetail = false,
-                                 }: Props) {
+function PostCard({
+                      post,
+                      onDeleted,
+                      disableOpenDetail = false,
+                  }: Props) {
     const navigation = useNavigation<any>();
     const { me } = useUser();
 
@@ -90,7 +90,7 @@ export default function PostCard({
         navigation.push("PostDetail", { postId: originalPost._id });
     }, [disableOpenDetail, navigation, originalPost?._id]);
 
-    const onLocalUpdate = (patch: Partial<PostType>) => {
+    const onLocalUpdate = useCallback((patch: Partial<PostType>) => {
         setLocalPost((p) => {
             if (p.type === "repost" && p.repostOf) {
                 return {
@@ -102,7 +102,7 @@ export default function PostCard({
 
             return { ...p, ...patch };
         });
-    };
+    }, []);
 
     const onShare = useCallback(() => {
         if (!originalPost?._id) return;
@@ -116,7 +116,14 @@ export default function PostCard({
         });
     }, [navigation, originalPost?._id]);
 
-    const MainContent = (
+    const handleHeaderDeleted = useCallback(
+        (id: string) => {
+            onDeleted?.(id);
+        },
+        [onDeleted]
+    );
+
+    const mainContent = useMemo(() => (
         <View style={styles.content}>
             <TrackInfo
                 coverUrl={originalPost.coverUrl}
@@ -147,13 +154,27 @@ export default function PostCard({
             ) : null}
 
             <AudioPreview
-                previewUrl={originalPost.previewUrl}
-                title={originalPost.trackTitle}
-                artist={originalPost.artist}
-                coverUrl={originalPost.coverUrl}
+                previewUrl={originalPost.previewUrl ?? null}
+                title={originalPost.trackTitle ?? ""}
+                artist={originalPost.artist ?? ""}
+                coverUrl={originalPost.coverUrl ?? null}
             />
         </View>
-    );
+    ), [
+        originalPost.coverUrl,
+        originalPost.trackTitle,
+        originalPost.artist,
+        originalPost.entityType,
+        originalPost.rating,
+        originalPost.ratings,
+        originalPost.prod,
+        originalPost.lyrics,
+        originalPost.emotion,
+        originalPost.comment,
+        originalPost.previewUrl,
+        isSimple,
+        average,
+    ]);
 
     return (
         <View style={styles.outer}>
@@ -190,14 +211,14 @@ export default function PostCard({
                     repostByUserId={reposter?._id}
                     postId={localPost._id}
                     canDelete={canDelete}
-                    onDeleted={(id) => onDeleted?.(id)}
+                    onDeleted={handleHeaderDeleted}
                 />
 
                 {disableOpenDetail ? (
-                    MainContent
+                    mainContent
                 ) : (
-                    <TouchableOpacity activeOpacity={0.96} onPress={openDetail}>
-                        {MainContent}
+                    <TouchableOpacity activeOpacity={0.94} onPress={openDetail}>
+                        {mainContent}
                     </TouchableOpacity>
                 )}
 
@@ -212,6 +233,8 @@ export default function PostCard({
     );
 }
 
+export default React.memo(PostCard);
+
 const styles = StyleSheet.create({
     outer: {
         width: "100%",
@@ -220,9 +243,9 @@ const styles = StyleSheet.create({
 
     card: {
         width: "100%",
-        backgroundColor: colors.surface2,
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xxl,
-        padding: spacing.lg,
+        padding: spacing.md,
         borderWidth: 1,
         borderColor: colors.borderSoft,
     },
@@ -232,7 +255,13 @@ const styles = StyleSheet.create({
         alignItems: "center",
         alignSelf: "flex-start",
         gap: spacing.sm,
-        marginBottom: spacing.sm,
+        marginBottom: spacing.md,
+        backgroundColor: colors.primaryFaint,
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 7,
     },
 
     repostText: {
@@ -248,17 +277,21 @@ const styles = StyleSheet.create({
 
     repostCommentWrap: {
         marginBottom: spacing.sm,
+        width: "100%",
     },
 
     content: {
-        marginTop: spacing.xs,
+        marginTop: 0,
+        width: "100%",
     },
 
     ratingWrap: {
-        marginTop: spacing.md,
+        marginTop: 0,
+        width: "100%",
     },
 
     commentWrap: {
-        marginTop: spacing.md,
+        marginTop: spacing.sm,
+        width: "100%",
     },
 });

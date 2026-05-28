@@ -7,6 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/types";
 import { API_URL } from "../lib/config";
+import { getStoredToken, clearStoredSession } from "../lib/authStorage";
 type SplashNav = NativeStackNavigationProp<RootStackParamList, "Splash">;
 
 async function safeJson(res: Response): Promise<any | null> {
@@ -15,7 +16,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Splash non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Splash non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -46,7 +47,7 @@ export default function SplashScreen() {
             const minDelay = new Promise((r) => setTimeout(r, 900));
 
             try {
-                const token = await AsyncStorage.getItem("token");
+                const token = await getStoredToken();
 
                 if (!token) {
                     await minDelay;
@@ -61,7 +62,7 @@ export default function SplashScreen() {
 
                 // Token invalide
                 if (res.status === 401 || res.status === 403) {
-                    await AsyncStorage.multiRemove(["token", "user"]);
+                    await clearStoredSession();
                     await minDelay;
                     navigation.replace("Login");
                     return;
@@ -71,7 +72,7 @@ export default function SplashScreen() {
 
                 // Backend KO / mauvaise réponse
                 if (!res.ok || !json?.user?._id) {
-                    await AsyncStorage.multiRemove(["token", "user"]);
+                    await clearStoredSession();
                     await minDelay;
                     navigation.replace("Login");
                     return;
@@ -82,8 +83,8 @@ export default function SplashScreen() {
                 await minDelay;
                 navigation.replace("Main");
             } catch (e) {
-                console.log("Splash bootstrap error:", e);
-                await AsyncStorage.multiRemove(["token", "user"]);
+                if (__DEV__) console.log("Splash bootstrap error:", e);
+                await clearStoredSession();
                 await minDelay;
                 navigation.replace("Login");
             }

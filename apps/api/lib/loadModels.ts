@@ -7,5 +7,8 @@ import "@/models/RevokedToken";
 import "@/models/Notification";
 import "@/models/PushToken";
 import "@/models/Note";
+import "@/models/AdminAuditLog";
+import "@/models/SupportTicket";
+import "@/models/Feedback";
 
 export {};

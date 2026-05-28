@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
+import { cleanHttpUrl, cleanMultilineText, cleanText } from "@/lib/sanitize";
+
+export const dynamic = "force-dynamic";
 
 const SELECT_USER =
     "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy";
@@ -15,12 +18,12 @@ function normalizeMusicRef(input: any, expectedType?: "song" | "album" | "artist
     if (expectedType && entityType !== expectedType) return null;
 
     return {
-        entityId: String(input.entityId || "").trim(),
+        entityId: cleanText(input.entityId, 160),
         entityType,
-        title: String(input.title || "").trim(),
-        artist: String(input.artist || "").trim(),
-        coverUrl: String(input.coverUrl || "").trim(),
-        previewUrl: String(input.previewUrl || "").trim(),
+        title: cleanText(input.title, 160),
+        artist: cleanText(input.artist, 160),
+        coverUrl: cleanHttpUrl(input.coverUrl),
+        previewUrl: cleanHttpUrl(input.previewUrl),
     };
 }
 
@@ -78,25 +81,25 @@ export async function PATCH(req: Request) {
         const update: Record<string, any> = {};
 
         if (typeof pseudo === "string") {
-            const p = pseudo.trim();
-            if (p.length > 0) update.pseudo = p;
+            const p = cleanText(pseudo, 30);
+            if (p.length >= 3) update.pseudo = p;
         }
 
         if (typeof bio === "string") {
-            update.bio = bio.trim();
+            update.bio = cleanMultilineText(bio, 280);
         }
 
         if (avatarUrl === null) {
             update.avatarUrl = "";
         } else if (typeof avatarUrl === "string") {
-            const a = avatarUrl.trim();
+            const a = cleanHttpUrl(avatarUrl);
             if (a.length > 0) update.avatarUrl = a;
         }
 
         if (bannerUrl === null) {
             update.bannerUrl = "";
         } else if (typeof bannerUrl === "string") {
-            const b = bannerUrl.trim();
+            const b = cleanHttpUrl(bannerUrl);
             if (b.length > 0) update.bannerUrl = b;
         }
 

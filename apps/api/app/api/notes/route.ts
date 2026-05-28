@@ -6,6 +6,8 @@ import { requireUserId } from "@/lib/requestAuth";
 import Note from "@/models/Note";
 import User from "@/models/User";
 
+export const dynamic = "force-dynamic";
+
 function sanitizeTrack(raw: any) {
     if (!raw || typeof raw !== "object") {
         return {

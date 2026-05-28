@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
         fontSize: typography.title,
         fontWeight: fontWeights.black,
         lineHeight: 28,
-        letterSpacing: -0.3,
+        letterSpacing: 0,
     },
 
     subtitle: {

@@ -5,6 +5,9 @@ import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 import mongoose from "mongoose";
 import { createNotification } from "@/lib/notifications";
+import FollowRequest from "@/models/FollowRequest";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, ctx: { params: { id: string } }) {
     try {
@@ -51,15 +54,47 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
             target.followers = Math.max(0, (target.followers || 0) - 1);
 
             await Promise.all([me.save(), target.save()]);
-            await createNotification({
-                recipientId: String(target._id),
-                actorId: String(me._id),
-                type: "follow",
-            });
 
             return NextResponse.json(
                 {
                     status: "unfollowed",
+                    following: false,
+                    meFollowing: me.following,
+                    targetFollowers: target.followers,
+                },
+                { status: 200 }
+            );
+        }
+
+        if (target.isPrivate) {
+            await FollowRequest.findOneAndUpdate(
+                {
+                    requesterId: me._id,
+                    targetUserId: target._id,
+                },
+                {
+                    $set: {
+                        requesterId: me._id,
+                        targetUserId: target._id,
+                        status: "pending",
+                    },
+                },
+                {
+                    new: true,
+                    upsert: true,
+                    setDefaultsOnInsert: true,
+                }
+            );
+
+            await createNotification({
+                recipientId: String(target._id),
+                actorId: String(me._id),
+                type: "follow_request",
+            });
+
+            return NextResponse.json(
+                {
+                    status: "requested",
                     following: false,
                     meFollowing: me.following,
                     targetFollowers: target.followers,
@@ -76,10 +111,16 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
             target.followersList = [...(target.followersList || []), me._id];
         }
 
-        me.following = (me.following || 0) + 1;
-        target.followers = (target.followers || 0) + 1;
+        me.following = (me.followingList || []).length;
+        target.followers = (target.followersList || []).length;
 
         await Promise.all([me.save(), target.save()]);
+
+        await createNotification({
+            recipientId: String(target._id),
+            actorId: String(me._id),
+            type: "follow",
+        });
 
         return NextResponse.json(
             {

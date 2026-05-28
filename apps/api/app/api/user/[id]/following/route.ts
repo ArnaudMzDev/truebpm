@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import mongoose from "mongoose";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
     req: Request,
     { params }: { params: { id: string } }

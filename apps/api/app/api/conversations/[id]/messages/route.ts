@@ -9,6 +9,8 @@ import Post from "@/models/Post";
 import User from "@/models/User";
 import { sendPushToUser } from "@/lib/push";
 
+export const dynamic = "force-dynamic";
+
 function isObjectId(id: string) {
     return mongoose.Types.ObjectId.isValid(id);
 }

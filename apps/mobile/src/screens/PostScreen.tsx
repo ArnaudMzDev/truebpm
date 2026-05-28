@@ -6,18 +6,20 @@ import {
     FlatList,
     TextInput,
     TouchableOpacity,
-    KeyboardAvoidingView,
     Platform,
     Image,
+    Keyboard,
+    TouchableWithoutFeedback,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { API_URL } from "../lib/config";
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 type CommentUser = { pseudo: string; avatarUrl?: string; _id: string };
 
@@ -51,7 +53,7 @@ async function safeJson(res: Response) {
     try {
         return JSON.parse(txt);
     } catch {
-        console.log("Non-JSON response:", txt.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", txt.slice(0, 200));
         return null;
     }
 }
@@ -74,6 +76,7 @@ function formatRelativeDate(dateString: string) {
 
 export default function PostScreen({ route, navigation }: any) {
     const { postId } = route.params;
+    const insets = useSafeAreaInsets();
 
     const [post, setPost] = useState<PostType | null>(null);
     const [loadingPost, setLoadingPost] = useState(true);
@@ -83,6 +86,8 @@ export default function PostScreen({ route, navigation }: any) {
 
     const [text, setText] = useState("");
     const [replyTo, setReplyTo] = useState<(CommentType | ReplyType) | null>(null);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
+    const [composerHeight, setComposerHeight] = useState(92);
 
     const placeholder = useMemo(
         () => (replyTo ? `Répondre à ${replyTo.userId.pseudo}…` : "Écrire un commentaire…"),
@@ -101,6 +106,23 @@ export default function PostScreen({ route, navigation }: any) {
     }, [cursorMap]);
 
     const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+        const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+        const showSub = Keyboard.addListener(showEvent, (event) => {
+            setKeyboardHeight(event.endCoordinates?.height || 0);
+        });
+        const hideSub = Keyboard.addListener(hideEvent, () => {
+            setKeyboardHeight(0);
+        });
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     const openUserProfile = useCallback(
         (userId?: string) => {
@@ -128,7 +150,7 @@ export default function PostScreen({ route, navigation }: any) {
 
     const fetchPost = useCallback(async () => {
         setLoadingPost(true);
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
 
         const res = await fetch(`${API_URL}/api/posts/${postId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -141,7 +163,7 @@ export default function PostScreen({ route, navigation }: any) {
 
     const fetchComments = useCallback(async () => {
         setLoadingComments(true);
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
 
         const res = await fetch(`${API_URL}/api/posts/${postId}/comments?limit=50`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -169,7 +191,7 @@ export default function PostScreen({ route, navigation }: any) {
                     `${API_URL}/api/comments/${parentId}/replies?limit=10` +
                     (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
 
-                const token = await AsyncStorage.getItem("token");
+                const token = await getStoredToken();
                 const res = await fetch(url, {
                     headers: token ? { Authorization: `Bearer ${token}` } : {},
                 });
@@ -231,7 +253,7 @@ export default function PostScreen({ route, navigation }: any) {
         async (nodeId: string, where: { type: "comment" } | { type: "reply"; parentId: string }) => {
             if (likeLoading[nodeId]) return;
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
             if (!token) return;
 
             setLikeLoading((m) => ({ ...m, [nodeId]: true }));
@@ -339,7 +361,7 @@ export default function PostScreen({ route, navigation }: any) {
     );
 
     const submit = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) return;
 
         const clean = text.trim();
@@ -617,13 +639,15 @@ export default function PostScreen({ route, navigation }: any) {
         return <AppScreenLoader label="Chargement du post..." />;
     }
 
+    const topInset = insets.top + 10;
+    const bottomInset = Math.max(insets.bottom, 12);
+    const composerBottom = keyboardHeight > 0 ? keyboardHeight + 8 : bottomInset;
+    const listBottomPadding = composerHeight + composerBottom + 18;
+
     return (
-        <KeyboardAvoidingView
-            style={styles.keyboard}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
-        >
-            <View style={styles.screen}>
+        <View style={styles.keyboard}>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <View style={[styles.screen, { paddingTop: topInset }]}>
                 <View style={styles.topBar}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.topBarBtn}>
                         <Ionicons name="arrow-back" size={20} color={colors.text} />
@@ -663,47 +687,55 @@ export default function PostScreen({ route, navigation }: any) {
                         renderItem={renderComment}
                         style={{ flex: 1 }}
                         keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={{ paddingBottom: 150 }}
+                        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+                        onScrollBeginDrag={Keyboard.dismiss}
+                        contentContainerStyle={{ paddingBottom: listBottomPadding }}
                         showsVerticalScrollIndicator={false}
                     />
                 )}
 
-                <View style={styles.composer}>
-                    {replyTo ? (
-                        <View style={styles.replyingTo}>
-                            <View style={styles.replyingToLeft}>
-                                <Ionicons name="return-up-forward-outline" size={14} color={colors.primary} />
-                                <Text style={styles.replyingToText}>Réponse à {replyTo.userId?.pseudo}</Text>
-                            </View>
+                <View
+                    onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
+                    style={[styles.composerDock, { bottom: composerBottom }]}
+                >
+                    <View style={styles.composer}>
+                        {replyTo ? (
+                            <View style={styles.replyingTo}>
+                                <View style={styles.replyingToLeft}>
+                                    <Ionicons name="return-up-forward-outline" size={14} color={colors.primary} />
+                                    <Text style={styles.replyingToText}>Réponse à {replyTo.userId?.pseudo}</Text>
+                                </View>
 
-                            <TouchableOpacity onPress={() => setReplyTo(null)} style={styles.replyingClose}>
-                                <Ionicons name="close" size={16} color={colors.textMuted} />
+                                <TouchableOpacity onPress={() => setReplyTo(null)} style={styles.replyingClose}>
+                                    <Ionicons name="close" size={16} color={colors.textMuted} />
+                                </TouchableOpacity>
+                            </View>
+                        ) : null}
+
+                        <View style={styles.inputRow}>
+                            <TextInput
+                                value={text}
+                                onChangeText={setText}
+                                placeholder={placeholder}
+                                placeholderTextColor={colors.textFaint}
+                                style={styles.input}
+                                multiline
+                            />
+
+                            <TouchableOpacity
+                                onPress={submit}
+                                style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+                                activeOpacity={0.85}
+                                disabled={!text.trim()}
+                            >
+                                <Ionicons name="send" size={17} color="#fff" />
                             </TouchableOpacity>
                         </View>
-                    ) : null}
-
-                    <View style={styles.inputRow}>
-                        <TextInput
-                            value={text}
-                            onChangeText={setText}
-                            placeholder={placeholder}
-                            placeholderTextColor={colors.textFaint}
-                            style={styles.input}
-                            multiline
-                        />
-
-                        <TouchableOpacity
-                            onPress={submit}
-                            style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
-                            activeOpacity={0.85}
-                            disabled={!text.trim()}
-                        >
-                            <Ionicons name="send" size={17} color="#fff" />
-                        </TouchableOpacity>
                     </View>
                 </View>
-            </View>
-        </KeyboardAvoidingView>
+                </View>
+            </TouchableWithoutFeedback>
+        </View>
     );
 }
 
@@ -716,7 +748,6 @@ const styles = StyleSheet.create({
     screen: {
         flex: 1,
         backgroundColor: colors.bg,
-        paddingTop: 40,
         paddingHorizontal: 14,
     },
 
@@ -953,14 +984,20 @@ const styles = StyleSheet.create({
         textAlign: "center",
     },
 
+    composerDock: {
+        position: "absolute",
+        left: 14,
+        right: 14,
+        zIndex: 20,
+    },
+
     composer: {
         backgroundColor: "#0F0F12",
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: radius.xxl,
         padding: 10,
-        marginTop: 10,
-        marginBottom: 14,
+        ...shadows.card,
     },
 
     replyingTo: {

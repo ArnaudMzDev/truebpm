@@ -1,8 +1,8 @@
 import React, { useMemo, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayer } from "../../context/PlayerContext";
-import { colors, spacing, typography, fontWeights } from "../../theme";
+import { colors, spacing, radius, typography, fontWeights } from "../../theme";
 
 type Props = {
     previewUrl: string | null;
@@ -30,10 +30,9 @@ function MiniWave({ active }: { active: boolean }) {
     );
 }
 
-export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
+function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     const player = usePlayer();
-
-    if (!previewUrl) return null;
+    const scale = React.useRef(new Animated.Value(1)).current;
 
     const currentTrack = player?.currentTrack ?? null;
     const isPlaying = !!player?.isPlaying;
@@ -44,7 +43,21 @@ export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Pr
 
     const isActive = isCurrentTrack && isPlaying;
 
+    const animateTo = useCallback(
+        (value: number) => {
+            Animated.spring(scale, {
+                toValue: value,
+                useNativeDriver: true,
+                speed: 24,
+                bounciness: 2,
+            }).start();
+        },
+        [scale]
+    );
+
     const togglePlay = useCallback(async () => {
+        if (!previewUrl) return;
+
         try {
             if (isCurrentTrack && isPlaying) {
                 if (typeof (player as any)?.pause === "function") {
@@ -65,56 +78,99 @@ export default function AudioPreview({ previewUrl, title, artist, coverUrl }: Pr
                 });
             }
         } catch (e) {
-            console.log("AudioPreview togglePlay error:", e);
+            if (__DEV__) console.log("AudioPreview togglePlay error:", e);
         }
     }, [player, isCurrentTrack, isPlaying, title, artist, coverUrl, previewUrl]);
 
+    if (!previewUrl) return null;
+
     return (
-        <View style={styles.wrap}>
-            <TouchableOpacity
-                style={styles.button}
+        <View style={[styles.wrap, isActive && styles.wrapActive]}>
+            <Pressable
                 onPress={togglePlay}
-                activeOpacity={0.82}
+                onPressIn={() => animateTo(0.98)}
+                onPressOut={() => animateTo(1)}
             >
-                <View style={styles.left}>
-                    <Ionicons
-                        name={isActive ? "pause-circle" : "play-circle"}
-                        size={30}
-                        color={isActive ? colors.primary : colors.text}
-                    />
+                <Animated.View style={[styles.button, { transform: [{ scale }] }]}>
+                    <View style={[styles.playDot, isActive && styles.playDotActive]}>
+                        <Ionicons
+                            name={isActive ? "pause" : "play"}
+                            size={17}
+                            color={colors.text}
+                            style={!isActive && styles.playIconOffset}
+                        />
+                    </View>
 
-                    <Text style={[styles.titleText, isActive && styles.titleTextActive]}>
-                        {isActive ? "Lecture en cours" : "Écouter l'extrait"}
-                    </Text>
-                </View>
+                    <View style={styles.copy}>
+                        <Text style={[styles.titleText, isActive && styles.titleTextActive]}>
+                            {isActive ? "Lecture en cours" : "Extrait audio"}
+                        </Text>
+                        <Text style={styles.subtitleText} numberOfLines={1}>
+                            {isActive ? "Extrait en cours dans le feed" : "Touche pour écouter l’extrait"}
+                        </Text>
+                    </View>
 
-                <MiniWave active={isActive} />
-            </TouchableOpacity>
+                    <MiniWave active={isActive} />
+                </Animated.View>
+            </Pressable>
         </View>
     );
 }
 
+export default React.memo(AudioPreview);
+
 const styles = StyleSheet.create({
     wrap: {
-        marginTop: 10,
+        marginTop: spacing.sm,
+        width: "100%",
+        borderRadius: radius.xl,
+    },
+
+    wrapActive: {
+        backgroundColor: colors.primaryFaint,
     },
 
     button: {
-        minHeight: 34,
+        minHeight: 58,
+        width: "100%",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        backgroundColor: "rgba(14, 17, 24, 0.72)",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        borderRadius: radius.xl,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
     },
 
-    left: {
-        flexDirection: "row",
+    playDot: {
+        width: 38,
+        height: 38,
+        borderRadius: radius.pill,
         alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.surfacePressed,
+        borderWidth: 1,
+        borderColor: colors.borderStrong,
+        marginRight: spacing.sm,
+    },
+
+    playDotActive: {
+        backgroundColor: colors.primaryDark,
+        borderColor: colors.primaryGlow,
+    },
+
+    playIconOffset: {
+        marginLeft: 2,
+    },
+
+    copy: {
         flex: 1,
         minWidth: 0,
     },
 
     titleText: {
-        marginLeft: 10,
         color: colors.text,
         fontSize: typography.bodySm,
         fontWeight: fontWeights.extraBold,
@@ -122,6 +178,13 @@ const styles = StyleSheet.create({
 
     titleTextActive: {
         color: colors.primary,
+    },
+
+    subtitleText: {
+        marginTop: 2,
+        color: colors.textFaint,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.medium,
     },
 
     waveWrap: {

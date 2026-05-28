@@ -12,8 +12,10 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { usePlayer } from "../context/PlayerContext";
+import { getStoredToken } from "../lib/authStorage";
 
 const NOTE_TRACK_PICK_KEY = "create_note_pending_track_pick";
 
@@ -32,12 +34,13 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
 
 export default function CreateNoteScreen({ navigation, route }: any) {
+    const insets = useSafeAreaInsets();
     const existingNote = route?.params?.existingNote ?? null;
 
     const [text, setText] = useState(existingNote?.text || "");
@@ -88,7 +91,7 @@ export default function CreateNoteScreen({ navigation, route }: any) {
     const handleSave = useCallback(async () => {
         if (!canSave || saving) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
@@ -124,7 +127,7 @@ export default function CreateNoteScreen({ navigation, route }: any) {
     }, [canSave, saving, text, track, navigation]);
 
     const handleDelete = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
@@ -161,7 +164,7 @@ export default function CreateNoteScreen({ navigation, route }: any) {
     }, [navigation]);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: Math.max(insets.bottom, 12) }]}>
             <View style={styles.topBar}>
                 <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -258,7 +261,7 @@ export default function CreateNoteScreen({ navigation, route }: any) {
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    <Text style={styles.helper}>Optionnel, mais très stylé.</Text>
+                    <Text style={styles.helper}>Optionnel.</Text>
                 )}
             </View>
 
@@ -291,7 +294,6 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: "#000",
         paddingHorizontal: 16,
-        paddingTop: 54,
     },
     topBar: {
         flexDirection: "row",

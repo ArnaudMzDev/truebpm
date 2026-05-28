@@ -63,4 +63,6 @@ CommentSchema.index({ postId: 1, parentId: 1, _id: -1 });
 // helpful for thread pagination
 CommentSchema.index({ rootId: 1, _id: -1 });
 
-export default models.Comment || model("Comment", CommentSchema);
+const Comment: any = models.Comment || model("Comment", CommentSchema);
+
+export default Comment;

@@ -20,13 +20,12 @@ import { PostType } from "../components/PostCard/types";
 import { API_URL, SOCKET_URL } from "../lib/config";
 
 import AppScreen from "../components/ui/AppScreen";
-import AppCard from "../components/ui/AppCard";
 import AppHeader from "../components/ui/AppHeader";
-import AppButton from "../components/ui/AppButton";
 import AppSectionLoader from "../components/ui/AppSectionLoader";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import { useUser } from "../context/UserContext";
+import { getStoredToken } from "../lib/authStorage";
 
 type SuggestedUser = {
     _id: string;
@@ -37,6 +36,8 @@ type SuggestedUser = {
     following?: number;
     notesCount?: number;
 };
+
+type HomeFeed = "forYou" | "following";
 
 const LIMIT = 15;
 const SUGGESTIONS_LIMIT = 8;
@@ -50,7 +51,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -84,7 +85,7 @@ function SuggestionCard({
     onHide: () => void;
 }) {
     return (
-        <AppCard style={styles.suggestionCard}>
+        <View style={styles.suggestionCard}>
             <TouchableOpacity
                 style={styles.suggestionHideBtn}
                 onPress={onHide}
@@ -114,25 +115,26 @@ function SuggestionCard({
                     </View>
                 </View>
 
-                <View style={styles.suggestionMetaRow}>
-                    <Text style={styles.suggestionMetaText}>
-                        {user.followers || 0} followers
-                    </Text>
-                    <Text style={styles.suggestionMetaDot}>•</Text>
-                    <Text style={styles.suggestionMetaText}>
-                        {user.notesCount || 0} notes
-                    </Text>
-                </View>
+                <Text style={styles.suggestionMetaText}>
+                    {(user.notesCount || 0) > 0 ? `${user.notesCount} avis publiés` : "Profil à découvrir"}
+                </Text>
             </TouchableOpacity>
 
-            <AppButton
-                label={followLoading ? "..." : following ? "Suivi" : "Suivre"}
+            <TouchableOpacity
                 onPress={onFollow}
                 disabled={followLoading}
-                variant={following ? "secondary" : "primary"}
-                style={styles.suggestionAction}
-            />
-        </AppCard>
+                activeOpacity={0.86}
+                style={[
+                    styles.suggestionAction,
+                    following && styles.suggestionActionFollowing,
+                    followLoading && styles.suggestionActionDisabled,
+                ]}
+            >
+                <Text style={[styles.suggestionActionText, following && styles.suggestionActionTextFollowing]}>
+                    {followLoading ? "..." : following ? "Suivi" : "Suivre"}
+                </Text>
+            </TouchableOpacity>
+        </View>
     );
 }
 
@@ -144,6 +146,7 @@ export default function HomeScreen({ navigation }: any) {
     const bottomSpacing = tabBarHeight + Math.max(insets.bottom, 10) + 20;
 
     const [posts, setPosts] = useState<PostType[]>([]);
+    const [activeFeed, setActiveFeed] = useState<HomeFeed>("forYou");
     const [initialLoading, setInitialLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -160,6 +163,7 @@ export default function HomeScreen({ navigation }: any) {
     const [followLoadingMap, setFollowLoadingMap] = useState<Record<string, boolean>>({});
 
     const didInit = useRef(false);
+    const lastFeedRef = useRef<HomeFeed>("forYou");
     const socketRef = useRef<Socket | null>(null);
 
     const followingIds = useMemo(() => {
@@ -213,7 +217,7 @@ export default function HomeScreen({ navigation }: any) {
     }, []);
 
     const fetchUnreadNotifications = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             setNotifUnread(0);
             return;
@@ -236,7 +240,7 @@ export default function HomeScreen({ navigation }: any) {
         try {
             setLoadingSuggestions(true);
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
             if (!token) {
                 setSuggestions([]);
                 return;
@@ -266,12 +270,13 @@ export default function HomeScreen({ navigation }: any) {
     const fetchInitial = useCallback(async () => {
         try {
             setInitialLoading(true);
+            setPosts([]);
             setCursor(null);
             setHasMore(true);
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
 
-            const res = await fetch(`${API_URL}/api/posts?limit=${LIMIT}`, {
+            const res = await fetch(`${API_URL}/api/posts?feed=${activeFeed}&limit=${LIMIT}`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
             const json = await safeJson(res);
@@ -292,7 +297,7 @@ export default function HomeScreen({ navigation }: any) {
         } finally {
             setInitialLoading(false);
         }
-    }, []);
+    }, [activeFeed]);
 
     const loadMore = useCallback(async () => {
         if (!cursor || loadingMore || !hasMore) return;
@@ -300,10 +305,10 @@ export default function HomeScreen({ navigation }: any) {
         try {
             setLoadingMore(true);
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
 
             const res = await fetch(
-                `${API_URL}/api/posts?limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
+                `${API_URL}/api/posts?feed=${activeFeed}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
                 { headers: token ? { Authorization: `Bearer ${token}` } : {} }
             );
             const json = await safeJson(res);
@@ -331,7 +336,7 @@ export default function HomeScreen({ navigation }: any) {
         } finally {
             setLoadingMore(false);
         }
-    }, [cursor, loadingMore, hasMore]);
+    }, [activeFeed, cursor, loadingMore, hasMore]);
 
     const onRefresh = async () => {
         setRefreshing(true);
@@ -346,6 +351,7 @@ export default function HomeScreen({ navigation }: any) {
     useEffect(() => {
         if (didInit.current) return;
         didInit.current = true;
+        lastFeedRef.current = activeFeed;
 
         Promise.all([
             fetchPrefs(),
@@ -353,13 +359,20 @@ export default function HomeScreen({ navigation }: any) {
             fetchUnreadNotifications(),
             fetchSuggestions(),
         ]).catch(() => {});
-    }, [fetchPrefs, fetchInitial, fetchUnreadNotifications, fetchSuggestions]);
+    }, [activeFeed, fetchPrefs, fetchInitial, fetchUnreadNotifications, fetchSuggestions]);
+
+    useEffect(() => {
+        if (!didInit.current) return;
+        if (lastFeedRef.current === activeFeed) return;
+        lastFeedRef.current = activeFeed;
+        fetchInitial().catch(() => {});
+    }, [activeFeed, fetchInitial]);
 
     useEffect(() => {
         let alive = true;
 
         (async () => {
-            const stored = await AsyncStorage.getItem("token");
+            const stored = await getStoredToken();
             const rawToken = stripToken(stored);
             if (!rawToken) return;
 
@@ -446,21 +459,86 @@ export default function HomeScreen({ navigation }: any) {
         await fetchSuggestions();
     }, [fetchSuggestions, persistHiddenIds]);
 
-    const ListHeader = () => (
+    const openExplore = useCallback(() => {
+        navigation.navigate("ExploreSearch");
+    }, [navigation]);
+
+    const openNotifications = useCallback(() => {
+        setNotifUnread(0);
+        navigation.navigate("SocialNotifications");
+    }, [navigation]);
+
+    const postKeyExtractor = useCallback((item: PostType) => item._id, []);
+
+    const renderPostItem = useCallback(
+        ({ item }: { item: PostType }) => (
+            <PostCard post={item} onDeleted={handleDeleted} />
+        ),
+        [handleDeleted]
+    );
+
+    const suggestionKeyExtractor = useCallback((item: SuggestedUser) => item._id, []);
+
+    const renderSuggestionItem = useCallback(
+        ({ item }: { item: SuggestedUser }) => (
+            <SuggestionCard
+                user={item}
+                navigation={navigation}
+                following={followingIds.has(String(item._id))}
+                followLoading={!!followLoadingMap[item._id]}
+                onFollow={() => handleFollowSuggestion(item._id)}
+                onHide={() => hideSuggestion(String(item._id))}
+            />
+        ),
+        [followLoadingMap, followingIds, handleFollowSuggestion, hideSuggestion, navigation]
+    );
+
+    const listContentStyle = useMemo(
+        () => [styles.listContent, { paddingBottom: bottomSpacing }],
+        [bottomSpacing]
+    );
+
+    const listFooter = useMemo(
+        () => (loadingMore ? <AppSectionLoader /> : <View style={styles.footerSpacer} />),
+        [loadingMore]
+    );
+
+    const listEmpty = useMemo(() => {
+        if (initialLoading) return null;
+
+        return (
+            <View style={styles.emptyFeedBox}>
+                <View style={styles.emptyFeedIconWrap}>
+                    <Ionicons
+                        name={activeFeed === "forYou" ? "sparkles-outline" : "people-outline"}
+                        size={18}
+                        color={colors.primary}
+                    />
+                </View>
+                <Text style={styles.emptyFeedTitle}>
+                    {activeFeed === "forYou" ? "Aucun avis pour l’instant." : "Pas encore de posts ici."}
+                </Text>
+                <Text style={styles.emptyFeedText}>
+                    {activeFeed === "forYou"
+                        ? "Lance un premier son ou suis quelques profils pour réveiller le feed."
+                        : "Ton feed prendra vie dès que les profils suivis publieront."}
+                </Text>
+            </View>
+        );
+    }, [activeFeed, initialLoading]);
+
+    const listHeader = useMemo(() => (
         <View>
             <View style={styles.heroIntro}>
                 <Text style={styles.heroEyebrow}>TrueBPM</Text>
-                <Text style={styles.heroTitle}>Ton feed musical</Text>
-                <Text style={styles.heroSubtitle}>
-                    Découvre les notes, avis et reposts de ta communauté.
-                </Text>
+                <Text style={styles.heroTitle}>Feed</Text>
             </View>
 
             <View style={styles.notesWrap}>
                 <NotesStrip navigation={navigation} />
             </View>
 
-            <AppCard style={styles.suggestionsBlock}>
+            <View style={styles.suggestionsBlock}>
                 <View style={styles.suggestionsHeader}>
                     <TouchableOpacity
                         style={styles.suggestionsHeaderLeft}
@@ -468,8 +546,8 @@ export default function HomeScreen({ navigation }: any) {
                         activeOpacity={0.85}
                     >
                         <View style={styles.suggestionsTitleWrap}>
-                            <Text style={styles.suggestionsEyebrow}>Découverte</Text>
-                            <Text style={styles.suggestionsTitle}>Suggestions</Text>
+                            <Text style={styles.suggestionsEyebrow}>À écouter avec eux</Text>
+                            <Text style={styles.suggestionsTitle}>Profils à suivre</Text>
                         </View>
 
                         <View style={styles.suggestionsChevronWrap}>
@@ -487,7 +565,7 @@ export default function HomeScreen({ navigation }: any) {
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity
-                            onPress={() => navigation.navigate("ExploreSearch")}
+                            onPress={openExplore}
                             activeOpacity={0.85}
                         >
                             <Text style={styles.suggestionsLink}>Explorer</Text>
@@ -503,17 +581,8 @@ export default function HomeScreen({ navigation }: any) {
                             data={visibleSuggestions}
                             horizontal
                             showsHorizontalScrollIndicator={false}
-                            keyExtractor={(item) => item._id}
-                            renderItem={({ item }) => (
-                                <SuggestionCard
-                                    user={item}
-                                    navigation={navigation}
-                                    following={followingIds.has(String(item._id))}
-                                    followLoading={!!followLoadingMap[item._id]}
-                                    onFollow={() => handleFollowSuggestion(item._id)}
-                                    onHide={() => hideSuggestion(String(item._id))}
-                                />
-                            )}
+                            keyExtractor={suggestionKeyExtractor}
+                            renderItem={renderSuggestionItem}
                             contentContainerStyle={styles.suggestionsListContent}
                         />
                     ) : (
@@ -522,21 +591,62 @@ export default function HomeScreen({ navigation }: any) {
                                 <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
                             </View>
                             <Text style={styles.emptySuggestionsText}>
-                                Plus aucune suggestion pour le moment.
+                                Plus personne à proposer là, reviens après quelques écoutes.
                             </Text>
                         </View>
                     )
                 ) : null}
-            </AppCard>
-
-            <View style={styles.feedHeader}>
-                <View>
-                    <Text style={styles.feedEyebrow}>Feed</Text>
-                    <Text style={styles.feedTitle}>Derniers posts</Text>
-                </View>
             </View>
+
+            <View style={styles.feedTabs}>
+                <TouchableOpacity
+                    style={[styles.feedTabBtn, activeFeed === "forYou" && styles.feedTabBtnActive]}
+                    activeOpacity={0.86}
+                    onPress={() => setActiveFeed("forYou")}
+                >
+                    <Ionicons
+                        name="sparkles-outline"
+                        size={15}
+                        color={activeFeed === "forYou" ? colors.bg : colors.textMuted}
+                    />
+                    <Text style={[styles.feedTabText, activeFeed === "forYou" && styles.feedTabTextActive]}>
+                        Pour toi
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.feedTabBtn, activeFeed === "following" && styles.feedTabBtnActive]}
+                    activeOpacity={0.86}
+                    onPress={() => setActiveFeed("following")}
+                >
+                    <Ionicons
+                        name="people-outline"
+                        size={15}
+                        color={activeFeed === "following" ? colors.bg : colors.textMuted}
+                    />
+                    <Text style={[styles.feedTabText, activeFeed === "following" && styles.feedTabTextActive]}>
+                        Abonnements
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
+            <Text style={styles.feedTitle}>
+                {activeFeed === "forYou" ? "Avis récents" : "Chez les profils suivis"}
+            </Text>
         </View>
-    );
+    ), [
+        activeFeed,
+        hiddenSuggestionIds.length,
+        loadingSuggestions,
+        navigation,
+        openExplore,
+        renderSuggestionItem,
+        restoreSuggestions,
+        suggestionKeyExtractor,
+        suggestionsCollapsed,
+        toggleSuggestionsCollapsed,
+        visibleSuggestions,
+    ]);
 
     if (initialLoading && posts.length === 0) {
         return <AppScreenLoader label="Chargement du feed..." />;
@@ -546,15 +656,11 @@ export default function HomeScreen({ navigation }: any) {
         <AppScreen>
             <AppHeader
                 title="Accueil"
-                subtitle="La musique notée par ta communauté"
                 right={
                     <TouchableOpacity
                         style={styles.notifButton}
                         activeOpacity={0.85}
-                        onPress={() => {
-                            setNotifUnread(0);
-                            navigation.navigate("SocialNotifications");
-                        }}
+                        onPress={openNotifications}
                     >
                         <Ionicons name="notifications-outline" size={22} color={colors.text} />
 
@@ -571,14 +677,11 @@ export default function HomeScreen({ navigation }: any) {
 
             <FlatList
                 data={posts}
-                keyExtractor={(item) => item._id}
-                renderItem={({ item }) => <PostCard post={item} onDeleted={handleDeleted} />}
-                ListHeaderComponent={ListHeader}
+                keyExtractor={postKeyExtractor}
+                renderItem={renderPostItem}
+                ListHeaderComponent={listHeader}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[
-                    styles.listContent,
-                    { paddingBottom: bottomSpacing },
-                ]}
+                contentContainerStyle={listContentStyle}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -588,9 +691,8 @@ export default function HomeScreen({ navigation }: any) {
                 }
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.5}
-                ListFooterComponent={
-                    loadingMore ? <AppSectionLoader /> : <View style={{ height: spacing.sm }} />
-                }
+                ListEmptyComponent={listEmpty}
+                ListFooterComponent={listFooter}
             />
         </AppScreen>
     );
@@ -620,13 +722,6 @@ const styles = StyleSheet.create({
         fontSize: 26,
         fontWeight: fontWeights.black,
         lineHeight: 30,
-    },
-
-    heroSubtitle: {
-        color: colors.textMuted,
-        fontSize: typography.body,
-        lineHeight: 20,
-        marginTop: 6,
     },
 
     notesWrap: {
@@ -670,6 +765,9 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xl,
         padding: spacing.md,
         backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
     },
 
     suggestionsHeader: {
@@ -735,6 +833,9 @@ const styles = StyleSheet.create({
         position: "relative",
         padding: spacing.md,
         backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.xl,
     },
 
     suggestionHideBtn: {
@@ -787,27 +888,42 @@ const styles = StyleSheet.create({
         marginTop: 3,
     },
 
-    suggestionMetaRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: spacing.xs,
-        marginBottom: spacing.sm,
-    },
-
     suggestionMetaText: {
         color: colors.textFaint,
         fontSize: 11,
         fontWeight: fontWeights.bold,
-    },
-
-    suggestionMetaDot: {
-        color: colors.textFaint,
-        marginHorizontal: 6,
-        fontSize: 11,
+        marginTop: spacing.sm,
     },
 
     suggestionAction: {
-        marginTop: spacing.sm,
+        marginTop: spacing.md,
+        alignSelf: "flex-start",
+        minHeight: 30,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.md,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.primaryDark,
+    },
+
+    suggestionActionFollowing: {
+        backgroundColor: "transparent",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+
+    suggestionActionDisabled: {
+        opacity: 0.62,
+    },
+
+    suggestionActionText: {
+        color: colors.text,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
+    },
+
+    suggestionActionTextFollowing: {
+        color: colors.primary,
     },
 
     emptySuggestionsBox: {
@@ -838,23 +954,88 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 
-    feedHeader: {
+    feedTabs: {
+        flexDirection: "row",
+        gap: 4,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: 4,
         marginBottom: spacing.md,
-        paddingHorizontal: spacing.xs,
     },
 
-    feedEyebrow: {
-        color: colors.primary,
-        fontSize: typography.tiny,
+    feedTabBtn: {
+        flex: 1,
+        minHeight: 42,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: spacing.xs,
+        borderRadius: radius.lg,
+    },
+
+    feedTabBtnActive: {
+        backgroundColor: colors.primary,
+    },
+
+    feedTabText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    feedTabTextActive: {
+        color: colors.bg,
         fontWeight: fontWeights.black,
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 2,
     },
 
     feedTitle: {
         color: colors.text,
         fontSize: 20,
         fontWeight: fontWeights.black,
+        marginBottom: spacing.md,
+        paddingHorizontal: spacing.xs,
+    },
+
+    emptyFeedBox: {
+        marginTop: spacing.xs,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: spacing.lg,
+        alignItems: "center",
+    },
+
+    emptyFeedIconWrap: {
+        width: 42,
+        height: 42,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        marginBottom: spacing.md,
+    },
+
+    emptyFeedTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+        textAlign: "center",
+        marginBottom: spacing.xs,
+    },
+
+    emptyFeedText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        lineHeight: 19,
+        textAlign: "center",
+    },
+
+    footerSpacer: {
+        height: spacing.sm,
     },
 });

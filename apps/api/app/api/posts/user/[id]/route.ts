@@ -6,6 +6,8 @@ import User from "@/models/User";
 import mongoose from "mongoose";
 import { getOptionalUserId } from "@/lib/requestAuth";
 
+export const dynamic = "force-dynamic";
+
 type Tab = "posts" | "reposts" | "likes";
 
 function toObjectId(id: string) {

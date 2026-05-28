@@ -4,10 +4,13 @@ import { connectDB } from "@/lib/db";
 import mongoose from "mongoose";
 import { verifyToken } from "@/lib/auth";
 import Conversation from "@/models/Conversation";
+import User from "@/models/User";
+
+export const dynamic = "force-dynamic";
 
 function buildKey(a: string, b: string) {
     const [x, y] = [a.toString(), b.toString()].sort();
-    return `${x}_${y}`;
+    return `${x}:${y}`;
 }
 
 export async function GET(req: Request) {
@@ -48,6 +51,24 @@ export async function POST(req: Request) {
 
         if (targetUserId.toString() === meId.toString()) {
             return NextResponse.json({ error: "Impossible de se DM soi-même." }, { status: 400 });
+        }
+
+        const otherUser: any = await User.findById(targetUserId)
+            .select("_id messagePrivacy followingList")
+            .lean();
+        if (!otherUser) {
+            return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+        }
+
+        if ((otherUser.messagePrivacy || "everyone") === "following") {
+            const followingList = Array.isArray(otherUser.followingList) ? otherUser.followingList : [];
+            const canMessage = followingList.some((id: any) => id?.toString?.() === String(meId));
+            if (!canMessage) {
+                return NextResponse.json(
+                    { error: "Cet utilisateur accepte uniquement les messages des comptes qu’il suit." },
+                    { status: 403 }
+                );
+            }
         }
 
         const key = buildKey(meId, targetUserId);

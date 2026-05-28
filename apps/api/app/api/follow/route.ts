@@ -5,6 +5,9 @@ import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import FollowRequest from "@/models/FollowRequest";
 import { verifyToken } from "@/lib/auth";
+import { createNotification } from "@/lib/notifications";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
     try {
@@ -101,6 +104,12 @@ export async function POST(req: Request) {
                 existingRequest.status = "pending";
                 await existingRequest.save();
 
+                await createNotification({
+                    recipientId: String(target._id),
+                    actorId: String(me._id),
+                    type: "follow_request",
+                });
+
                 return NextResponse.json(
                     {
                         success: true,
@@ -116,6 +125,12 @@ export async function POST(req: Request) {
                 requesterId: me._id,
                 targetUserId: target._id,
                 status: "pending",
+            });
+
+            await createNotification({
+                recipientId: String(target._id),
+                actorId: String(me._id),
+                type: "follow_request",
             });
 
             return NextResponse.json(
@@ -144,6 +159,12 @@ export async function POST(req: Request) {
                 targetUserId: target._id,
             }),
         ]);
+
+        await createNotification({
+            recipientId: String(target._id),
+            actorId: String(me._id),
+            type: "follow",
+        });
 
         return NextResponse.json(
             {

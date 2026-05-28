@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { emit } from "../lib/userEvents";
 import { API_URL } from "../lib/config";
+import { getStoredToken, setStoredToken, clearStoredSession } from "../lib/authStorage";
 
 
 
@@ -44,7 +45,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -57,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // hydrate cache local
     useEffect(() => {
         (async () => {
-            const t = await AsyncStorage.getItem("token");
+            const t = await getStoredToken();
             const u = await AsyncStorage.getItem("user");
             if (t) setToken(t);
             if (u) {
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const setSession = async (t: string, u: User) => {
         setToken(t);
         setUser(u);
-        await AsyncStorage.setItem("token", t);
+        await setStoredToken(t);
         await AsyncStorage.setItem("user", JSON.stringify(u));
         emit("meUpdated", undefined);
     };
@@ -78,12 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = async () => {
         setToken(null);
         setUser(null);
-        await AsyncStorage.multiRemove(["token", "user"]);
+        await clearStoredSession();
         emit("meUpdated", undefined);
     };
 
     const refreshMe = async () => {
-        const t = token ?? (await AsyncStorage.getItem("token"));
+        const t = token ?? (await getStoredToken());
         if (!t) {
             await logout();
             return null;
@@ -103,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setToken(t);
         setUser(json.user);
-        await AsyncStorage.setItem("token", t);
+        await setStoredToken(t);
         await AsyncStorage.setItem("user", JSON.stringify(json.user));
         emit("meUpdated", undefined);
         return json.user;

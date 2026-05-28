@@ -6,6 +6,12 @@ import bcrypt from "bcryptjs";
 import { loginSchema } from "@/lib/validators/auth";
 import { signToken } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
+const INVALID_CREDENTIALS = "Identifiants invalides.";
+const DUMMY_PASSWORD_HASH =
+    "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+
 export async function POST(req: Request) {
     try {
         await connectDB();
@@ -21,17 +27,22 @@ export async function POST(req: Request) {
         const password = parsed.data.password;
 
         const userDoc = await User.findOne({ email });
-        if (!userDoc) {
-            return NextResponse.json({ error: "Cet email n'existe pas." }, { status: 400 });
+        const passwordHash = userDoc?.password || DUMMY_PASSWORD_HASH;
+        const match = await bcrypt.compare(password, passwordHash);
+
+        if (!userDoc || !match) {
+            return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
         }
 
-        const match = await bcrypt.compare(password, userDoc.password);
-        if (!match) {
-            return NextResponse.json({ error: "Mot de passe incorrect." }, { status: 400 });
+        const bannedUntil = userDoc.bannedUntil ? new Date(userDoc.bannedUntil) : null;
+        if (userDoc.isBanned && (!bannedUntil || bannedUntil.getTime() > Date.now())) {
+            return NextResponse.json(
+                { error: "Ce compte est suspendu." },
+                { status: 403 }
+            );
         }
 
         const token = signToken(userDoc._id.toString());
-        console.log("LOGIN token head:", token.slice(0, 20));
 
         // ✅ user complet (source de vérité)
         const user = await User.findById(userDoc._id)

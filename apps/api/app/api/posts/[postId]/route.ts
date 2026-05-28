@@ -7,7 +7,8 @@ import { getOptionalUserId, requireUserId } from "@/lib/requestAuth";
 
 import Post from "@/models/Post";
 import Comment from "@/models/Comment";
-import User from "@/models/User";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: { postId: string } }) {
     try {
@@ -113,12 +114,6 @@ export async function DELETE(req: Request, { params }: { params: { postId: strin
         const commentDeletion = await Comment.deleteMany({
             postId: post._id,
         });
-
-        // 4) éviter notesCount négatif
-        await User.updateOne(
-            { _id: me, notesCount: { $gt: 0 } },
-            { $inc: { notesCount: -1 } }
-        );
 
         return NextResponse.json(
             {

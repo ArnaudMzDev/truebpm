@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
     try {
         const keyId = process.env.APPLE_MUSIC_KEY_ID!;

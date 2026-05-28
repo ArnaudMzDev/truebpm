@@ -10,7 +10,7 @@ const RevokedTokenSchema = new Schema(
 
 RevokedTokenSchema.index({ exp: 1 }, { expireAfterSeconds: 0 });
 
-const RevokedToken =
+const RevokedToken: any =
     models.RevokedToken || model("RevokedToken", RevokedTokenSchema);
 
 export default RevokedToken;

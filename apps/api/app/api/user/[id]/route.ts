@@ -7,6 +7,8 @@ import FollowRequest from "@/models/FollowRequest";
 import mongoose from "mongoose";
 import { getOptionalUserId } from "@/lib/requestAuth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
     req: Request,
     { params }: { params: { id: string } }

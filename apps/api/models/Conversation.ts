@@ -57,4 +57,6 @@ ConversationSchema.index(
 
 ConversationSchema.index({ participants: 1, lastMessageAt: -1 });
 
-export default models.Conversation || model("Conversation", ConversationSchema);
+const Conversation: any = models.Conversation || model("Conversation", ConversationSchema);
+
+export default Conversation;

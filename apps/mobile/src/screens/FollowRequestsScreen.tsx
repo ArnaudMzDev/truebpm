@@ -11,8 +11,10 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { useUser } from "../context/UserContext";
+import { getStoredToken } from "../lib/authStorage";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -21,12 +23,13 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
 
 export default function FollowRequestsScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
     const { refreshMe } = useUser();
 
     const [items, setItems] = useState<any[]>([]);
@@ -34,7 +37,7 @@ export default function FollowRequestsScreen({ navigation }: any) {
     const [processingId, setProcessingId] = useState<string | null>(null);
 
     const fetchRequests = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             setItems([]);
             setLoading(false);
@@ -68,7 +71,7 @@ export default function FollowRequestsScreen({ navigation }: any) {
 
     const handleAction = useCallback(
         async (requestId: string, action: "accept" | "decline") => {
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
             if (!token) return;
 
             setProcessingId(requestId);
@@ -112,7 +115,7 @@ export default function FollowRequestsScreen({ navigation }: any) {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: Math.max(insets.bottom, 12) }]}>
             <View style={styles.topBar}>
                 <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -200,7 +203,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#000",
-        paddingTop: 54,
         paddingHorizontal: 16,
     },
     topBar: {

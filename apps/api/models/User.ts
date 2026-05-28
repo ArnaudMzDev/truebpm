@@ -124,6 +124,51 @@ const UserSchema = new Schema(
             enum: ["everyone", "following"],
             default: "everyone",
         },
+
+        isBanned: {
+            type: Boolean,
+            default: false,
+            index: true,
+        },
+
+        bannedAt: {
+            type: Date,
+            default: null,
+        },
+
+        bannedUntil: {
+            type: Date,
+            default: null,
+            index: true,
+        },
+
+        banReason: {
+            type: String,
+            default: "",
+            maxlength: 500,
+        },
+
+        bannedBy: {
+            type: String,
+            default: "",
+        },
+
+        legalAcceptedAt: {
+            type: Date,
+            default: null,
+        },
+
+        termsVersion: {
+            type: String,
+            default: "",
+            maxlength: 32,
+        },
+
+        privacyVersion: {
+            type: String,
+            default: "",
+            maxlength: 32,
+        },
     },
     { timestamps: true }
 );
@@ -137,4 +182,6 @@ UserSchema.index(
     }
 );
 
-export default models.User || model("User", UserSchema);
+const User: any = models.User || model("User", UserSchema);
+
+export default User;

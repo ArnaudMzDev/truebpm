@@ -2,10 +2,10 @@ import React from "react";
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_URL } from "../../lib/config";
 import { colors, spacing, typography, fontWeights, radius } from "../../theme";
+import { getStoredToken } from "../../lib/authStorage";
 
 type Props = {
     pseudo: string;
@@ -25,22 +25,22 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
 
-export default function Header({
-                                   pseudo,
-                                   avatarUrl,
-                                   createdAt,
-                                   userId,
-                                   repostByPseudo,
-                                   repostByUserId,
-                                   postId,
-                                   canDelete,
-                                   onDeleted,
-                               }: Props) {
+function Header({
+                    pseudo,
+                    avatarUrl,
+                    createdAt,
+                    userId,
+                    repostByPseudo,
+                    repostByUserId,
+                    postId,
+                    canDelete,
+                    onDeleted,
+                }: Props) {
     const navigation = useNavigation<any>();
     const dateLabel = formatDate(createdAt);
 
@@ -54,7 +54,7 @@ export default function Header({
     const handleDelete = async () => {
         if (!postId) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
@@ -154,6 +154,8 @@ export default function Header({
     );
 }
 
+export default React.memo(Header);
+
 function formatDate(dateString: string): string {
     const date = new Date(dateString);
     const now = new Date();
@@ -189,13 +191,13 @@ const styles = StyleSheet.create({
     },
 
     avatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         marginRight: spacing.md,
         backgroundColor: colors.surface4,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.borderAccent,
     },
 
     textWrap: {
@@ -211,7 +213,7 @@ const styles = StyleSheet.create({
 
     pseudo: {
         color: colors.text,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: fontWeights.black,
         lineHeight: 20,
     },
@@ -245,11 +247,14 @@ const styles = StyleSheet.create({
     },
 
     menuButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 40,
+        height: 40,
+        borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
         marginTop: 4,
+        backgroundColor: "rgba(8, 10, 14, 0.72)",
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
     },
 });

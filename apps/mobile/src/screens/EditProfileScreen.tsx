@@ -14,8 +14,10 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "../components/Logo";
 import { API_URL } from "../lib/config";
+import { getStoredToken } from "../lib/authStorage";
 
 const CLOUD_NAME = "dyc6hwvj4";
 const UPLOAD_PRESET = "truebpm_unsigned";
@@ -56,7 +58,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -99,6 +101,7 @@ function MusicChip({
 }
 
 export default function EditProfileScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
     const [user, setUser] = useState<User | null>(null);
 
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
@@ -229,7 +232,7 @@ export default function EditProfileScreen({ navigation }: any) {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
-            aspect: type === "avatar" ? [1, 1] : [3, 1],
+            aspect: type === "avatar" ? [1, 1] : [16, 9],
             quality: 0.8,
         });
 
@@ -317,7 +320,7 @@ export default function EditProfileScreen({ navigation }: any) {
         try {
             setLoading(true);
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
             if (!token) {
                 setLoading(false);
                 return Alert.alert("Erreur", "Tu n'es pas connecté.");
@@ -435,36 +438,71 @@ export default function EditProfileScreen({ navigation }: any) {
             style={{ flex: 1, backgroundColor: "#000" }}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-            <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+            <ScrollView
+                contentContainerStyle={[
+                    styles.container,
+                    {
+                        paddingTop: insets.top + 10,
+                        paddingBottom: Math.max(insets.bottom, 12) + 32,
+                    },
+                ]}
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.header}>
                     <Logo size={22} />
                     <Text style={styles.title}>Modifier mon profil</Text>
                 </View>
 
-                <Text style={styles.sectionTitle}>Bannière</Text>
-                <TouchableOpacity style={styles.bannerPlaceholder} onPress={() => pickImage("banner")}>
-                    {bannerUri ? (
-                        <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
-                    ) : (
-                        <Text style={styles.bannerPlaceholderText}>Choisir une bannière</Text>
-                    )}
-                </TouchableOpacity>
-
-                <Text style={styles.sectionTitle}>Photo de profil</Text>
-                <View style={styles.avatarRow}>
-                    <TouchableOpacity style={styles.avatarPlaceholder} onPress={() => pickImage("avatar")}>
-                        {avatarUri ? (
-                            <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                <Text style={styles.sectionTitle}>Aperçu du profil</Text>
+                <View style={styles.profilePreview}>
+                    <TouchableOpacity
+                        style={styles.previewBannerWrap}
+                        onPress={() => pickImage("banner")}
+                        activeOpacity={0.86}
+                    >
+                        {bannerUri ? (
+                            <Image
+                                source={{ uri: bannerUri }}
+                                style={styles.previewBannerImage}
+                                resizeMode="cover"
+                            />
                         ) : (
-                            <Text style={styles.avatarPlaceholderText}>Choisir une photo</Text>
+                            <View style={styles.previewBannerEmpty}>
+                                <Text style={styles.previewBannerEmptyText}>Choisir une bannière</Text>
+                            </View>
+                        )}
+                        <View style={styles.previewBannerOverlay} />
+                        <View style={styles.previewBannerAction}>
+                            <Text style={styles.previewActionText}>Changer la bannière</Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.previewAvatarWrap}
+                        onPress={() => pickImage("avatar")}
+                        activeOpacity={0.86}
+                    >
+                        {avatarUri ? (
+                            <Image
+                                source={{ uri: avatarUri }}
+                                style={styles.previewAvatarImage}
+                                resizeMode="cover"
+                            />
+                        ) : (
+                            <View style={styles.previewAvatarEmpty}>
+                                <Text style={styles.previewAvatarEmptyText}>Photo</Text>
+                            </View>
                         )}
                     </TouchableOpacity>
 
-                    <Text style={styles.avatarHint}>
-                        Conseil : une image claire & reconnaissable fonctionne mieux.
-                    </Text>
+                    <TouchableOpacity
+                        style={styles.previewAvatarAction}
+                        onPress={() => pickImage("avatar")}
+                        activeOpacity={0.86}
+                    >
+                        <Text style={styles.previewActionText}>Changer la photo</Text>
+                    </TouchableOpacity>
                 </View>
-
                 <Text style={styles.sectionTitle}>Bio</Text>
                 <TextInput
                     style={styles.bioInput}
@@ -578,8 +616,6 @@ const styles = StyleSheet.create({
     },
     container: {
         paddingHorizontal: 24,
-        paddingTop: 40,
-        paddingBottom: 40,
         backgroundColor: "#000",
     },
     header: {
@@ -600,43 +636,103 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         marginTop: 18,
     },
-    bannerPlaceholder: {
+    profilePreview: {
+        position: "relative",
         width: "100%",
-        height: 120,
-        borderRadius: 18,
+        height: 276,
+        marginTop: 4,
+        marginBottom: 6,
+    },
+    previewBannerWrap: {
+        width: "100%",
+        height: 218,
+        borderRadius: 24,
         backgroundColor: "#141414",
         borderWidth: 1,
         borderColor: "#333",
-        justifyContent: "center",
-        alignItems: "center",
         overflow: "hidden",
     },
-    bannerImage: { width: "100%", height: "100%" },
-    bannerPlaceholderText: { color: "#777" },
-    avatarRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 8,
+    previewBannerImage: {
+        width: "100%",
+        height: "100%",
     },
-    avatarPlaceholder: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+    previewBannerEmpty: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
         backgroundColor: "#141414",
-        borderWidth: 1,
-        borderColor: "#333",
-        justifyContent: "center",
-        alignItems: "center",
-        overflow: "hidden",
-        marginRight: 16,
     },
-    avatarImage: { width: "100%", height: "100%" },
-    avatarPlaceholderText: {
+    previewBannerEmptyText: {
         color: "#777",
-        fontSize: 11,
-        textAlign: "center",
+        fontSize: 14,
+        fontWeight: "700",
     },
-    avatarHint: { flex: 1, color: "#777", fontSize: 12 },
+    previewBannerOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(0,0,0,0.18)",
+    },
+    previewBannerAction: {
+        position: "absolute",
+        right: 12,
+        top: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.58)",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.16)",
+    },
+    previewAvatarWrap: {
+        position: "absolute",
+        left: 18,
+        bottom: 0,
+        width: 112,
+        height: 112,
+        borderRadius: 56,
+        padding: 4,
+        backgroundColor: "#000",
+        borderWidth: 1,
+        borderColor: "#222",
+        overflow: "hidden",
+    },
+    previewAvatarImage: {
+        width: "100%",
+        height: "100%",
+        borderRadius: 52,
+        borderWidth: 3,
+        borderColor: "#1B202B",
+        backgroundColor: "#141414",
+    },
+    previewAvatarEmpty: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 52,
+        backgroundColor: "#141414",
+        borderWidth: 3,
+        borderColor: "#1B202B",
+    },
+    previewAvatarEmptyText: {
+        color: "#777",
+        fontSize: 12,
+        fontWeight: "800",
+    },
+    previewAvatarAction: {
+        position: "absolute",
+        left: 142,
+        bottom: 15,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: "rgba(94, 23, 235, 0.9)",
+        borderWidth: 1,
+        borderColor: "#2E2050",
+    },
+    previewActionText: {
+        color: "#fff",
+        fontSize: 12,
+        fontWeight: "900",
+    },
     bioInput: {
         marginTop: 4,
         minHeight: 90,

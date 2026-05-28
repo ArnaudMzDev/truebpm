@@ -81,14 +81,14 @@ function MiniEqualizer({ value }: { value: number }) {
     );
 }
 
-export default function RatingMulti({
-                                        entityType,
-                                        average,
-                                        ratings,
-                                        prod,
-                                        lyrics,
-                                        emotion,
-                                    }: Props) {
+function RatingMulti({
+                         entityType,
+                         average,
+                         ratings,
+                         prod,
+                         lyrics,
+                         emotion,
+                     }: Props) {
     const [open, setOpen] = useState(false);
 
     const computedRatings = useMemo(() => {
@@ -119,38 +119,33 @@ export default function RatingMulti({
 
     return (
         <View style={styles.wrap}>
-            <View style={styles.hero}>
-                <View style={styles.heroLeft}>
-                    <Text style={styles.eyebrow}>MULTI-CRITÈRES</Text>
-
+            <TouchableOpacity
+                style={[styles.summary, open && styles.summaryOpen]}
+                onPress={() => setOpen((v) => !v)}
+                activeOpacity={0.85}
+            >
+                <View style={styles.summaryLeft}>
+                    <Text style={styles.eyebrow}>Multi-critères</Text>
                     {computedAverage !== null ? (
-                        <View style={styles.avgRow}>
+                        <View style={styles.scoreLine}>
                             <Text style={styles.avgScore}>{format(computedAverage)}</Text>
-                            <Text style={styles.avgOutOf}>/ 5</Text>
+                            <Text style={styles.avgOutOf}>/5</Text>
                         </View>
                     ) : null}
                 </View>
 
-                {computedAverage !== null ? (
-                    <View style={styles.heroEqWrap}>
+                <View style={styles.summaryRight}>
+                    {computedAverage !== null ? (
                         <MiniEqualizer value={computedAverage} />
-                    </View>
-                ) : null}
-            </View>
+                    ) : null}
 
-            <TouchableOpacity
-                style={styles.accordionBtn}
-                onPress={() => setOpen((v) => !v)}
-                activeOpacity={0.85}
-            >
-                <Text style={styles.accordionText}>
-                    {open ? "Masquer les détails" : "Voir les détails"}
-                </Text>
-                <Ionicons
-                    name={open ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={colors.textMuted}
-                />
+                    <Text style={styles.summaryHint}>{open ? "Masquer" : "Détail"}</Text>
+                    <Ionicons
+                        name={open ? "chevron-up" : "chevron-down"}
+                        size={17}
+                        color={colors.textMuted}
+                    />
+                </View>
             </TouchableOpacity>
 
             {open && computedRatings ? (
@@ -173,86 +168,90 @@ export default function RatingMulti({
     );
 }
 
+export default React.memo(RatingMulti);
+
 const styles = StyleSheet.create({
     wrap: {
-        marginTop: spacing.md,
-        marginBottom: spacing.sm,
+        marginTop: spacing.sm,
+        marginBottom: spacing.xs,
+        width: "100%",
     },
 
-    hero: {
-        backgroundColor: "#110D1C",
+    summary: {
+        width: "100%",
+        minHeight: 72,
+        backgroundColor: colors.surfaceInset,
         borderWidth: 1,
-        borderColor: "#2A2040",
+        borderColor: colors.borderSoft,
         borderRadius: radius.xl,
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        gap: spacing.md,
     },
 
-    heroLeft: {
-        flex: 1,
+    summaryOpen: {
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        borderColor: colors.borderStrong,
     },
 
     eyebrow: {
         color: colors.primary,
-        fontSize: typography.tiny,
-        fontWeight: fontWeights.black,
-        letterSpacing: 1,
-        marginBottom: 4,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.extraBold,
+        marginBottom: 2,
     },
 
-    avgRow: {
+    summaryLeft: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    scoreLine: {
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "baseline",
+    },
+
+    summaryHint: {
+        color: colors.textFaint,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.bold,
+    },
+
+    summaryRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
     },
 
     avgScore: {
         color: colors.text,
-        fontSize: 32,
-        lineHeight: 34,
+        fontSize: 28,
+        lineHeight: 31,
         fontWeight: fontWeights.black,
+        fontVariant: ["tabular-nums"],
     },
 
     avgOutOf: {
         color: colors.primary,
-        fontSize: 18,
-        lineHeight: 24,
+        fontSize: 13,
+        lineHeight: 15,
         fontWeight: fontWeights.extraBold,
-        marginLeft: 6,
-        marginBottom: 2,
-    },
-
-    heroEqWrap: {
-        marginLeft: spacing.md,
-    },
-
-    accordionBtn: {
-        marginTop: spacing.sm,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.lg,
-        paddingHorizontal: spacing.md,
-        paddingVertical: 11,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-    },
-
-    accordionText: {
-        color: colors.textSoft,
-        fontWeight: fontWeights.extraBold,
-        fontSize: typography.bodySm,
+        marginLeft: 3,
     },
 
     details: {
-        marginTop: spacing.sm,
-        backgroundColor: colors.surface,
+        marginTop: 0,
+        width: "100%",
+        backgroundColor: colors.surfaceInset,
         borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.lg,
+        borderTopWidth: 0,
+        borderColor: colors.borderStrong,
+        borderBottomLeftRadius: radius.xl,
+        borderBottomRightRadius: radius.xl,
         padding: spacing.md,
     },
 
@@ -290,16 +289,16 @@ const styles = StyleSheet.create({
 
     miniEq: {
         width: 54,
-        height: 22,
+        height: 24,
         flexDirection: "row",
         alignItems: "flex-end",
         justifyContent: "space-between",
     },
 
     miniEqTrack: {
-        width: 6,
+        width: 7,
         height: "100%",
-        backgroundColor: "#1A1527",
+        backgroundColor: colors.surfacePressed,
         borderRadius: 999,
         justifyContent: "flex-end",
         overflow: "hidden",

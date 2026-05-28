@@ -6,8 +6,6 @@ const NoteSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "User",
             required: true,
-            unique: true,
-            index: true,
         },
 
         text: {
@@ -33,7 +31,6 @@ const NoteSchema = new Schema(
         expiresAt: {
             type: Date,
             required: true,
-            index: true,
         },
     },
     { timestamps: true }
@@ -45,4 +42,6 @@ NoteSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 // sécurité supplémentaire
 NoteSchema.index({ userId: 1 }, { unique: true });
 
-export default models.Note || model("Note", NoteSchema);
+const Note: any = models.Note || model("Note", NoteSchema);
+
+export default Note;

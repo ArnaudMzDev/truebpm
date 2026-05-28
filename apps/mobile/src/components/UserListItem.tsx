@@ -12,6 +12,8 @@ import { useUser } from "../context/UserContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
+import { colors, radius, spacing, typography, fontWeights } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 type Props = {
     user: {
@@ -28,13 +30,14 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
 
 export default function UserListItem({ user, navigation }: Props) {
-    if (!user || !user._id) return null;    const { me, toggleFollow } = useUser();
+    const { me, toggleFollow } = useUser();
+    if (!user || !user._id) return null;
 
     const [loadingFollow, setLoadingFollow] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState(false);
@@ -64,9 +67,9 @@ export default function UserListItem({ user, navigation }: Props) {
     const goToChat = useCallback(
         (conversationId: string) => {
             navigation.navigate("Main", {
-                screen: "Notifications", // ton tab "Messages"
+                screen: "MessagesTab",
                 params: {
-                    screen: "Chat", // screen du MessagesStack
+                    screen: "Chat",
                     params: {
                         conversationId,
                         otherUser: {
@@ -85,7 +88,7 @@ export default function UserListItem({ user, navigation }: Props) {
         if (loadingMsg) return;
         if (isSelf) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
@@ -146,9 +149,9 @@ export default function UserListItem({ user, navigation }: Props) {
                         activeOpacity={0.85}
                     >
                         {loadingMsg ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <ActivityIndicator size="small" color={colors.text} />
                         ) : (
-                            <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
+                            <Ionicons name="chatbubble-ellipses" size={16} color={colors.text} />
                         )}
                     </TouchableOpacity>
 
@@ -164,7 +167,7 @@ export default function UserListItem({ user, navigation }: Props) {
                         activeOpacity={0.85}
                     >
                         {loadingFollow ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <ActivityIndicator size="small" color={colors.text} />
                         ) : (
                             <Text style={styles.followText}>
                                 {isFollowing ? "Ne plus suivre" : "Suivre"}
@@ -179,41 +182,51 @@ export default function UserListItem({ user, navigation }: Props) {
 
 const styles = StyleSheet.create({
     container: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderColor: "#222",
+        marginBottom: spacing.md,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        backgroundColor: "#000",
+        backgroundColor: colors.surface2,
     },
     userInfo: { flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 12 },
-    avatar: { width: 42, height: 42, borderRadius: 21, marginRight: 12, backgroundColor: "#111" },
-    pseudo: { color: "#fff", fontSize: 16, fontWeight: "600", flexShrink: 1 },
+    avatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        marginRight: spacing.md,
+        backgroundColor: colors.surface4,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    pseudo: { color: colors.text, fontSize: 16, fontWeight: fontWeights.extraBold, flexShrink: 1 },
 
-    actions: { flexDirection: "row", alignItems: "center", gap: 10 },
+    actions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
 
     msgBtn: {
-        width: 42,
-        height: 38,
+        width: 40,
+        height: 40,
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: 10,
-        backgroundColor: "#222",
+        borderRadius: radius.md,
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#2a2a2a",
+        borderColor: colors.border,
     },
 
     followBtn: {
-        minWidth: 120,
+        minWidth: 104,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
         paddingVertical: 8,
         paddingHorizontal: 14,
-        borderRadius: 10,
+        borderRadius: radius.md,
     },
-    following: { backgroundColor: "#330000", borderWidth: 1, borderColor: "#FF4444" },
-    followText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+    following: { backgroundColor: "#24151B", borderWidth: 1, borderColor: colors.danger },
+    followText: { color: colors.text, fontSize: typography.bodySm, fontWeight: fontWeights.extraBold },
 });

@@ -23,6 +23,7 @@ import * as ImagePicker from "expo-image-picker";
 import { io, Socket } from "socket.io-client";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 type OtherUser = {
     _id: string;
@@ -50,7 +51,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -230,7 +231,7 @@ export default function ChatScreen({ route, navigation }: any) {
     const fetchOtherUserPresence = useCallback(async () => {
         if (!otherUserId) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         const res = await fetch(`${API_URL}/api/user/${otherUserId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -251,7 +252,7 @@ export default function ChatScreen({ route, navigation }: any) {
     }, []);
 
     const markAsRead = useCallback(async () => {
-        const bearer = toBearer(await AsyncStorage.getItem("token"));
+        const bearer = toBearer(await getStoredToken());
         if (!bearer) return;
 
         await fetch(`${API_URL}/api/conversations/${conversationId}/read`, {
@@ -261,7 +262,7 @@ export default function ChatScreen({ route, navigation }: any) {
     }, [conversationId]);
 
     const fetchReadState = useCallback(async () => {
-        const bearer = toBearer(await AsyncStorage.getItem("token"));
+        const bearer = toBearer(await getStoredToken());
         if (!bearer) return;
 
         const res = await fetch(`${API_URL}/api/conversations/${conversationId}`, {
@@ -275,7 +276,7 @@ export default function ChatScreen({ route, navigation }: any) {
     }, [conversationId]);
 
     const fetchInitial = useCallback(async () => {
-        const bearer = toBearer(await AsyncStorage.getItem("token"));
+        const bearer = toBearer(await getStoredToken());
         if (!bearer) return;
 
         setLoading(true);
@@ -316,7 +317,7 @@ export default function ChatScreen({ route, navigation }: any) {
     const loadMore = useCallback(async () => {
         if (!cursor || loadingMore || !hasMore) return;
 
-        const bearer = toBearer(await AsyncStorage.getItem("token"));
+        const bearer = toBearer(await getStoredToken());
         if (!bearer) return;
 
         setLoadingMore(true);
@@ -391,7 +392,7 @@ export default function ChatScreen({ route, navigation }: any) {
             try {
                 if (!conversationId) return;
 
-                const stored = await AsyncStorage.getItem("token");
+                const stored = await getStoredToken();
                 const rawToken = toRawToken(stored);
                 if (!rawToken) return;
 
@@ -528,7 +529,7 @@ export default function ChatScreen({ route, navigation }: any) {
         const t = text.trim();
         if (!t || sending) return;
 
-        const bearer = toBearer(await AsyncStorage.getItem("token"));
+        const bearer = toBearer(await getStoredToken());
         if (!bearer) return;
 
         setSending(true);
@@ -577,7 +578,7 @@ export default function ChatScreen({ route, navigation }: any) {
     const sendImage = useCallback(async () => {
         if (sending) return;
 
-        const bearer = toBearer(await AsyncStorage.getItem("token"));
+        const bearer = toBearer(await getStoredToken());
         if (!bearer) return;
 
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -647,7 +648,7 @@ export default function ChatScreen({ route, navigation }: any) {
         async (postId: string) => {
             if (!postId || sending) return;
 
-            const bearer = toBearer(await AsyncStorage.getItem("token"));
+            const bearer = toBearer(await getStoredToken());
             if (!bearer) return;
 
             setSending(true);
@@ -738,7 +739,7 @@ export default function ChatScreen({ route, navigation }: any) {
                             style={{
                                 width: w,
                                 height: Math.min(320, Math.max(160, h)),
-                                borderRadius: 12,
+                                borderRadius: radius.lg,
                             }}
                             resizeMode="cover"
                         />
@@ -856,27 +857,35 @@ export default function ChatScreen({ route, navigation }: any) {
         );
     }
 
-    const composerBottom = keyboardVisible ? 8 : 16 + insets.bottom + 72;
+    const composerBottom = keyboardVisible ? 8 : Math.max(insets.bottom, 12) + 10;
 
     return (
         <>
             <KeyboardAvoidingView
                 style={styles.container}
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={0}
             >
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                     <View style={styles.flex}>
-                        <View style={styles.header}>
+                        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} activeOpacity={0.85}>
                                 <Ionicons name="chevron-back" size={22} color={colors.text} />
                             </TouchableOpacity>
 
                             <View style={styles.headerCenter}>
-                                <Image
-                                    source={{ uri: otherUser?.avatarUrl || "https://picsum.photos/200" }}
-                                    style={styles.headerAvatar}
-                                />
+                                <View style={styles.headerAvatarWrap}>
+                                    <Image
+                                        source={{ uri: otherUser?.avatarUrl || "https://picsum.photos/200" }}
+                                        style={styles.headerAvatar}
+                                    />
+                                    <View
+                                        style={[
+                                            styles.presenceDot,
+                                            otherUser?.isOnline ? styles.presenceDotOnline : styles.presenceDotOffline,
+                                        ]}
+                                    />
+                                </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.headerTitle} numberOfLines={1}>
                                         {title}
@@ -897,11 +906,21 @@ export default function ChatScreen({ route, navigation }: any) {
                                 </View>
                             </View>
 
-                            <View style={{ width: 40 }} />
+                            <TouchableOpacity
+                                style={styles.headerBtn}
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                    if (otherUser?._id) navigation.navigate("UserProfile", { userId: otherUser._id });
+                                }}
+                            >
+                                <Ionicons name="person-outline" size={18} color={colors.text} />
+                            </TouchableOpacity>
                         </View>
 
                         <FlatList
-                            ref={(r) => (listRef.current = r)}
+                            ref={(r) => {
+                                listRef.current = r;
+                            }}
                             data={messages}
                             keyExtractor={(m) => String(m._id)}
                             renderItem={renderItem}
@@ -1002,15 +1021,14 @@ const styles = StyleSheet.create({
     },
 
     header: {
-        paddingTop: 50,
-        paddingHorizontal: 12,
-        paddingBottom: 12,
+        paddingHorizontal: spacing.md,
+        paddingBottom: spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: colors.borderSoft,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: colors.bg,
+        backgroundColor: "#090B10",
     },
 
     headerBtn: {
@@ -1019,7 +1037,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.surface3,
+        backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,
     },
@@ -1032,17 +1050,45 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
 
-    headerAvatar: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+    headerAvatarWrap: {
+        position: "relative",
+        borderRadius: 999,
+        padding: 2,
         backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
+    headerAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.surface3,
+    },
+
+    presenceDot: {
+        position: "absolute",
+        right: -1,
+        bottom: -1,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: "#090B10",
+    },
+
+    presenceDotOnline: {
+        backgroundColor: "#2DD36F",
+    },
+
+    presenceDotOffline: {
+        backgroundColor: colors.textFaint,
     },
 
     headerTitle: {
         color: colors.text,
         fontWeight: fontWeights.black,
-        fontSize: 16,
+        fontSize: 17,
         flexShrink: 1,
     },
 
@@ -1068,12 +1114,13 @@ const styles = StyleSheet.create({
     },
 
     messagesContent: {
-        padding: 16,
+        paddingHorizontal: spacing.md,
+        paddingTop: spacing.lg,
         paddingBottom: 12,
     },
 
     row: {
-        marginVertical: 6,
+        marginVertical: 7,
     },
 
     rowMine: {
@@ -1085,30 +1132,33 @@ const styles = StyleSheet.create({
     },
 
     bubble: {
-        maxWidth: "82%",
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 16,
+        maxWidth: "84%",
+        paddingVertical: 11,
+        paddingHorizontal: spacing.md,
+        borderRadius: 18,
     },
 
     imageBubble: {
-        padding: 6,
+        padding: 5,
     },
 
     bubbleMine: {
         backgroundColor: colors.primaryDark,
+        borderTopRightRadius: 7,
         ...shadows.glowPrimary,
     },
 
     bubbleOther: {
-        backgroundColor: colors.surface2,
+        backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.borderSoft,
+        borderTopLeftRadius: 7,
     },
 
     msgText: {
-        fontSize: 14,
-        fontWeight: fontWeights.bold,
+        fontSize: 15,
+        lineHeight: 20,
+        fontWeight: fontWeights.medium,
     },
 
     textMine: {
@@ -1122,7 +1172,7 @@ const styles = StyleSheet.create({
     metaRow: {
         flexDirection: "row",
         gap: 10,
-        marginTop: 4,
+        marginTop: 5,
         alignItems: "center",
     },
 
@@ -1164,7 +1214,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        marginBottom: 10,
+        marginBottom: spacing.sm,
     },
 
     postAuthorAvatar: {
@@ -1184,9 +1234,9 @@ const styles = StyleSheet.create({
     postRatingPill: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
         borderRadius: radius.pill,
         backgroundColor: "rgba(255,255,255,0.16)",
     },
@@ -1199,14 +1249,15 @@ const styles = StyleSheet.create({
 
     postCard: {
         flexDirection: "row",
-        gap: 10,
+        gap: spacing.sm,
         alignItems: "center",
+        minWidth: 230,
     },
 
     postCover: {
-        width: 46,
-        height: 46,
-        borderRadius: 10,
+        width: 50,
+        height: 50,
+        borderRadius: radius.lg,
         backgroundColor: colors.surface4,
     },
 
@@ -1218,26 +1269,27 @@ const styles = StyleSheet.create({
 
     inputDock: {
         position: "absolute",
-        left: 12,
-        right: 12,
+        left: spacing.md,
+        right: spacing.md,
         zIndex: 20,
     },
 
     inputRow: {
         flexDirection: "row",
         alignItems: "flex-end",
-        gap: 10,
-        padding: 10,
+        gap: spacing.sm,
+        padding: spacing.sm,
         borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.bg,
-        borderRadius: radius.xxl,
+        borderColor: colors.borderSoft,
+        backgroundColor: "#090B10",
+        borderRadius: radius.xl,
+        ...shadows.card,
     },
 
     attachBtn: {
         width: 44,
         height: 44,
-        borderRadius: 12,
+        borderRadius: radius.lg,
         backgroundColor: colors.surface3,
         alignItems: "center",
         justifyContent: "center",
@@ -1250,10 +1302,10 @@ const styles = StyleSheet.create({
         minHeight: 44,
         maxHeight: 120,
         color: colors.text,
-        backgroundColor: colors.surface2,
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 14,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.lg,
         paddingHorizontal: 12,
         paddingVertical: 10,
         fontSize: 15,
@@ -1262,7 +1314,7 @@ const styles = StyleSheet.create({
     sendBtn: {
         width: 44,
         height: 44,
-        borderRadius: 12,
+        borderRadius: radius.lg,
         backgroundColor: colors.primaryDark,
         alignItems: "center",
         justifyContent: "center",

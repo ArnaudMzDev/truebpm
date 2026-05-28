@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserListItem from "../components/UserListItem";
 
 import { API_URL } from "../lib/config";
@@ -21,7 +22,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -39,6 +40,7 @@ function useDebouncedValue(value: string, delay = 250) {
 
 export default function FollowingListScreen({ route, navigation }: any) {
     const { userId } = route.params;
+    const insets = useSafeAreaInsets();
 
     const [connectedUser, setConnectedUser] = useState<any>(null);
 
@@ -131,7 +133,7 @@ export default function FollowingListScreen({ route, navigation }: any) {
     }, []);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top + 10, paddingBottom: Math.max(insets.bottom, 12) }]}>
             <Text style={styles.title}>Abonnements</Text>
 
             <TextInput
@@ -166,7 +168,7 @@ export default function FollowingListScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#000", paddingTop: 50, paddingHorizontal: 16 },
+    container: { flex: 1, backgroundColor: "#000", paddingHorizontal: 16 },
     title: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 16 },
     search: {
         backgroundColor: "#111",

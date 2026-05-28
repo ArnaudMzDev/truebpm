@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // apps/api/app/api/health/route.ts
 import { NextResponse } from "next/server";
 

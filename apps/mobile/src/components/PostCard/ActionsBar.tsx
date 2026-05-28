@@ -1,11 +1,11 @@
 import React from "react";
-import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Pressable, Text, StyleSheet, ActivityIndicator, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { PostType } from "./types";
 import { API_URL } from "../../lib/config";
-import { colors, spacing, typography, fontWeights } from "../../theme";
+import { colors, spacing, typography, fontWeights, radius } from "../../theme";
+import { getStoredToken } from "../../lib/authStorage";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -13,7 +13,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -36,57 +36,83 @@ type ActionButtonProps = {
     onlyIcon?: boolean;
 };
 
-function ActionButton({
-                          icon,
-                          activeIcon,
-                          active = false,
-                          count,
-                          loading = false,
-                          activeColor = colors.primary,
-                          onPress,
-                          onlyIcon = false,
-                      }: ActionButtonProps) {
+const ActionButton = React.memo(function ActionButton({
+                                                         icon,
+                                                         activeIcon,
+                                                         active = false,
+                                                         count,
+                                                         loading = false,
+                                                         activeColor = colors.primary,
+                                                         onPress,
+                                                         onlyIcon = false,
+                                                     }: ActionButtonProps) {
+    const scale = React.useRef(new Animated.Value(1)).current;
     const iconColor = active ? activeColor : colors.textMuted;
-    const textColor = active ? colors.text : colors.textMuted;
+    const textColor = active ? activeColor : colors.textMuted;
+    const activeBg = activeColor === colors.danger ? colors.dangerSoft : colors.primarySoft;
+    const activeBorder = activeColor === colors.danger ? "rgba(255, 77, 109, 0.26)" : colors.borderAccent;
+
+    const animateTo = React.useCallback(
+        (value: number) => {
+            Animated.spring(scale, {
+                toValue: value,
+                useNativeDriver: true,
+                speed: 26,
+                bounciness: 2,
+            }).start();
+        },
+        [scale]
+    );
 
     return (
-        <TouchableOpacity
-            activeOpacity={0.8}
+        <Pressable
             onPress={onPress}
-            style={styles.actionBtn}
+            onPressIn={() => animateTo(0.96)}
+            onPressOut={() => animateTo(1)}
+            disabled={loading}
+            hitSlop={6}
         >
-            {loading ? (
-                <ActivityIndicator size="small" color={iconColor} />
-            ) : (
-                <Ionicons
-                    name={active && activeIcon ? activeIcon : icon}
-                    size={20}
-                    color={iconColor}
-                />
-            )}
+            <Animated.View
+                style={[
+                    styles.actionBtn,
+                    onlyIcon && styles.actionBtnIconOnly,
+                    active && { backgroundColor: activeBg, borderColor: activeBorder },
+                    { transform: [{ scale }] },
+                ]}
+            >
+                {loading ? (
+                    <ActivityIndicator size="small" color={iconColor} />
+                ) : (
+                    <Ionicons
+                        name={active && activeIcon ? activeIcon : icon}
+                        size={20}
+                        color={iconColor}
+                    />
+                )}
 
-            {!onlyIcon && typeof count === "number" ? (
-                <Text style={[styles.actionCount, { color: textColor }]}>
-                    {count}
-                </Text>
-            ) : null}
-        </TouchableOpacity>
+                {!onlyIcon && typeof count === "number" ? (
+                    <Text style={[styles.actionCount, { color: textColor }]}>
+                        {count}
+                    </Text>
+                ) : null}
+            </Animated.View>
+        </Pressable>
     );
-}
+});
 
-export default function ActionsBar({
-                                       post,
-                                       onLocalUpdate,
-                                       onOpenComments,
-                                       onShare,
-                                   }: Props) {
+function ActionsBar({
+                        post,
+                        onLocalUpdate,
+                        onOpenComments,
+                        onShare,
+                    }: Props) {
     const [liking, setLiking] = React.useState(false);
     const [reposting, setReposting] = React.useState(false);
 
-    const toggleLike = async () => {
+    const toggleLike = React.useCallback(async () => {
         if (liking) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) return;
 
         setLiking(true);
@@ -124,12 +150,12 @@ export default function ActionsBar({
         } finally {
             setLiking(false);
         }
-    };
+    }, [liking, onLocalUpdate, post._id, post.likedByMe, post.likesCount]);
 
-    const toggleRepost = async () => {
+    const toggleRepost = React.useCallback(async () => {
         if (reposting) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) return;
 
         setReposting(true);
@@ -167,7 +193,7 @@ export default function ActionsBar({
         } finally {
             setReposting(false);
         }
-    };
+    }, [reposting, onLocalUpdate, post._id, post.repostedByMe, post.repostsCount]);
 
     return (
         <View style={styles.row}>
@@ -208,29 +234,49 @@ export default function ActionsBar({
     );
 }
 
+export default React.memo(ActionsBar);
+
 const styles = StyleSheet.create({
     row: {
+        width: "100%",
         marginTop: spacing.lg,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        borderTopWidth: 1,
+        borderTopColor: colors.borderSoft,
+        paddingTop: spacing.md,
     },
 
     leftGroup: {
         flexDirection: "row",
         alignItems: "center",
-        gap: spacing.lg,
+        gap: spacing.sm,
     },
 
     actionBtn: {
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         gap: 6,
-        paddingVertical: 4,
+        minHeight: 42,
+        minWidth: 48,
+        paddingVertical: 8,
+        paddingHorizontal: 11,
+        borderRadius: radius.pill,
+        backgroundColor: "rgba(8, 10, 14, 0.68)",
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+    },
+
+    actionBtnIconOnly: {
+        minWidth: 42,
+        paddingHorizontal: 10,
     },
 
     actionCount: {
         fontSize: typography.bodySm,
         fontWeight: fontWeights.extraBold,
+        fontVariant: ["tabular-nums"],
     },
 });

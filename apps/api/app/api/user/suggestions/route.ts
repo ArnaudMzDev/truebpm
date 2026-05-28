@@ -5,6 +5,8 @@ import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 import mongoose from "mongoose";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
     try {
         await connectDB();

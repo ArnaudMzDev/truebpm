@@ -23,4 +23,6 @@ const MessageSchema = new Schema(
 
 MessageSchema.index({ conversationId: 1, _id: -1 });
 
-export default models.Message || model("Message", MessageSchema);
+const Message: any = models.Message || model("Message", MessageSchema);
+
+export default Message;

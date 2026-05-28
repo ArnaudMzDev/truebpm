@@ -15,6 +15,12 @@ import { Ionicons } from "@expo/vector-icons";
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 import UserListItem from "../components/UserListItem";
+import AppScreen from "../components/ui/AppScreen";
+import AppHeader from "../components/ui/AppHeader";
+import AppEmptyState from "../components/ui/AppEmptyState";
+import AppSectionLoader from "../components/ui/AppSectionLoader";
+import { colors, radius, spacing, typography, fontWeights } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 
 type Filter = "all" | "posts" | "users";
@@ -49,7 +55,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -63,10 +69,12 @@ export default function ExploreSearchScreen({ navigation }: Props) {
     const [filter, setFilter] = useState<Filter>("all");
 
     const [items, setItems] = useState<SearchItem[]>([]);
+    const [discoverItems, setDiscoverItems] = useState<SearchItem[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
 
     const [loadingInitial, setLoadingInitial] = useState(false);
+    const [loadingDiscover, setLoadingDiscover] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
     const lastRequestKey = useRef<string>("");
@@ -93,6 +101,66 @@ export default function ExploreSearchScreen({ navigation }: Props) {
         },
         [filter]
     );
+
+    const fetchDiscover = useCallback(async () => {
+        const key = `discover:${filter}`;
+        lastRequestKey.current = key;
+        setLoadingDiscover(true);
+
+        try {
+            const token = await getStoredToken();
+            const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+            const [postsRes, usersRes] = await Promise.all([
+                filter !== "users"
+                    ? fetch(`${API_URL}/api/posts?feed=forYou&limit=8`, { headers })
+                    : Promise.resolve(null),
+                filter !== "posts" && token
+                    ? fetch(`${API_URL}/api/user/suggestions?limit=8`, { headers })
+                    : Promise.resolve(null),
+            ]);
+
+            const [postsJson, usersJson] = await Promise.all([
+                postsRes ? safeJson(postsRes) : Promise.resolve(null),
+                usersRes ? safeJson(usersRes) : Promise.resolve(null),
+            ]);
+
+            if (lastRequestKey.current !== key) return;
+
+            const postItems: SearchItem[] =
+                postsRes?.ok && Array.isArray(postsJson?.posts)
+                    ? postsJson.posts.map((post: PostType) => ({ type: "post" as const, post }))
+                    : [];
+
+            const userItems: SearchItem[] =
+                usersRes?.ok && Array.isArray(usersJson?.users)
+                    ? usersJson.users.map((user: SearchUser) => ({ type: "user" as const, user }))
+                    : [];
+
+            if (filter === "posts") {
+                setDiscoverItems(postItems);
+                return;
+            }
+
+            if (filter === "users") {
+                setDiscoverItems(userItems);
+                return;
+            }
+
+            const merged: SearchItem[] = [];
+            const max = Math.max(postItems.length, userItems.length);
+            for (let i = 0; i < max; i += 1) {
+                if (i < postItems.length) merged.push(postItems[i]);
+                if (i < userItems.length) merged.push(userItems[i]);
+            }
+            setDiscoverItems(merged);
+        } catch (e) {
+            console.log("Explore discover fetch error:", e);
+            if (lastRequestKey.current === key) setDiscoverItems([]);
+        } finally {
+            if (lastRequestKey.current === key) setLoadingDiscover(false);
+        }
+    }, [filter]);
 
     const fetchInitial = useCallback(async () => {
         const q = debouncedQuery.trim().replace(/\s+/g, " ");
@@ -168,6 +236,12 @@ export default function ExploreSearchScreen({ navigation }: Props) {
         fetchInitial();
     }, [fetchInitial]);
 
+    useEffect(() => {
+        if (debouncedQuery.trim().length < 2) {
+            fetchDiscover();
+        }
+    }, [debouncedQuery, fetchDiscover]);
+
     const FilterButton = useMemo(
         () =>
             function Btn({ value, label }: { value: Filter; label: string }) {
@@ -204,16 +278,23 @@ export default function ExploreSearchScreen({ navigation }: Props) {
         );
     };
 
+    const isSearching = debouncedQuery.trim().length >= 2;
+    const visibleItems = isSearching ? items : discoverItems;
+    const showInitialLoader = isSearching ? loadingInitial : loadingDiscover;
+
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Recherche</Text>
+        <AppScreen>
+            <AppHeader
+                title="Recherche"
+                compact
+            />
 
             <View style={styles.searchRow}>
-                <Ionicons name="search" size={18} color="#777" />
+                <Ionicons name="search" size={18} color={colors.textMuted} />
                 <TextInput
                     style={styles.input}
                     placeholder="Rechercher posts et utilisateurs..."
-                    placeholderTextColor="#666"
+                    placeholderTextColor={colors.textFaint}
                     value={query}
                     onChangeText={setQuery}
                     autoCorrect={false}
@@ -228,11 +309,18 @@ export default function ExploreSearchScreen({ navigation }: Props) {
                 <FilterButton value="users" label="Utilisateurs" />
             </View>
 
-            {loadingInitial ? (
-                <ActivityIndicator color="#9B5CFF" style={{ marginTop: 20 }} />
+            <View style={styles.sectionHead}>
+                <Text style={styles.sectionEyebrow}>{isSearching ? "Résultats" : "Suggestions"}</Text>
+                <Text style={styles.sectionTitle}>
+                    {isSearching ? `“${debouncedQuery.trim()}”` : "À découvrir"}
+                </Text>
+            </View>
+
+            {showInitialLoader ? (
+                <AppSectionLoader />
             ) : (
                 <FlatList
-                    data={items}
+                    data={visibleItems}
                     keyExtractor={(it, idx) => {
                         // ✅ super safe
                         if (!it) return `x:${idx}`;
@@ -244,51 +332,82 @@ export default function ExploreSearchScreen({ navigation }: Props) {
                         return it.user?._id ? `u:${it.user._id}` : `u:${idx}`;
                     }}
                     renderItem={renderItem}
-                    contentContainerStyle={{ paddingBottom: 160 }}
+                    contentContainerStyle={styles.resultsContent}
                     onEndReached={loadMore}
                     onEndReachedThreshold={0.5}
                     ListEmptyComponent={
-                        debouncedQuery.trim().length >= 2 ? (
-                            <Text style={styles.empty}>Aucun résultat</Text>
+                        isSearching ? (
+                            <AppEmptyState
+                                icon="search-outline"
+                                title="Aucun résultat"
+                                text="Essaie moins de mots."
+                            />
                         ) : (
-                            <Text style={styles.empty}>Tape au moins 2 caractères</Text>
+                            <AppEmptyState
+                                icon="sparkles-outline"
+                                title="Suggestions indisponibles"
+                                text="Lance une recherche."
+                            />
                         )
                     }
                     ListFooterComponent={
-                        loadingMore ? <ActivityIndicator color="#9B5CFF" style={{ marginVertical: 14 }} /> : null
+                        isSearching && loadingMore ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 14 }} /> : null
                     }
                     keyboardShouldPersistTaps="handled"
                 />
             )}
-        </View>
+        </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#000", paddingTop: 50, paddingHorizontal: 16 },
-    title: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 14 },
     searchRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 10,
-        backgroundColor: "#111",
-        borderRadius: 12,
-        paddingHorizontal: 12,
+        gap: spacing.sm,
+        backgroundColor: colors.surface2,
+        borderRadius: radius.lg,
+        paddingHorizontal: spacing.md,
         borderWidth: 1,
-        borderColor: "#222",
+        borderColor: colors.border,
+        minHeight: 50,
     },
-    input: { flex: 1, height: 46, color: "#fff", fontSize: 15 },
-    chipsRow: { flexDirection: "row", gap: 10, marginTop: 12, marginBottom: 10 },
+    input: { flex: 1, height: 48, color: colors.text, fontSize: 15 },
+    chipsRow: {
+        flexDirection: "row",
+        gap: spacing.sm,
+        marginTop: spacing.md,
+        marginBottom: spacing.md,
+    },
     chip: {
         paddingVertical: 8,
         paddingHorizontal: 12,
-        borderRadius: 999,
-        backgroundColor: "#111",
+        borderRadius: radius.pill,
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#222",
+        borderColor: colors.border,
     },
-    chipActive: { backgroundColor: "#5E17EB", borderColor: "#5E17EB" },
-    chipText: { color: "#bbb", fontWeight: "700", fontSize: 13 },
-    chipTextActive: { color: "#fff" },
-    empty: { color: "#777", textAlign: "center", marginTop: 30 },
+    chipActive: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
+    chipText: { color: colors.textMuted, fontWeight: fontWeights.extraBold, fontSize: typography.bodySm },
+    chipTextActive: { color: colors.text },
+    sectionHead: {
+        marginBottom: spacing.sm,
+        paddingHorizontal: spacing.xs,
+    },
+    sectionEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 1,
+        textTransform: "uppercase",
+        marginBottom: 3,
+    },
+    sectionTitle: {
+        color: colors.text,
+        fontSize: 18,
+        fontWeight: fontWeights.black,
+    },
+    resultsContent: {
+        paddingBottom: 160,
+    },
 });

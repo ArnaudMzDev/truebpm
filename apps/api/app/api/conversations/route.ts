@@ -7,6 +7,8 @@ import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
 import User from "@/models/User";
 
+export const dynamic = "force-dynamic";
+
 function getReadAt(convo: any, userId: string): Date | null {
     const ra = convo?.readAt;
     if (!ra) return null;
@@ -100,7 +102,7 @@ export async function POST(req: Request) {
         const [meUser, otherUser] = await Promise.all([
             User.findById(meId).select("_id").lean(),
             User.findById(otherUserId)
-                .select("_id pseudo avatarUrl messagePrivacy followersList")
+                .select("_id pseudo avatarUrl messagePrivacy followingList")
                 .lean(),
         ]);
 
@@ -111,11 +113,11 @@ export async function POST(req: Request) {
         const messagePrivacy = (otherUser as any)?.messagePrivacy || "everyone";
 
         if (messagePrivacy === "following") {
-            const followersList = Array.isArray((otherUser as any)?.followersList)
-                ? (otherUser as any).followersList
+            const followingList = Array.isArray((otherUser as any)?.followingList)
+                ? (otherUser as any).followingList
                 : [];
 
-            const canMessage = followersList.some(
+            const canMessage = followingList.some(
                 (id: any) => id?.toString?.() === String(meId)
             );
 
@@ -132,61 +134,36 @@ export async function POST(req: Request) {
         const sorted = [String(meId), String(otherUserId)].sort();
         const participantsKey = `${sorted[0]}:${sorted[1]}`;
 
-        let conversation: any = await Conversation.findOne({
-            isGroup: false,
-            participantsKey,
-        })
+        const now = new Date();
+        const conversationDoc = await Conversation.findOneAndUpdate(
+            {
+                isGroup: false,
+                participantsKey,
+            },
+            {
+                $setOnInsert: {
+                    isGroup: false,
+                    participants: [meId, otherUserId],
+                    participantsKey,
+                    readAt: {
+                        [String(meId)]: now,
+                        [String(otherUserId)]: now,
+                    },
+                },
+            },
+            {
+                new: true,
+                upsert: true,
+                setDefaultsOnInsert: true,
+            }
+        );
+
+        const conversation = await Conversation.findById(conversationDoc._id)
             .populate("participants", "_id pseudo avatarUrl")
             .lean();
 
-        if (!conversation) {
-            const now = new Date();
-
-            const created = await Conversation.create({
-                isGroup: false,
-                participants: [meId, otherUserId],
-                participantsKey,
-                readAt: {
-                    [String(meId)]: now,
-                    [String(otherUserId)]: now,
-                },
-            });
-
-            conversation = await Conversation.findById(created._id)
-                .populate("participants", "_id pseudo avatarUrl")
-                .lean();
-        }
-
         return NextResponse.json({ conversation }, { status: 200 });
     } catch (e: any) {
-        if (e?.code === 11000) {
-            try {
-                await connectDB();
-
-                const meId = await requireUserId(req);
-                const body = await req.json().catch(() => null);
-                const otherUserId = body?.otherUserId as string | undefined;
-
-                if (!meId || !otherUserId) {
-                    return NextResponse.json({ error: "Conflit de création." }, { status: 409 });
-                }
-
-                const sorted = [String(meId), String(otherUserId)].sort();
-                const participantsKey = `${sorted[0]}:${sorted[1]}`;
-
-                const conversation = await Conversation.findOne({
-                    isGroup: false,
-                    participantsKey,
-                })
-                    .populate("participants", "_id pseudo avatarUrl")
-                    .lean();
-
-                if (conversation) {
-                    return NextResponse.json({ conversation }, { status: 200 });
-                }
-            } catch {}
-        }
-
         console.error("POST /api/conversations error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });
     }

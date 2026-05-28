@@ -29,4 +29,6 @@ FollowRequestSchema.index(
     { unique: true }
 );
 
-export default models.FollowRequest || model("FollowRequest", FollowRequestSchema);
+const FollowRequest: any = models.FollowRequest || model("FollowRequest", FollowRequestSchema);
+
+export default FollowRequest;

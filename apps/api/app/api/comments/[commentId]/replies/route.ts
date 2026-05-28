@@ -6,6 +6,9 @@ import Post from "@/models/Post";
 import mongoose from "mongoose";
 import { getOptionalUserId, requireUserId } from "@/lib/requestAuth";
 import { createNotification } from "@/lib/notifications";
+import { cleanMultilineText } from "@/lib/sanitize";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/comments/:commentId/replies?limit=10&cursor=<objectId>
@@ -92,7 +95,7 @@ export async function POST(req: Request, { params }: { params: { commentId: stri
         }
 
         const body = await req.json().catch(() => null);
-        const text = typeof body?.text === "string" ? body.text.trim() : "";
+        const text = cleanMultilineText(body?.text, 1000);
         if (!text) {
             return NextResponse.json({ error: "Réponse vide." }, { status: 400 });
         }

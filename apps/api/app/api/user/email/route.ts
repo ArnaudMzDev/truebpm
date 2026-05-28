@@ -5,6 +5,8 @@ import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 function isValidEmail(email: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }

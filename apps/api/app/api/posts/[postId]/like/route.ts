@@ -6,6 +6,8 @@ import mongoose from "mongoose";
 import { requireUserId } from "@/lib/requestAuth";
 import { createNotification } from "@/lib/notifications";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request, { params }: { params: { postId: string } }) {
     try {
         await connectDB();
@@ -36,17 +38,10 @@ export async function POST(req: Request, { params }: { params: { postId: string 
         const likesArr = Array.isArray(base.likes) ? base.likes : [];
         const already = likesArr.some((id: any) => id?.toString?.() === me.toString());
 
-        if (already) {
-            await Post.updateOne(
-                { _id: baseId },
-                { $pull: { likes: me }, $inc: { likesCount: -1 } }
-            );
-        } else {
-            await Post.updateOne(
-                { _id: baseId },
-                { $addToSet: { likes: me }, $inc: { likesCount: 1 } }
-            );
-        }
+        await Post.updateOne(
+            { _id: baseId },
+            already ? { $pull: { likes: me } } : { $addToSet: { likes: me } }
+        );
 
         // ✅ Re-fetch pour renvoyer une vérité serveur (et éviter les compteurs négatifs/incohérents)
         const fresh: any = await Post.findById(baseId).select("likes").lean();

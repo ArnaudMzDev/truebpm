@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     View,
     TextInput,
@@ -7,11 +7,20 @@ import {
     Image,
     TouchableOpacity,
     StyleSheet,
-    ActivityIndicator,
+    Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../lib/config";
+import AppScreen from "../components/ui/AppScreen";
+import AppHeader from "../components/ui/AppHeader";
+import AppSectionLoader from "../components/ui/AppSectionLoader";
+import { colors, spacing, radius, typography, fontWeights } from "../theme";
+import {
+    isShazamKitAvailable,
+    recognizeWithShazamKit,
+    ShazamKitTrack,
+} from "../lib/shazamKit";
 
 const PROFILE_MUSIC_PICK_KEY = "edit_profile_pending_music_pick";
 const NOTE_TRACK_PICK_KEY = "create_note_pending_track_pick";
@@ -44,6 +53,8 @@ type ArtistItem = {
 
 type AnyItem = SongItem | AlbumItem | ArtistItem;
 
+type RecognizedTrack = ShazamKitTrack;
+
 type PickProfileKind =
     | "pinnedTrack"
     | "favoriteArtists"
@@ -68,9 +79,18 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(value), delayMs);
+        return () => clearTimeout(t);
+    }, [value, delayMs]);
+    return debounced;
 }
 
 function normalizeToProfileMusic(item: AnyItem) {
@@ -106,6 +126,17 @@ function normalizeToProfileMusic(item: AnyItem) {
     };
 }
 
+function recognizedToSongItem(track: RecognizedTrack): SongItem {
+    return {
+        id: track.entityId || `recognized:${track.title}:${track.artist}`,
+        type: "song",
+        title: track.title,
+        artist: track.artist,
+        cover: track.cover || null,
+        previewUrl: track.previewUrl || null,
+    };
+}
+
 export default function SearchScreen({ navigation, route }: any) {
     const mode: "pickTrack" | "pickProfileMusic" | "pickNoteTrack" =
         route?.params?.mode || "pickTrack";
@@ -121,38 +152,85 @@ export default function SearchScreen({ navigation, route }: any) {
                 : "song");
 
     const [query, setQuery] = useState("");
+    const debouncedQuery = useDebouncedValue(query, 260);
     const [type, setType] = useState<SearchType>(initialType);
     const [results, setResults] = useState<AnyItem[]>([]);
+    const [discoverItems, setDiscoverItems] = useState<AnyItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingDiscover, setLoadingDiscover] = useState(false);
+    const [recognizing, setRecognizing] = useState(false);
+    const [recognitionResult, setRecognitionResult] = useState<RecognizedTrack | null>(null);
+    const [recognitionError, setRecognitionError] = useState("");
+    const lastRequestKey = useRef("");
 
-    const search = async (forcedType?: SearchType) => {
+    const typeCopy = useMemo(() => {
+        if (type === "artist") return "Artistes populaires";
+        if (type === "album") return "Albums populaires";
+        return "Sons populaires";
+    }, [type]);
+
+    const fetchAppleItems = useCallback(async (q: string, effective: SearchType) => {
+        const params = new URLSearchParams();
+        params.set("type", effective);
+        if (q.trim()) params.set("q", q.trim());
+
+        const res = await fetch(`${API_URL}/api/search/apple?${params.toString()}`);
+        const json = await safeJson(res);
+        if (!res.ok || !Array.isArray(json?.items)) {
+            console.log("Apple search error:", res.status, json);
+            return [];
+        }
+        return json.items as AnyItem[];
+    }, []);
+
+    const loadDiscover = useCallback(async (effective: SearchType = type) => {
+        const key = `discover:${effective}`;
+        lastRequestKey.current = key;
+
+        try {
+            setLoadingDiscover(true);
+            const items = await fetchAppleItems("", effective);
+            if (lastRequestKey.current === key) setDiscoverItems(items);
+        } catch (err) {
+            console.log("Discover fetch error:", err);
+            if (lastRequestKey.current === key) setDiscoverItems([]);
+        } finally {
+            if (lastRequestKey.current === key) setLoadingDiscover(false);
+        }
+    }, [fetchAppleItems, type]);
+
+    const search = useCallback(async (forcedType?: SearchType, forcedQuery?: string) => {
         const effective = forcedType ?? type;
-        if (!query.trim()) return;
+        const q = (forcedQuery ?? query).trim().replace(/\s+/g, " ");
+        if (q.length < 2) {
+            setResults([]);
+            return;
+        }
+
+        const key = `search:${effective}:${q}`;
+        lastRequestKey.current = key;
 
         try {
             setLoading(true);
-
-            const url = `${API_URL}/api/search/apple?q=${encodeURIComponent(
-                query.trim()
-            )}&type=${effective}`;
-
-            const res = await fetch(url);
-            const json = await safeJson(res);
-
-            if (!res.ok || !json?.items) {
-                console.log("Search error:", res.status, json);
-                setResults([]);
-                return;
-            }
-
-            setResults(Array.isArray(json.items) ? json.items : []);
+            const items = await fetchAppleItems(q, effective);
+            if (lastRequestKey.current === key) setResults(items);
         } catch (err) {
             console.log("Search fetch error:", err);
-            setResults([]);
+            if (lastRequestKey.current === key) setResults([]);
         } finally {
-            setLoading(false);
+            if (lastRequestKey.current === key) setLoading(false);
         }
-    };
+    }, [fetchAppleItems, query, type]);
+
+    useEffect(() => {
+        const q = debouncedQuery.trim();
+        if (q.length >= 2) {
+            search(type, q).catch(() => {});
+        } else {
+            setResults([]);
+            loadDiscover(type).catch(() => {});
+        }
+    }, [debouncedQuery, loadDiscover, search, type]);
 
     const goToCreatePost = (payload: CreatePostNavPayload) => {
         navigation.navigate("CreatePost", payload);
@@ -196,6 +274,45 @@ export default function SearchScreen({ navigation, route }: any) {
         }
 
         navigation.goBack();
+    };
+
+    const recognizeCurrentSong = async () => {
+        if (recognizing) return;
+
+        try {
+            setRecognitionResult(null);
+            setRecognitionError("");
+
+            if (!isShazamKitAvailable()) {
+                Alert.alert(
+                    "Dev build requise",
+                    "Le vrai ShazamKit nécessite une Expo dev build iOS. Rebuild l’app, puis relance ce bouton."
+                );
+                return;
+            }
+
+            setRecognizing(true);
+            const result = await recognizeWithShazamKit();
+
+            if (!result?.matched || !result.track) {
+                setRecognitionResult(null);
+                setRecognitionError(result?.error || "Aucun morceau reconnu. Essaie un extrait plus clair.");
+                return;
+            }
+
+            const track = result.track;
+            const item = recognizedToSongItem(track);
+            setRecognitionResult(track);
+            setRecognitionError("");
+            setType("song");
+            setQuery(`${track.title} ${track.artist}`);
+            setResults([item]);
+        } catch (e: any) {
+            console.log("Recognition error:", e);
+            setRecognitionError(e?.message || "Impossible d’identifier ce morceau.");
+        } finally {
+            setRecognizing(false);
+        }
     };
 
     const handlePress = (item: AnyItem) => {
@@ -257,7 +374,7 @@ export default function SearchScreen({ navigation, route }: any) {
                         <Image source={{ uri: item.cover }} style={styles.cover} />
                     ) : (
                         <View style={styles.placeholder}>
-                            <Ionicons name="musical-notes" size={18} color="#bbb" />
+                            <Ionicons name="musical-notes" size={18} color={colors.textMuted} />
                         </View>
                     )}
 
@@ -270,7 +387,11 @@ export default function SearchScreen({ navigation, route }: any) {
                         </Text>
                     </View>
 
-                    {item.previewUrl ? <Ionicons name="play" size={18} color="#bbb" /> : null}
+                    {item.previewUrl ? (
+                        <View style={styles.playPill}>
+                            <Ionicons name="play" size={14} color={colors.text} />
+                        </View>
+                    ) : null}
                 </TouchableOpacity>
             );
         }
@@ -282,7 +403,7 @@ export default function SearchScreen({ navigation, route }: any) {
                         <Image source={{ uri: item.cover }} style={styles.cover} />
                     ) : (
                         <View style={styles.placeholder}>
-                            <Ionicons name="disc" size={18} color="#bbb" />
+                            <Ionicons name="disc" size={18} color={colors.textMuted} />
                         </View>
                     )}
 
@@ -295,7 +416,7 @@ export default function SearchScreen({ navigation, route }: any) {
                         </Text>
                     </View>
 
-                    <Ionicons name="chevron-forward" size={18} color="#666" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
                 </TouchableOpacity>
             );
         }
@@ -306,7 +427,7 @@ export default function SearchScreen({ navigation, route }: any) {
                     <Image source={{ uri: item.cover }} style={styles.cover} />
                 ) : (
                     <View style={styles.placeholder}>
-                        <Ionicons name="person" size={18} color="#bbb" />
+                        <Ionicons name="person" size={18} color={colors.textMuted} />
                     </View>
                 )}
 
@@ -319,7 +440,7 @@ export default function SearchScreen({ navigation, route }: any) {
                     </Text>
                 </View>
 
-                <Ionicons name="chevron-forward" size={18} color="#666" />
+                <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </TouchableOpacity>
         );
     };
@@ -337,130 +458,447 @@ export default function SearchScreen({ navigation, route }: any) {
                 ? "Choisir un son pour la note"
                 : "Rechercher";
 
+    const visibleItems = query.trim().length >= 2 ? results : discoverItems;
+    const isSearching = query.trim().length >= 2;
+
     return (
-        <View style={styles.container}>
-            <Text style={styles.screenTitle}>{screenTitle}</Text>
+        <AppScreen>
+            <AppHeader title={screenTitle} compact />
 
-            <TextInput
-                style={styles.input}
-                placeholder="Rechercher un titre, album, artiste..."
-                placeholderTextColor="#777"
-                value={query}
-                onChangeText={setQuery}
-                onSubmitEditing={() => search()}
-                returnKeyType="search"
-                autoCorrect={false}
-                autoCapitalize="none"
-            />
-
-            <View style={styles.filters}>
-                {(["song", "album", "artist"] as SearchType[]).map((t) => (
-                    <TouchableOpacity
-                        key={t}
-                        style={[styles.filter, type === t && styles.filterActive]}
-                        onPress={() => {
-                            setType(t);
-                            if (query.trim()) search(t);
-                        }}
-                    >
-                        <Text style={styles.filterText}>
-                            {t === "song" ? "Sons" : t === "album" ? "Albums" : "Artistes"}
-                        </Text>
+            <View style={styles.searchBox}>
+                <Ionicons name="search" size={18} color={colors.textMuted} />
+                <TextInput
+                    style={styles.input}
+                    placeholder="Titre, artiste, album..."
+                    placeholderTextColor={colors.textFaint}
+                    value={query}
+                    onChangeText={setQuery}
+                    onSubmitEditing={() => search()}
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                />
+                {query.length > 0 ? (
+                    <TouchableOpacity onPress={() => setQuery("")} style={styles.clearBtn}>
+                        <Ionicons name="close" size={16} color={colors.textMuted} />
                     </TouchableOpacity>
-                ))}
+                ) : null}
             </View>
 
-            {loading ? (
-                <ActivityIndicator size="large" color="#9B5CFF" style={{ marginTop: 30 }} />
+            <View style={styles.filters}>
+                {(["song", "album", "artist"] as SearchType[]).map((t) => {
+                    const active = type === t;
+                    return (
+                        <TouchableOpacity
+                            key={t}
+                            style={[styles.filter, active && styles.filterActive]}
+                            onPress={() => {
+                                setType(t);
+                                if (query.trim().length >= 2) search(t, query);
+                            }}
+                            activeOpacity={0.85}
+                        >
+                            <Ionicons
+                                name={t === "song" ? "musical-notes-outline" : t === "album" ? "disc-outline" : "person-outline"}
+                                size={15}
+                                color={active ? colors.bg : colors.textMuted}
+                            />
+                            <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                                {t === "song" ? "Sons" : t === "album" ? "Albums" : "Artistes"}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+
+            <View style={styles.recognitionCard}>
+                <View style={styles.recognitionHeader}>
+                    <View style={[styles.recognitionIcon, recognizing && styles.recognitionIconActive]}>
+                        <Ionicons
+                            name={recognizing ? "radio" : "sparkles"}
+                            size={20}
+                            color={recognizing ? colors.bg : colors.primary}
+                        />
+                    </View>
+                    <View style={styles.recognitionCopy}>
+                        <Text style={styles.recognitionTitle}>Identifier un son</Text>
+                        <Text style={styles.recognitionText}>
+                            {recognizing
+                                ? "ShazamKit écoute autour de toi..."
+                                : "Reconnaissance native Apple ShazamKit."}
+                        </Text>
+                    </View>
+                    <TouchableOpacity
+                        style={[styles.recognitionButton, recognizing && styles.recognitionButtonDisabled]}
+                        onPress={recognizeCurrentSong}
+                        disabled={recognizing}
+                        activeOpacity={0.86}
+                    >
+                        <Text style={styles.recognitionButtonText}>
+                            {recognizing ? "Écoute" : "Lancer"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {recognizing ? (
+                    <View style={styles.listeningBar}>
+                        <View style={styles.listeningDot} />
+                        <View style={styles.listeningDotTall} />
+                        <View style={styles.listeningDot} />
+                        <Text style={styles.listeningText}>Garde le téléphone proche de la musique.</Text>
+                    </View>
+                ) : null}
+
+                {recognitionResult ? (
+                    <TouchableOpacity
+                        style={styles.recognizedResult}
+                        onPress={() => handlePress(recognizedToSongItem(recognitionResult))}
+                        activeOpacity={0.88}
+                    >
+                        {recognitionResult.cover ? (
+                            <Image source={{ uri: recognitionResult.cover }} style={styles.recognizedCover} />
+                        ) : (
+                            <View style={styles.recognizedCoverFallback}>
+                                <Ionicons name="musical-notes" size={18} color={colors.textMuted} />
+                            </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.recognizedTitle} numberOfLines={1}>
+                                {recognitionResult.title}
+                            </Text>
+                            <Text style={styles.recognizedArtist} numberOfLines={1}>
+                                {recognitionResult.artist}
+                                {recognitionResult.album ? ` • ${recognitionResult.album}` : ""}
+                            </Text>
+                        </View>
+                        <Ionicons name="add-circle" size={24} color={colors.primary} />
+                    </TouchableOpacity>
+                ) : null}
+
+                {recognitionError ? (
+                    <Text style={styles.recognitionError}>{recognitionError}</Text>
+                ) : null}
+            </View>
+
+            <View style={styles.sectionHead}>
+                <Text style={styles.sectionEyebrow}>{isSearching ? "Résultats" : "Découverte"}</Text>
+                <Text style={styles.sectionTitle}>{isSearching ? `Recherche “${query.trim()}”` : typeCopy}</Text>
+            </View>
+
+            {loading || loadingDiscover ? (
+                <AppSectionLoader />
             ) : (
                 <FlatList
-                    data={results}
-                    keyExtractor={(item) => item.id}
+                    data={visibleItems}
+                    keyExtractor={(item, index) => `${item.type}:${item.id}:${index}`}
                     renderItem={renderItem}
-                    contentContainerStyle={{ paddingBottom: 200 }}
+                    contentContainerStyle={styles.resultsContent}
                     keyboardShouldPersistTaps="handled"
+                    ListEmptyComponent={
+                        <View style={styles.emptyBox}>
+                            <View style={styles.emptyIconWrap}>
+                                <Ionicons name="search-outline" size={18} color={colors.primary} />
+                            </View>
+                            <Text style={styles.emptyTitle}>
+                                {isSearching ? "Aucun résultat" : "Suggestions indisponibles"}
+                            </Text>
+                            <Text style={styles.emptyText}>
+                                {isSearching
+                                    ? "Essaie moins de mots, un artiste, ou une orthographe approximative."
+                                    : "Apple Music n’a rien renvoyé pour cette catégorie."}
+                            </Text>
+                        </View>
+                    }
                 />
             )}
-        </View>
+        </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#000",
-        padding: 16,
-        paddingTop: 50,
-    },
-    screenTitle: {
-        color: "#fff",
-        fontSize: 20,
-        fontWeight: "800",
-        marginBottom: 14,
+    searchBox: {
+        minHeight: 52,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        paddingHorizontal: spacing.md,
     },
     input: {
-        backgroundColor: "#111",
-        padding: 14,
-        borderRadius: 12,
-        color: "#fff",
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: "#222",
+        flex: 1,
+        color: colors.text,
+        fontSize: 15,
+        fontWeight: fontWeights.medium,
+        minHeight: 50,
+    },
+    clearBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.surface3,
     },
     filters: {
         flexDirection: "row",
-        marginTop: 14,
-        marginBottom: 10,
-        backgroundColor: "#111",
+        gap: 4,
+        marginTop: spacing.md,
+        marginBottom: spacing.md,
+        backgroundColor: colors.surface,
         padding: 4,
-        borderRadius: 10,
+        borderRadius: radius.xl,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
     },
     filter: {
         flex: 1,
-        paddingVertical: 10,
-        borderRadius: 8,
+        minHeight: 40,
+        flexDirection: "row",
+        gap: spacing.xs,
         alignItems: "center",
+        justifyContent: "center",
+        borderRadius: radius.lg,
     },
     filterActive: {
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primary,
     },
     filterText: {
-        color: "#fff",
-        fontWeight: "600",
+        color: colors.textMuted,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.bodySm,
+    },
+    filterTextActive: {
+        color: colors.bg,
+        fontWeight: fontWeights.black,
+    },
+    recognitionCard: {
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: spacing.md,
+        marginBottom: spacing.md,
+    },
+    recognitionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+    },
+    recognitionIcon: {
+        width: 42,
+        height: 42,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+    recognitionIconActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    recognitionCopy: {
+        flex: 1,
+        minWidth: 0,
+    },
+    recognitionTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+    recognitionText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        marginTop: 3,
+        lineHeight: 18,
+    },
+    recognitionButton: {
+        minHeight: 36,
+        paddingHorizontal: spacing.md,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.primaryDark,
+    },
+    recognitionButtonDisabled: {
+        opacity: 0.68,
+    },
+    recognitionButtonText: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.black,
+    },
+    listeningBar: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginTop: spacing.md,
+        paddingTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderSoft,
+    },
+    listeningDot: {
+        width: 5,
+        height: 15,
+        borderRadius: radius.pill,
+        backgroundColor: colors.primary,
+        opacity: 0.72,
+    },
+    listeningDotTall: {
+        width: 5,
+        height: 26,
+        borderRadius: radius.pill,
+        backgroundColor: colors.primary,
+    },
+    listeningText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.medium,
+        marginLeft: spacing.xs,
+        flex: 1,
+    },
+    recognizedResult: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        marginTop: spacing.md,
+        paddingTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderSoft,
+    },
+    recognizedCover: {
+        width: 46,
+        height: 46,
+        borderRadius: radius.md,
+        backgroundColor: colors.surface3,
+    },
+    recognizedCoverFallback: {
+        width: 46,
+        height: 46,
+        borderRadius: radius.md,
+        backgroundColor: colors.surface3,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    recognizedTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+    recognizedArtist: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        marginTop: 3,
+        fontWeight: fontWeights.medium,
+    },
+    recognitionError: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        lineHeight: 18,
+        marginTop: spacing.md,
+        paddingTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderSoft,
+    },
+    sectionHead: {
+        marginBottom: spacing.sm,
+        paddingHorizontal: spacing.xs,
+    },
+    sectionEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 1,
+        textTransform: "uppercase",
+        marginBottom: 3,
+    },
+    sectionTitle: {
+        color: colors.text,
+        fontSize: 18,
+        fontWeight: fontWeights.black,
+    },
+    resultsContent: {
+        paddingBottom: 200,
     },
     item: {
         flexDirection: "row",
-        padding: 12,
-        backgroundColor: "#111",
-        borderRadius: 12,
-        marginTop: 10,
+        padding: spacing.md,
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
+        marginBottom: spacing.sm,
         alignItems: "center",
         borderWidth: 1,
-        borderColor: "#1f1f1f",
+        borderColor: colors.borderSoft,
     },
     cover: {
-        width: 60,
-        height: 60,
-        borderRadius: 8,
+        width: 62,
+        height: 62,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface3,
     },
     placeholder: {
-        width: 60,
-        height: 60,
-        borderRadius: 8,
-        backgroundColor: "#1b1b1b",
+        width: 62,
+        height: 62,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface3,
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "#2a2a2a",
+        borderColor: colors.border,
     },
     title: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
-        fontWeight: "700",
+        fontWeight: fontWeights.black,
     },
     artist: {
-        color: "#aaa",
-        marginTop: 3,
-        fontSize: 13,
+        color: colors.textMuted,
+        marginTop: 4,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.medium,
+    },
+    playPill: {
+        width: 34,
+        height: 34,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.primaryDark,
+    },
+    emptyBox: {
+        marginTop: spacing.xl,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: spacing.lg,
+        alignItems: "center",
+    },
+    emptyIconWrap: {
+        width: 42,
+        height: 42,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        marginBottom: spacing.md,
+    },
+    emptyTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+        marginBottom: spacing.xs,
+    },
+    emptyText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        lineHeight: 19,
+        textAlign: "center",
     },
 });

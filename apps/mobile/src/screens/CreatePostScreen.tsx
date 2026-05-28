@@ -11,11 +11,15 @@ import {
     ScrollView,
     Alert,
 } from "react-native";
-import Slider from "@react-native-community/slider";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayer } from "../context/PlayerContext";
+import AppButton from "../components/ui/AppButton";
+import AppScreen from "../components/ui/AppScreen";
+import { colors, spacing, radius, typography, fontWeights } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 const CRITERIA_BY_TYPE: Record<
     "song" | "album" | "artist",
@@ -56,7 +60,86 @@ type Props = {
     navigation: any;
 };
 
+function clamp(value: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function snapRating(value: number) {
+    return clamp(Math.round(value * 2) / 2, 1, 5);
+}
+
+function formatRating(value: number) {
+    return Number(value.toFixed(1)).toString();
+}
+
+const SCORE_MARKS = [1, 2, 3, 4, 5];
+
+function RatingSlider({
+                          label,
+                          value,
+                          onChange,
+                          featured = false,
+                      }: {
+    label: string;
+    value: number;
+    onChange: (value: number) => void;
+    featured?: boolean;
+}) {
+    const percent = clamp((value - 1) / 4, 0, 1);
+
+    return (
+        <View style={[styles.ratingControl, featured && styles.ratingControlFeatured]}>
+            <View style={styles.ratingControlHeader}>
+                <Text style={styles.ratingControlLabel} numberOfLines={1}>
+                    {label}
+                </Text>
+
+                <View style={styles.scorePill}>
+                    <Text style={styles.scoreValue}>{formatRating(value)}</Text>
+                    <Text style={styles.scoreOutOf}>/5</Text>
+                </View>
+            </View>
+
+            <View style={styles.sliderVisualWrap}>
+                <View style={styles.sliderTrackBackdrop}>
+                    <View style={[styles.sliderTrackFill, { width: `${percent * 100}%` }]} />
+                    <View style={styles.sliderTicks} pointerEvents="none">
+                        {SCORE_MARKS.map((mark) => (
+                            <View
+                                key={mark}
+                                style={[
+                                    styles.sliderTick,
+                                    mark <= value && styles.sliderTickActive,
+                                ]}
+                            />
+                        ))}
+                    </View>
+                </View>
+
+                <Slider
+                    style={styles.ratingSlider}
+                    minimumValue={1}
+                    maximumValue={5}
+                    step={0.5}
+                    value={value}
+                    onValueChange={(next) => onChange(snapRating(next))}
+                    minimumTrackTintColor="transparent"
+                    maximumTrackTintColor="transparent"
+                    thumbTintColor={colors.primary}
+                />
+            </View>
+
+            <View style={styles.ratingScaleRow}>
+                <Text style={styles.ratingScaleText}>1</Text>
+                <Text style={styles.ratingScaleHint}>glisse pour ajuster</Text>
+                <Text style={styles.ratingScaleText}>5</Text>
+            </View>
+        </View>
+    );
+}
+
 export default function CreatePostScreen({ route, navigation }: Props) {
+    const insets = useSafeAreaInsets();
     const { entityType, entityId, track } = route.params;
 
     const [mode, setMode] = useState<"general" | "multi">("general");
@@ -105,7 +188,7 @@ export default function CreatePostScreen({ route, navigation }: Props) {
     const handlePublish = async () => {
         if (publishing) return;
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
@@ -123,7 +206,6 @@ export default function CreatePostScreen({ route, navigation }: Props) {
 
                 coverUrl: track.cover || null,
 
-                // ✅ IMPORTANT : sinon la preview n’existera jamais sur les posts
                 previewUrl: track.previewUrl || null,
 
                 mode,
@@ -141,7 +223,6 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                 payload.ratings = finalRatings;
             }
 
-            // ✅ IMPORTANT : adapte l'URL si ta route est vraiment /api/posts/create
             const res = await fetch(`${API_URL}/api/posts/create`, {
                 method: "POST",
                 headers: {
@@ -158,9 +239,6 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                 return;
             }
 
-            // Optionnel: reset player si tu veux éviter un bug de preview restée ouverte
-            // await close();
-
             navigation.replace("Main");
         } catch (e) {
             console.log("Publish error:", e);
@@ -171,237 +249,593 @@ export default function CreatePostScreen({ route, navigation }: Props) {
     };
 
     return (
-        <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-                <Ionicons name="arrow-back" size={26} color="#fff" />
-            </TouchableOpacity>
+        <AppScreen>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={[
+                    styles.content,
+                    {
+                        paddingTop: insets.top + 10,
+                        paddingBottom: Math.max(insets.bottom, 12) + 96,
+                    },
+                ]}
+            >
+                <View style={styles.topBar}>
+                    <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => navigation.goBack()}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="arrow-back" size={22} color={colors.text} />
+                    </TouchableOpacity>
 
-            <Text style={styles.title}>Créer un post</Text>
+                    <View style={styles.topTitleWrap}>
+                        <Text style={styles.eyebrow}>Création</Text>
+                        <Text style={styles.title}>Nouveau post</Text>
+                    </View>
 
-            <View style={styles.card}>
-                {track.cover ? (
-                    <Image source={{ uri: track.cover }} style={styles.cover} />
-                ) : null}
-
-                <View style={{ flex: 1 }}>
-                    <Text style={styles.trackTitle}>{track.title}</Text>
-                    <Text style={styles.trackArtist}>{track.artist}</Text>
-
-                    {entityType === "song" && track.previewUrl ? (
-                        <TouchableOpacity
-                            style={styles.previewRow}
-                            onPress={() => {
-                                if (isCurrentTrack) {
-                                    togglePlay();
-                                } else {
-                                    playPreview({
-                                        title: track.title,
-                                        artist: track.artist,
-                                        cover: track.cover || "",
-                                        url: track.previewUrl!,
-                                    });
-                                }
-                            }}
-                            activeOpacity={0.85}
-                        >
-                            <Ionicons
-                                name={isCurrentTrack && isPlaying ? "pause" : "play"}
-                                size={16}
-                                color="#fff"
-                            />
-                            <Text style={styles.previewText}>
-                                {isCurrentTrack && isPlaying ? "Pause" : "Écouter l'extrait"}
-                            </Text>
-                        </TouchableOpacity>
-                    ) : null}
+                    <View style={styles.iconButtonGhost} />
                 </View>
-            </View>
 
-            <View style={styles.switch}>
-                <TouchableOpacity
-                    style={[styles.switchBtn, mode === "general" && styles.switchActive]}
-                    onPress={() => setMode("general")}
-                >
-                    <Text style={styles.switchText}>Note simple</Text>
-                </TouchableOpacity>
+                <View style={styles.trackCard}>
+                    {track.cover ? (
+                        <Image source={{ uri: track.cover }} style={styles.cover} />
+                    ) : (
+                        <View style={[styles.cover, styles.coverFallback]}>
+                            <Ionicons name="musical-notes" size={22} color={colors.textMuted} />
+                        </View>
+                    )}
 
-                <TouchableOpacity
-                    style={[styles.switchBtn, mode === "multi" && styles.switchActive]}
-                    onPress={() => setMode("multi")}
-                >
-                    <Text style={styles.switchText}>Multi-critères</Text>
-                </TouchableOpacity>
-            </View>
-
-            {mode === "general" ? (
-                <>
-                    <Text style={styles.sectionTitle}>Note : {rating.toFixed(1)} / 5</Text>
-                    <Slider
-                        minimumValue={1}
-                        maximumValue={5}
-                        step={0.5}
-                        value={rating}
-                        onValueChange={setRating}
-                        minimumTrackTintColor="#9B5CFF"
-                        maximumTrackTintColor="#333"
-                    />
-                </>
-            ) : (
-                <>
-                    {criteria.map((c) => (
-                        <View key={c.key} style={styles.sliderBlock}>
-                            <Text style={styles.sliderLabel}>
-                                {c.label} : {(ratings[c.key] ?? 3).toFixed(1)}
+                    <View style={styles.trackMeta}>
+                        <View style={styles.typePill}>
+                            <Ionicons
+                                name={
+                                    entityType === "album"
+                                        ? "disc-outline"
+                                        : entityType === "artist"
+                                            ? "person-outline"
+                                            : "musical-notes-outline"
+                                }
+                                size={12}
+                                color={colors.primary}
+                            />
+                            <Text style={styles.typePillText}>
+                                {entityType === "album" ? "Album" : entityType === "artist" ? "Artiste" : "Son"}
                             </Text>
-                            <Slider
-                                minimumValue={1}
-                                maximumValue={5}
-                                step={0.5}
-                                value={ratings[c.key] ?? 3}
-                                onValueChange={(v) => setRatings((r) => ({ ...r, [c.key]: v }))}
-                                minimumTrackTintColor="#9B5CFF"
-                                maximumTrackTintColor="#333"
+                        </View>
+
+                        <Text style={styles.trackTitle} numberOfLines={2}>
+                            {track.title}
+                        </Text>
+                        <Text style={styles.trackArtist} numberOfLines={1}>
+                            {track.artist}
+                        </Text>
+
+                        {entityType === "song" && track.previewUrl ? (
+                            <TouchableOpacity
+                                style={styles.previewRow}
+                                onPress={() => {
+                                    if (isCurrentTrack) {
+                                        togglePlay();
+                                    } else {
+                                        playPreview({
+                                            title: track.title,
+                                            artist: track.artist,
+                                            cover: track.cover || "",
+                                            coverUrl: track.cover || "",
+                                            url: track.previewUrl!,
+                                        });
+                                    }
+                                }}
+                                activeOpacity={0.85}
+                            >
+                                <Ionicons
+                                    name={isCurrentTrack && isPlaying ? "pause-circle" : "play-circle"}
+                                    size={21}
+                                    color={isCurrentTrack && isPlaying ? colors.primary : colors.text}
+                                />
+                                <Text style={styles.previewText}>
+                                    {isCurrentTrack && isPlaying ? "Lecture en cours" : "Écouter l'extrait"}
+                                </Text>
+                            </TouchableOpacity>
+                        ) : null}
+                    </View>
+                </View>
+
+                <View style={styles.modeCard}>
+                    <TouchableOpacity
+                        style={[styles.modeButton, mode === "general" && styles.modeButtonActive]}
+                        onPress={() => setMode("general")}
+                        activeOpacity={0.86}
+                    >
+                        <Ionicons
+                            name="star-outline"
+                            size={16}
+                            color={mode === "general" ? colors.bg : colors.textMuted}
+                        />
+                        <Text style={[styles.modeText, mode === "general" && styles.modeTextActive]}>
+                            Simple
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.modeButton, mode === "multi" && styles.modeButtonActive]}
+                        onPress={() => setMode("multi")}
+                        activeOpacity={0.86}
+                    >
+                        <Ionicons
+                            name="stats-chart-outline"
+                            size={16}
+                            color={mode === "multi" ? colors.bg : colors.textMuted}
+                        />
+                        <Text style={[styles.modeText, mode === "multi" && styles.modeTextActive]}>
+                            Multi-critères
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.ratingCard}>
+                    <View style={styles.ratingHeader}>
+                        <View>
+                            <Text style={styles.eyebrow}>Notation</Text>
+                            <Text style={styles.sectionTitle}>
+                                {mode === "general" ? "Note générale" : "Note détaillée"}
+                            </Text>
+                        </View>
+
+                        <View style={styles.averagePill}>
+                            <Text style={styles.averageValue}>
+                                {formatRating(mode === "general" ? rating : average ?? 3)}
+                            </Text>
+                            <Text style={styles.averageOutOf}>/5</Text>
+                        </View>
+                    </View>
+
+                    {mode === "general" ? (
+                        <View style={styles.singleRatingWrap}>
+                            <RatingSlider
+                                label="Note"
+                                value={rating}
+                                onChange={setRating}
+                                featured
                             />
                         </View>
-                    ))}
+                    ) : (
+                        <View style={styles.multiRatingList}>
+                            {criteria.map((c) => (
+                                <RatingSlider
+                                    key={c.key}
+                                    label={c.label}
+                                    value={ratings[c.key] ?? 3}
+                                    onChange={(v) => setRatings((r) => ({ ...r, [c.key]: v }))}
+                                />
+                            ))}
+                        </View>
+                    )}
+                </View>
 
-                    {average !== null ? (
-                        <Text style={styles.average}>Moyenne : {average} / 5</Text>
-                    ) : null}
-                </>
-            )}
+                <View style={styles.commentCard}>
+                    <View style={styles.commentHeader}>
+                        <Text style={styles.eyebrow}>Avis</Text>
+                        <Text style={styles.commentCount}>{comment.trim().length}/280</Text>
+                    </View>
 
-            <TextInput
-                style={styles.input}
-                placeholder="Ton avis..."
-                placeholderTextColor="#666"
-                multiline
-                value={comment}
-                onChangeText={setComment}
-            />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Ton avis..."
+                        placeholderTextColor={colors.textFaint}
+                        multiline
+                        maxLength={280}
+                        value={comment}
+                        onChangeText={setComment}
+                        textAlignVertical="top"
+                    />
+                </View>
 
-            <TouchableOpacity
-                style={[styles.publishBtn, publishing && { opacity: 0.6 }]}
-                onPress={handlePublish}
-                disabled={publishing}
-                activeOpacity={0.85}
-            >
-                <Text style={styles.publishText}>
-                    {publishing ? "Publication..." : "Publier"}
-                </Text>
-            </TouchableOpacity>
-        </ScrollView>
+                <AppButton
+                    label={publishing ? "Publication..." : "Publier"}
+                    onPress={handlePublish}
+                    disabled={publishing}
+                    style={styles.publishBtn}
+                />
+            </ScrollView>
+        </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#000",
-        padding: 20,
-        paddingTop: 50,
+    content: {
+        paddingBottom: 120,
     },
-    title: {
-        color: "#fff",
-        fontSize: 24,
-        fontWeight: "800",
-        marginVertical: 20,
-    },
-    card: {
+
+    topBar: {
         flexDirection: "row",
-        backgroundColor: "#111",
-        padding: 14,
-        borderRadius: 14,
-        marginBottom: 20,
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: spacing.lg,
+    },
+
+    iconButton: {
+        width: 42,
+        height: 42,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#222",
+        borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
     },
+
+    iconButtonGhost: {
+        width: 42,
+        height: 42,
+    },
+
+    topTitleWrap: {
+        alignItems: "center",
+    },
+
+    eyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 1,
+        textTransform: "uppercase",
+    },
+
+    title: {
+        color: colors.text,
+        fontSize: 22,
+        lineHeight: 27,
+        fontWeight: fontWeights.black,
+        marginTop: 2,
+    },
+
+    trackCard: {
+        width: "100%",
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        padding: spacing.md,
+        borderRadius: radius.xl,
+        marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+    },
+
     cover: {
-        width: 70,
-        height: 70,
-        borderRadius: 10,
-        marginRight: 14,
+        width: 84,
+        height: 84,
+        borderRadius: radius.lg,
+        marginRight: spacing.md,
+        backgroundColor: colors.surface4,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
+
+    coverFallback: {
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    trackMeta: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    typePill: {
+        alignSelf: "flex-start",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        borderRadius: radius.pill,
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        backgroundColor: "#151122",
+        marginBottom: 8,
+    },
+
+    typePillText: {
+        color: colors.primary,
+        fontSize: 11,
+        fontWeight: fontWeights.black,
+        letterSpacing: 0.8,
+        textTransform: "uppercase",
+    },
+
     trackTitle: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "700",
+        color: colors.text,
+        fontSize: 19,
+        lineHeight: 23,
+        fontWeight: fontWeights.black,
     },
+
     trackArtist: {
-        color: "#aaa",
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.medium,
         marginTop: 4,
     },
+
     previewRow: {
+        alignSelf: "flex-start",
         flexDirection: "row",
         alignItems: "center",
-        marginTop: 8,
-        gap: 6,
+        marginTop: spacing.sm,
+        gap: spacing.xs,
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 7,
     },
+
     previewText: {
-        color: "#ccc",
-        fontSize: 13,
+        color: colors.textSoft,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.extraBold,
     },
-    switch: {
+
+    modeCard: {
+        width: "100%",
         flexDirection: "row",
-        backgroundColor: "#111",
-        borderRadius: 10,
-        marginBottom: 20,
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
+        marginBottom: spacing.md,
         borderWidth: 1,
-        borderColor: "#222",
+        borderColor: colors.borderSoft,
+        padding: 4,
+        gap: 4,
     },
-    switchBtn: {
+
+    modeButton: {
         flex: 1,
-        paddingVertical: 12,
+        minHeight: 42,
+        borderRadius: radius.lg,
+        flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
+        gap: spacing.xs,
     },
-    switchActive: {
-        backgroundColor: "#5E17EB",
-        borderRadius: 10,
+
+    modeButtonActive: {
+        backgroundColor: colors.primary,
     },
-    switchText: {
-        color: "#fff",
-        fontWeight: "600",
+
+    modeText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
     },
-    sectionTitle: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "700",
-        marginBottom: 10,
+
+    modeTextActive: {
+        color: colors.bg,
+        fontWeight: fontWeights.black,
     },
-    sliderBlock: {
-        marginBottom: 16,
-    },
-    sliderLabel: {
-        color: "#fff",
-        marginBottom: 6,
-    },
-    average: {
-        color: "#9B5CFF",
-        fontWeight: "700",
-        marginTop: 10,
-        fontSize: 16,
-    },
-    input: {
-        backgroundColor: "#111",
-        color: "#fff",
-        borderRadius: 12,
-        padding: 14,
-        minHeight: 100,
-        marginTop: 20,
+
+    ratingCard: {
+        width: "100%",
+        backgroundColor: colors.surface,
         borderWidth: 1,
-        borderColor: "#222",
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: spacing.md,
+        marginBottom: spacing.md,
     },
-    publishBtn: {
-        backgroundColor: "#9B5CFF",
-        paddingVertical: 16,
-        borderRadius: 14,
+
+    ratingHeader: {
+        flexDirection: "row",
         alignItems: "center",
-        marginTop: 20,
-        marginBottom: 100,
+        justifyContent: "space-between",
+        gap: spacing.md,
+        marginBottom: spacing.lg,
     },
-    publishText: {
-        color: "#fff",
+
+    sectionTitle: {
+        color: colors.text,
+        fontSize: 18,
+        lineHeight: 22,
+        fontWeight: fontWeights.black,
+        marginTop: 3,
+    },
+
+    averagePill: {
+        flexDirection: "row",
+        alignItems: "baseline",
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 6,
+    },
+
+    averageValue: {
+        color: colors.text,
+        fontSize: 18,
+        lineHeight: 20,
+        fontWeight: fontWeights.black,
+    },
+
+    averageOutOf: {
+        color: colors.primary,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.extraBold,
+        marginLeft: 2,
+    },
+
+    singleRatingWrap: {
+        paddingVertical: spacing.xs,
+    },
+
+    multiRatingList: {
+        gap: spacing.md,
+    },
+
+    ratingControl: {
+        width: "100%",
+        backgroundColor: colors.surface2,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.lg,
+        padding: spacing.md,
+    },
+
+    ratingControlFeatured: {
+        backgroundColor: "#10131A",
+        borderColor: "#2B3342",
+    },
+
+    ratingControlHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: spacing.md,
+        marginBottom: spacing.md,
+    },
+
+    ratingControlLabel: {
+        flex: 1,
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+
+    scorePill: {
+        flexDirection: "row",
+        alignItems: "baseline",
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 6,
+    },
+
+    scoreValue: {
+        color: colors.text,
         fontSize: 16,
-        fontWeight: "700",
+        lineHeight: 18,
+        fontWeight: fontWeights.black,
+    },
+
+    scoreOutOf: {
+        color: colors.primary,
+        fontSize: 11,
+        fontWeight: fontWeights.extraBold,
+        marginLeft: 2,
+    },
+
+    sliderVisualWrap: {
+        position: "relative",
+        height: 44,
+        justifyContent: "center",
+        marginHorizontal: -8,
+    },
+
+    sliderTrackBackdrop: {
+        position: "absolute",
+        left: 16,
+        right: 16,
+        height: 12,
+        borderRadius: radius.pill,
+        backgroundColor: colors.surface4,
+        borderWidth: 1,
+        borderColor: colors.border,
+        overflow: "hidden",
+    },
+
+    sliderTrackFill: {
+        height: "100%",
+        backgroundColor: colors.primary,
+        borderRadius: radius.pill,
+    },
+
+    sliderTicks: {
+        ...StyleSheet.absoluteFillObject,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 4,
+    },
+
+    sliderTick: {
+        width: 2,
+        height: 6,
+        borderRadius: 999,
+        backgroundColor: "rgba(255,255,255,0.16)",
+    },
+
+    sliderTickActive: {
+        backgroundColor: "rgba(255,255,255,0.58)",
+    },
+
+    ratingSlider: {
+        width: "100%",
+        height: 44,
+    },
+
+    ratingScaleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 8,
+        marginTop: spacing.xs,
+    },
+
+    ratingScaleText: {
+        color: colors.textFaint,
+        fontSize: 11,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    ratingScaleHint: {
+        color: colors.textFaint,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
+    },
+
+    commentCard: {
+        width: "100%",
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: spacing.md,
+        marginBottom: spacing.md,
+    },
+
+    commentHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: spacing.sm,
+    },
+
+    commentCount: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
+    },
+
+    input: {
+        minHeight: 118,
+        color: colors.text,
+        backgroundColor: colors.surface2,
+        borderRadius: radius.lg,
+        padding: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        fontSize: typography.body,
+        lineHeight: 21,
+        fontWeight: fontWeights.medium,
+    },
+
+    publishBtn: {
+        marginTop: spacing.xs,
     },
 });

@@ -1,6 +1,6 @@
 import React from "react";
 import { View, StyleSheet, ViewProps } from "react-native";
-import { colors, radius, spacing } from "../../theme";
+import { colors, radius, spacing, shadows } from "../../theme";
 
 type Props = ViewProps & {
     padded?: boolean;
@@ -31,9 +31,10 @@ export default function AppCard({
 
 const styles = StyleSheet.create({
     card: {
+        width: "100%",
         backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.borderSoft,
         borderRadius: radius.xl,
     },
 
@@ -42,9 +43,6 @@ const styles = StyleSheet.create({
     },
 
     elevated: {
-        shadowColor: "#000",
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
+        ...shadows.card,
     },
 });

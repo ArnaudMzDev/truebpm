@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
     View,
     Text,
@@ -14,10 +14,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../lib/config";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 import { usePlayer } from "../context/PlayerContext";
+import { getStoredToken, clearStoredSession } from "../lib/authStorage";
 import {
     colors,
     spacing,
@@ -26,6 +28,7 @@ import {
     fontWeights,
     shadows,
 } from "../theme";
+import { useAppBottomSpacing } from "../hooks/useAppBottomSpacing";
 
 type MusicRef = {
     entityId: string;
@@ -44,7 +47,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -172,6 +175,8 @@ function MiniWave({ active }: { active: boolean }) {
 }
 
 export default function ProfileScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
+    const bottomSpacing = useAppBottomSpacing({ extra: 28 });
     const [user, setUser] = useState<any>(null);
     const [loadingUser, setLoadingUser] = useState(true);
 
@@ -190,7 +195,7 @@ export default function ProfileScreen({ navigation }: any) {
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const handleLogout = useCallback(async () => {
-        const stored = await AsyncStorage.getItem("token");
+        const stored = await getStoredToken();
         const bearer = toBearer(stored);
 
         if (bearer) {
@@ -200,12 +205,12 @@ export default function ProfileScreen({ navigation }: any) {
             }).catch(() => {});
         }
 
-        await AsyncStorage.multiRemove(["token", "user"]);
+        await clearStoredSession();
         navigation.reset({ index: 0, routes: [{ name: "Login" }] });
     }, [navigation]);
 
     const fetchMe = useCallback(async () => {
-        const stored = await AsyncStorage.getItem("token");
+        const stored = await getStoredToken();
         const bearer = toBearer(stored);
 
         if (!bearer) {
@@ -236,7 +241,7 @@ export default function ProfileScreen({ navigation }: any) {
             setCursor(null);
             setHasMore(true);
 
-            const bearer = toBearer(await AsyncStorage.getItem("token"));
+            const bearer = toBearer(await getStoredToken());
             if (!bearer) return;
 
             const res = await fetch(
@@ -264,7 +269,7 @@ export default function ProfileScreen({ navigation }: any) {
         try {
             setLoadingMore(true);
 
-            const bearer = toBearer(await AsyncStorage.getItem("token"));
+            const bearer = toBearer(await getStoredToken());
             if (!bearer) return;
 
             const res = await fetch(
@@ -373,16 +378,6 @@ export default function ProfileScreen({ navigation }: any) {
         });
     }, [pinnedTrack, canPlayPinned, isPinnedCurrent, togglePlay, playPreview]);
 
-    const profileCompletion = useMemo(() => {
-        let score = 0;
-        if (user?.bio?.trim()) score += 1;
-        if (pinnedTrack) score += 1;
-        if (favoriteArtists.length) score += 1;
-        if (favoriteAlbums.length) score += 1;
-        if (favoriteTracks.length) score += 1;
-        return score;
-    }, [user?.bio, pinnedTrack, favoriteArtists.length, favoriteAlbums.length, favoriteTracks.length]);
-
     if (loadingUser || !user || (initialLoadingPosts && posts.length === 0)) {
         return (
             <View style={styles.loading}>
@@ -411,21 +406,12 @@ export default function ProfileScreen({ navigation }: any) {
                     <Image
                         source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
                         style={styles.banner}
+                        resizeMode="cover"
                     />
                     <View style={styles.bannerOverlay} />
-                    <View style={styles.bannerShade} />
                 </View>
 
-                <View style={styles.topActions}>
-                    <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => navigation.navigate("EditProfile")}
-                        activeOpacity={0.85}
-                    >
-                        <Ionicons name="create-outline" size={15} color={colors.text} />
-                        <Text style={styles.editText}>Modifier</Text>
-                    </TouchableOpacity>
-
+                <View style={[styles.topActions, { top: insets.top + 10 }]}>
                     <TouchableOpacity
                         style={styles.settingsButton}
                         onPress={() => navigation.navigate("Settings")}
@@ -437,24 +423,29 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
 
             <View style={styles.identityBlock}>
-                <View style={styles.avatarWrap}>
-                    <Image
-                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                        style={[styles.avatar, styles.avatarGlow]}
-                    />
+                <View style={styles.identityTopRow}>
+                    <View style={styles.avatarWrap}>
+                        <Image
+                            source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
+                            style={[styles.avatar, styles.avatarGlow]}
+                            resizeMode="cover"
+                        />
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.profileEditButton}
+                        onPress={() => navigation.navigate("EditProfile")}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="create-outline" size={15} color={colors.text} />
+                        <Text style={styles.profileEditText}>Modifier</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <Text style={styles.pseudo}>{user.pseudo}</Text>
                 <Text style={styles.bio}>
-                    {user.bio || "Ajoute une bio pour personnaliser ton univers musical."}
+                    {user.bio || "Aucune bio."}
                 </Text>
-
-                <View style={styles.profileBadgeRow}>
-                    <View style={styles.profileBadge}>
-                        <Ionicons name="sparkles" size={13} color={colors.primary} />
-                        <Text style={styles.profileBadgeText}>Profil musical {profileCompletion}/5</Text>
-                    </View>
-                </View>
             </View>
 
             <View style={styles.stats}>
@@ -615,7 +606,7 @@ export default function ProfileScreen({ navigation }: any) {
             )}
             ListHeaderComponent={HeaderBlock}
             ListEmptyComponent={<EmptyPostsState tab={activeTab} />}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: bottomSpacing }]}
             refreshControl={
                 <RefreshControl
                     refreshing={refreshing}
@@ -659,11 +650,13 @@ const styles = StyleSheet.create({
 
     heroWrap: {
         position: "relative",
+        marginTop: 0,
+        marginHorizontal: 0,
     },
 
     bannerBox: {
         width: "100%",
-        height: 220,
+        height: 228,
         backgroundColor: colors.surface2,
         position: "relative",
         overflow: "hidden",
@@ -676,49 +669,23 @@ const styles = StyleSheet.create({
 
     bannerOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.18)",
-    },
-
-    bannerShade: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 90,
-        backgroundColor: "rgba(0,0,0,0.45)",
+        backgroundColor: "rgba(0,0,0,0.22)",
     },
 
     topActions: {
         position: "absolute",
-        top: 168,
-        right: 16,
+        top: 12,
+        right: 12,
         flexDirection: "row",
-        gap: 10,
+        gap: spacing.sm,
         zIndex: 3,
-    },
-
-    editButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-        backgroundColor: colors.primaryDark,
-        paddingVertical: 9,
-        paddingHorizontal: 14,
-        borderRadius: radius.lg,
-        ...shadows.glowPrimary,
-    },
-
-    editText: {
-        color: colors.text,
-        fontWeight: fontWeights.bold,
-        fontSize: typography.bodySm,
     },
 
     settingsButton: {
         width: 40,
         height: 40,
         borderRadius: radius.lg,
-        backgroundColor: colors.surface3,
+        backgroundColor: "rgba(18, 22, 31, 0.88)",
         borderWidth: 1,
         borderColor: colors.border,
         alignItems: "center",
@@ -726,21 +693,29 @@ const styles = StyleSheet.create({
     },
 
     identityBlock: {
-        marginTop: -52,
-        paddingHorizontal: 20,
+        marginTop: -58,
+        marginHorizontal: 20,
+    },
+
+    identityTopRow: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        gap: spacing.md,
     },
 
     avatarWrap: {
-        alignSelf: "flex-start",
         borderRadius: 999,
         padding: 4,
         backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
     },
 
     avatar: {
-        width: 104,
-        height: 104,
-        borderRadius: 52,
+        width: 112,
+        height: 112,
+        borderRadius: 56,
         borderWidth: 3,
         borderColor: colors.surface4,
         backgroundColor: colors.surface2,
@@ -757,7 +732,7 @@ const styles = StyleSheet.create({
         fontSize: 28,
         color: colors.text,
         fontWeight: fontWeights.black,
-        marginTop: 12,
+        marginTop: spacing.sm,
         lineHeight: 32,
     },
 
@@ -766,48 +741,43 @@ const styles = StyleSheet.create({
         fontSize: typography.body,
         lineHeight: 21,
         marginTop: 8,
-        marginRight: 16,
     },
 
-    profileBadgeRow: {
-        flexDirection: "row",
-        marginTop: 14,
-    },
-
-    profileBadge: {
+    profileEditButton: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
-        backgroundColor: "#12101B",
+        gap: spacing.xs,
+        backgroundColor: "rgba(94, 23, 235, 0.9)",
         borderWidth: 1,
         borderColor: colors.borderAccent,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 10,
         borderRadius: radius.pill,
+        marginBottom: spacing.sm,
+        ...shadows.glowPrimary,
     },
 
-    profileBadgeText: {
-        color: colors.textSoft,
-        fontSize: typography.caption,
-        fontWeight: fontWeights.bold,
+    profileEditText: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.black,
     },
 
     stats: {
         flexDirection: "row",
-        marginTop: 22,
-        marginHorizontal: 16,
-        paddingVertical: 8,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
+        marginTop: spacing.lg,
+        marginHorizontal: 20,
+        paddingVertical: spacing.md,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
         borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
     },
 
     statBtn: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 10,
+        paddingVertical: 2,
     },
 
     statNumber: {
@@ -824,13 +794,13 @@ const styles = StyleSheet.create({
     },
 
     sectionBlock: {
-        marginTop: 22,
+        marginTop: spacing.md,
         marginHorizontal: 16,
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.borderSoft,
-        borderRadius: radius.xxl,
-        padding: 14,
+        borderRadius: radius.xl,
+        padding: spacing.md,
     },
 
     sectionHeader: {
@@ -863,9 +833,9 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface3,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: radius.xl,
-        padding: 12,
-        gap: 12,
+        borderRadius: radius.lg,
+        padding: spacing.md,
+        gap: spacing.md,
     },
 
     pinnedCardPlaying: {
@@ -877,7 +847,7 @@ const styles = StyleSheet.create({
     pinnedCover: {
         width: 64,
         height: 64,
-        borderRadius: 14,
+        borderRadius: radius.lg,
         backgroundColor: colors.surface4,
     },
 
@@ -933,12 +903,12 @@ const styles = StyleSheet.create({
 
     musicCard: {
         width: 148,
-        marginRight: 12,
+        marginRight: spacing.sm,
         backgroundColor: colors.surface3,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: radius.xl,
-        padding: 12,
+        borderRadius: radius.lg,
+        padding: spacing.sm,
     },
 
     musicCardCompact: {
@@ -948,9 +918,9 @@ const styles = StyleSheet.create({
     musicCardCover: {
         width: "100%",
         height: 124,
-        borderRadius: 14,
+        borderRadius: radius.lg,
         backgroundColor: colors.surface4,
-        marginBottom: 12,
+        marginBottom: spacing.sm,
     },
 
     musicPlaceholder: {
@@ -996,17 +966,19 @@ const styles = StyleSheet.create({
 
     tabsRow: {
         flexDirection: "row",
-        gap: 10,
+        gap: spacing.sm,
         marginHorizontal: 16,
-        marginTop: 24,
-        marginBottom: 12,
+        marginTop: spacing.lg,
+        marginBottom: spacing.md,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: 4,
     },
 
     tabBtn: {
         flex: 1,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.border,
         borderRadius: radius.lg,
         paddingVertical: 11,
         alignItems: "center",

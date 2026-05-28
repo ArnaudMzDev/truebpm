@@ -1,4 +1,17 @@
-export const LOCAL_IP = "192.168.1.25";
+import Constants from "expo-constants";
 
-export const API_URL = `http://${LOCAL_IP}:3000`;
-export const SOCKET_URL = `http://${LOCAL_IP}:3001`;
+declare const process: {
+    env?: Record<string, string | undefined>;
+};
+
+const extra = (Constants.expoConfig?.extra || {}) as Record<string, string | undefined>;
+
+export const API_URL =
+    process.env?.EXPO_PUBLIC_API_URL ||
+    extra.apiUrl ||
+    "http://192.168.1.25:3000";
+
+export const SOCKET_URL =
+    process.env?.EXPO_PUBLIC_SOCKET_URL ||
+    extra.socketUrl ||
+    "http://192.168.1.25:3001";

@@ -13,6 +13,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
 import { API_URL } from "../lib/config";
+import { colors, radius, spacing, typography, fontWeights, shadows } from "../theme";
+import { setStoredToken, clearStoredSession } from "../lib/authStorage";
 
 function ErrorMessage({ message }: { message: string }) {
     const opacity = useRef(new Animated.Value(0)).current;
@@ -48,7 +50,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -71,7 +73,6 @@ export default function LoginScreen({ navigation }: any) {
         setLoading(true);
 
         try {
-            console.log("LOGIN API_URL =", API_URL);
 
             const loginRes = await fetch(`${API_URL}/api/auth/login`, {
                 method: "POST",
@@ -92,7 +93,7 @@ export default function LoginScreen({ navigation }: any) {
                 return setError("Réponse serveur invalide.");
             }
 
-            await AsyncStorage.setItem("token", token);
+            await setStoredToken(token);
 
             const meRes = await fetch(`${API_URL}/api/user/me`, {
                 method: "GET",
@@ -104,13 +105,13 @@ export default function LoginScreen({ navigation }: any) {
             const meData = await safeJson(meRes);
 
             if (!meRes.ok) {
-                await AsyncStorage.multiRemove(["token", "user"]);
+                await clearStoredSession();
                 setLoading(false);
                 return setError(meData?.error || "Impossible de récupérer le profil.");
             }
 
             if (!meData?.user?._id) {
-                await AsyncStorage.multiRemove(["token", "user"]);
+                await clearStoredSession();
                 setLoading(false);
                 return setError("Profil invalide.");
             }
@@ -148,7 +149,7 @@ export default function LoginScreen({ navigation }: any) {
                     <TextInput
                         style={[styles.input, focused === "email" && styles.inputFocused]}
                         placeholder="exemple@mail.com"
-                        placeholderTextColor="#777"
+                        placeholderTextColor={colors.textFaint}
                         keyboardType="email-address"
                         autoCapitalize="none"
                         onFocus={() => setFocused("email")}
@@ -162,7 +163,7 @@ export default function LoginScreen({ navigation }: any) {
                     <TextInput
                         style={[styles.input, focused === "password" && styles.inputFocused]}
                         placeholder="Mot de passe"
-                        placeholderTextColor="#777"
+                        placeholderTextColor={colors.textFaint}
                         secureTextEntry
                         onFocus={() => setFocused("password")}
                         onBlur={() => setFocused(null)}
@@ -199,48 +200,46 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
-        paddingHorizontal: 24,
+        backgroundColor: colors.bg,
+        paddingHorizontal: spacing.xxl,
         justifyContent: "center",
     },
     header: { alignItems: "center", marginBottom: 40 },
-    subtitle: { marginTop: 10, fontSize: 16, color: "#aaa" },
+    subtitle: { marginTop: 10, fontSize: 16, color: colors.textMuted, fontWeight: fontWeights.medium },
     form: { width: "100%" },
     label: {
-        color: "#fff",
+        color: colors.text,
         marginBottom: 8,
         marginTop: 12,
-        fontSize: 14,
-        fontWeight: "600",
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.extraBold,
     },
     input: {
         width: "100%",
         height: 52,
-        borderRadius: 14,
+        borderRadius: radius.lg,
         paddingHorizontal: 16,
         fontSize: 16,
-        color: "#fff",
-        backgroundColor: "#141414",
+        color: colors.text,
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#333",
+        borderColor: colors.border,
     },
     inputFocused: {
-        borderColor: "#9B5CFF",
-        shadowColor: "#9B5CFF",
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 0 },
+        borderColor: colors.primary,
+        ...shadows.glowPrimary,
     },
-    errorText: { color: "#ff4d4d", fontSize: 14, fontWeight: "500" },
+    errorText: { color: colors.danger, fontSize: 14, fontWeight: fontWeights.medium },
     button: {
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
         paddingVertical: 14,
-        borderRadius: 12,
+        borderRadius: radius.lg,
         alignItems: "center",
         marginTop: 28,
+        ...shadows.glowPrimary,
     },
-    buttonDisabled: { backgroundColor: "#2f116e", opacity: 0.5 },
-    buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-    registerText: { color: "#aaa", textAlign: "center", marginTop: 18 },
-    registerHighlight: { color: "#9B5CFF", fontWeight: "700" },
+    buttonDisabled: { opacity: 0.5 },
+    buttonText: { color: colors.text, fontSize: 16, fontWeight: fontWeights.extraBold },
+    registerText: { color: colors.textMuted, textAlign: "center", marginTop: 18 },
+    registerHighlight: { color: colors.primary, fontWeight: fontWeights.extraBold },
 });

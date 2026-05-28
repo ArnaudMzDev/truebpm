@@ -18,6 +18,7 @@ import AppHeader from "../components/ui/AppHeader";
 import AppCard from "../components/ui/AppCard";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -25,7 +26,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -61,9 +62,15 @@ type Conversation = {
 };
 
 function formatPreview(c: Conversation) {
-    if (c.lastMessageType === "post") return c.lastMessageText || "📌 Post partagé";
-    if (c.lastMessageType === "image") return c.lastMessageText || "📷 Photo";
+    if (c.lastMessageType === "post") return c.lastMessageText || "Post partagé";
+    if (c.lastMessageType === "image") return c.lastMessageText || "Photo";
     return c.lastMessageText || "—";
+}
+
+function getPreviewIcon(type?: Conversation["lastMessageType"]) {
+    if (type === "post") return "musical-notes-outline";
+    if (type === "image") return "image-outline";
+    return "chatbubble-ellipses-outline";
 }
 
 function formatConversationTime(dateString?: string | null) {
@@ -109,6 +116,7 @@ function ConversationRow({
     const unread = (item.unreadCount ?? 0) > 0;
     const preview = formatPreview(item);
     const timeLabel = formatConversationTime(item.lastMessageAt || item.updatedAt || null);
+    const previewIcon = getPreviewIcon(item.lastMessageType);
 
     return (
         <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
@@ -124,29 +132,44 @@ function ConversationRow({
 
                     <View style={styles.content}>
                         <View style={styles.topLine}>
-                            <Text style={[styles.name, unread && styles.nameUnread]} numberOfLines={1}>
-                                {other?.pseudo || "Conversation"}
-                            </Text>
+                            <View style={styles.nameLine}>
+                                <Text style={[styles.name, unread && styles.nameUnread]} numberOfLines={1}>
+                                    {other?.pseudo || "Conversation"}
+                                </Text>
+                                {unread ? <View style={styles.unreadPillMini} /> : null}
+                            </View>
 
                             <View style={styles.topRight}>
                                 {timeLabel ? <Text style={styles.time}>{timeLabel}</Text> : null}
-
-                                {(item.unreadCount ?? 0) > 0 ? (
-                                    <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>
-                                            {item.unreadCount! > 99 ? "99+" : item.unreadCount}
-                                        </Text>
-                                    </View>
-                                ) : null}
                             </View>
                         </View>
 
-                        <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
-                            {preview}
-                        </Text>
+                        <View style={styles.previewLine}>
+                            <View style={[styles.previewIconWrap, unread && styles.previewIconWrapUnread]}>
+                                <Ionicons
+                                    name={previewIcon as keyof typeof Ionicons.glyphMap}
+                                    size={13}
+                                    color={unread ? colors.primary : colors.textMuted}
+                                />
+                            </View>
+
+                            <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
+                                {preview}
+                            </Text>
+                        </View>
                     </View>
 
-                    <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+                    <View style={styles.trailing}>
+                        {(item.unreadCount ?? 0) > 0 ? (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>
+                                    {item.unreadCount! > 99 ? "99+" : item.unreadCount}
+                                </Text>
+                            </View>
+                        ) : (
+                            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+                        )}
+                    </View>
                 </View>
             </AppCard>
         </TouchableOpacity>
@@ -175,7 +198,7 @@ export default function ConversationsScreen({ navigation, route }: any) {
     }, []);
 
     const fetchConversations = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             setConversations([]);
             return;
@@ -209,7 +232,7 @@ export default function ConversationsScreen({ navigation, route }: any) {
         let alive = true;
 
         (async () => {
-            const stored = await AsyncStorage.getItem("token");
+            const stored = await getStoredToken();
             const rawToken = stripToken(stored);
             if (!rawToken) return;
 
@@ -271,6 +294,27 @@ export default function ConversationsScreen({ navigation, route }: any) {
         [sharePostId]
     );
 
+    const ListHeader = () => (
+        <View style={styles.listHeader}>
+            {sharePostId ? (
+                <View style={styles.shareBanner}>
+                    <View style={styles.shareIconWrap}>
+                        <Ionicons name="paper-plane-outline" size={16} color={colors.primary} />
+                    </View>
+                    <View style={styles.shareCopy}>
+                        <Text style={styles.shareTitle}>Partager un post</Text>
+                        <Text style={styles.shareText}>Choisis une conversation pour envoyer ce morceau.</Text>
+                    </View>
+                </View>
+            ) : (
+                <View style={styles.inboxIntro}>
+                    <Text style={styles.inboxEyebrow}>Inbox</Text>
+                    <Text style={styles.inboxTitle}>{conversations.length} conversation{conversations.length > 1 ? "s" : ""}</Text>
+                </View>
+            )}
+        </View>
+    );
+
     if (loading) {
         return <AppScreenLoader label="Chargement des conversations..." />;
     }
@@ -290,6 +334,7 @@ export default function ConversationsScreen({ navigation, route }: any) {
                     />
                 )}
                 contentContainerStyle={styles.listContent}
+                ListHeaderComponent={ListHeader}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
@@ -319,14 +364,82 @@ const styles = StyleSheet.create({
         paddingBottom: 120,
     },
 
+    listHeader: {
+        marginBottom: spacing.sm,
+    },
+
+    inboxIntro: {
+        marginBottom: spacing.xs,
+        paddingHorizontal: spacing.xs,
+    },
+
+    inboxEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 1,
+        textTransform: "uppercase",
+        marginBottom: 3,
+    },
+
+    inboxTitle: {
+        color: colors.text,
+        fontSize: 18,
+        fontWeight: fontWeights.black,
+    },
+
+    shareBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        backgroundColor: "#111018",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        borderRadius: radius.xl,
+        padding: spacing.md,
+        marginBottom: spacing.sm,
+    },
+
+    shareIconWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: radius.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#151122",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+    },
+
+    shareCopy: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    shareTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+
+    shareText: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.medium,
+        marginTop: 3,
+    },
+
     rowCard: {
-        marginBottom: spacing.md,
+        marginBottom: spacing.sm,
         paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
     },
 
     rowCardUnread: {
         borderColor: colors.borderAccent,
-        backgroundColor: "#111018",
+        backgroundColor: "#10131B",
     },
 
     row: {
@@ -337,12 +450,17 @@ const styles = StyleSheet.create({
 
     avatarWrap: {
         position: "relative",
+        borderRadius: 999,
+        padding: 2,
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
 
     avatar: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
+        width: 54,
+        height: 54,
+        borderRadius: 27,
         backgroundColor: colors.surface3,
     },
 
@@ -363,6 +481,14 @@ const styles = StyleSheet.create({
         minWidth: 0,
     },
 
+    nameLine: {
+        flex: 1,
+        minWidth: 0,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+    },
+
     topLine: {
         flexDirection: "row",
         alignItems: "center",
@@ -376,10 +502,33 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
     },
 
+    previewLine: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        marginTop: 7,
+    },
+
+    previewIconWrap: {
+        width: 22,
+        height: 22,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
+    previewIconWrapUnread: {
+        backgroundColor: "#151122",
+        borderColor: colors.borderAccent,
+    },
+
     name: {
         color: colors.text,
         fontWeight: fontWeights.extraBold,
-        fontSize: 15,
+        fontSize: 16,
         flex: 1,
     },
 
@@ -389,12 +538,14 @@ const styles = StyleSheet.create({
 
     preview: {
         color: colors.textMuted,
-        marginTop: 4,
         fontSize: typography.bodySm,
+        fontWeight: fontWeights.medium,
+        flex: 1,
     },
 
     previewUnread: {
         color: colors.textSoft,
+        fontWeight: fontWeights.bold,
     },
 
     time: {
@@ -403,10 +554,22 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.medium,
     },
 
+    trailing: {
+        width: 30,
+        alignItems: "flex-end",
+    },
+
+    unreadPillMini: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+        backgroundColor: colors.primary,
+    },
+
     badge: {
-        minWidth: 22,
-        height: 20,
-        borderRadius: 10,
+        minWidth: 24,
+        height: 24,
+        borderRadius: 12,
         backgroundColor: colors.primary,
         alignItems: "center",
         justifyContent: "center",

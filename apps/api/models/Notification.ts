@@ -50,7 +50,7 @@ const NotificationSchema = new Schema(
 NotificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
 NotificationSchema.index({ recipientId: 1, createdAt: -1 });
 
-const Notification =
+const Notification: any =
     models.Notification || model("Notification", NotificationSchema);
 
 export default Notification;

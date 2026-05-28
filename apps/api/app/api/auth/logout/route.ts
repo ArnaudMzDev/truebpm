@@ -4,11 +4,16 @@ import { connectDB } from "@/lib/db";
 import jwt from "jsonwebtoken";
 import RevokedToken from "@/models/RevokedToken";
 
-type JwtPayload = { id: string; jti: string; exp?: number };
+export const dynamic = "force-dynamic";
+
+type JwtPayload = { id: string; exp?: number };
 
 function getJwtSecret() {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error("JWT_SECRET is missing");
+    if (process.env.NODE_ENV === "production" && secret.length < 32) {
+        throw new Error("JWT_SECRET must be at least 32 characters in production");
+    }
     return secret;
 }
 
@@ -18,12 +23,12 @@ export async function POST(req: Request) {
 
         const header = req.headers.get("authorization") || "";
         const [scheme, token] = header.split(" ");
-        if (scheme?.toLowerCase() !== "bearer" || !token) {
+        if (scheme?.toLowerCase() !== "bearer" || !token || token.length > 4096) {
             return NextResponse.json({ error: "Missing token" }, { status: 401 });
         }
 
-        const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
-        if (!decoded?.id || !decoded?.jti) {
+        const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
+        if (!decoded?.id) {
             return NextResponse.json({ error: "Invalid token" }, { status: 401 });
         }
 
@@ -31,10 +36,9 @@ export async function POST(req: Request) {
         const expSeconds = decoded.exp;
         const expDate = expSeconds ? new Date(expSeconds * 1000) : new Date(Date.now() + 7 * 24 * 3600 * 1000);
 
-        // ✅ enregistre jti en blacklist (upsert)
         await RevokedToken.updateOne(
-            { jti: decoded.jti },
-            { $setOnInsert: { jti: decoded.jti, userId: decoded.id, exp: expDate } },
+            { token },
+            { $setOnInsert: { token, exp: expDate } },
             { upsert: true }
         );
 

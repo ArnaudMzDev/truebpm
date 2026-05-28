@@ -120,5 +120,15 @@ PostSchema.index(
         partialFilterExpression: { type: "repost" },
     }
 );
+PostSchema.index(
+    { trackTitle: "text", artist: "text", comment: "text" },
+    {
+        weights: { trackTitle: 10, artist: 6, comment: 2 },
+        name: "post_text_search",
+        default_language: "none",
+    }
+);
 
-export default models.Post || model("Post", PostSchema);
+const Post: any = models.Post || model("Post", PostSchema);
+
+export default Post;

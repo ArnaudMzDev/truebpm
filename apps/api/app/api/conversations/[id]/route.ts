@@ -5,6 +5,8 @@ import { connectDB } from "@/lib/db";
 import { verifyToken } from "@/lib/auth";
 import Conversation from "@/models/Conversation";
 
+export const dynamic = "force-dynamic";
+
 function isObjectId(id: string) {
     return mongoose.Types.ObjectId.isValid(id);
 }

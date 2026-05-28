@@ -1,17 +1,9 @@
 import dotenv from "dotenv";
 import path from "path";
-import crypto from "crypto";
 import http from "http";
 import { Server } from "socket.io";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
-
-const fp = (s?: string) =>
-    s ? crypto.createHash("sha256").update(s).digest("hex").slice(0, 8) : "missing";
-
-console.log("SOCKET JWT_SECRET fp:", fp(process.env.JWT_SECRET));
-console.log("SOCKET cwd:", process.cwd());
-console.log("SOCKET env path:", path.resolve(process.cwd(), ".env.local"));
 
 import "@/lib/loadModels";
 import { connectDB } from "@/lib/db";
@@ -23,6 +15,18 @@ import Notification from "@/models/Notification";
 import User from "@/models/User";
 
 const PORT = Number(process.env.SOCKET_PORT || 3001);
+
+function getAllowedSocketOrigins() {
+ return (process.env.SOCKET_CORS_ORIGINS || process.env.CORS_ALLOWED_ORIGINS || "")
+     .split(",")
+     .map((origin) => origin.trim())
+     .filter(Boolean);
+}
+
+function isAllowedDevOrigin(origin: string) {
+ if (process.env.NODE_ENV === "production") return false;
+ return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin);
+}
 
 async function emitPresenceToContacts(io: Server, userId: string, isOnline: boolean, lastSeenAt: Date) {
  try {
@@ -60,8 +64,16 @@ async function main() {
 
  const io = new Server(server, {
   cors: {
-   origin: "*",
+   origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed = getAllowedSocketOrigins();
+    if (allowed.includes(origin) || isAllowedDevOrigin(origin)) {
+     return callback(null, true);
+    }
+    return callback(new Error("Origin not allowed"), false);
+   },
    methods: ["GET", "POST"],
+   credentials: true,
   },
   transports: ["polling", "websocket"],
  });
@@ -74,7 +86,9 @@ async function main() {
    socket.userId = String(userId);
    return next();
   } catch (e: any) {
-   console.log("SOCKET auth failed:", e?.message || e);
+   if (process.env.NODE_ENV !== "production") {
+    console.log("SOCKET auth failed:", e?.message || e);
+   }
    return next(new Error("Unauthorized"));
   }
  });
@@ -83,11 +97,13 @@ async function main() {
   // @ts-ignore
   const meId = socket.userId as string;
 
-  console.log("✅ socket connected:", {
-   socketId: socket.id,
-   userId: meId,
-   transport: socket.conn.transport.name,
-  });
+  if (process.env.NODE_ENV !== "production") {
+   console.log("✅ socket connected:", {
+    socketId: socket.id,
+    userId: meId,
+    transport: socket.conn.transport.name,
+   });
+  }
 
   socket.join(`user:${meId}`);
 
@@ -156,11 +172,13 @@ async function main() {
   });
 
   socket.on("disconnect", async (reason) => {
-   console.log("🛑 socket disconnected:", {
-    socketId: socket.id,
-    userId: meId,
-    reason,
-   });
+   if (process.env.NODE_ENV !== "production") {
+    console.log("🛑 socket disconnected:", {
+     socketId: socket.id,
+     userId: meId,
+     reason,
+    });
+   }
 
    try {
     const stillConnected = await io.in(`user:${meId}`).fetchSockets();

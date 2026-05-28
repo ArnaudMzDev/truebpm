@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+    
+        <defs>
+            <linearGradient id="bpm-gradient" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#9B5CFF"/>
+                <stop offset="100%" stop-color="#5E17EB"/>
+            </linearGradient>
+            <linearGradient id="icon-gradient" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#9B5CFF"/>
+                <stop offset="58%" stop-color="#5E17EB"/>
+                <stop offset="100%" stop-color="#230A58"/>
+            </linearGradient>
+            <radialGradient id="icon-glow" cx="50%" cy="32%" r="68%">
+                <stop offset="0%" stop-color="#D84DFF" stop-opacity="0.42"/>
+                <stop offset="52%" stop-color="#9B5CFF" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#050608" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="18" result="blur"/>
+                <feMerge>
+                    <feMergeNode in="blur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+        </defs>
+    
+    <rect x="112" y="112" width="800" height="800" rx="224" fill="#050608" stroke="#211C32" stroke-width="10" opacity="1"/>
+    <circle cx="512" cy="390" r="340" fill="url(#icon-glow)" stroke="none" stroke-width="0" opacity="1"/>
+    <text x="292" y="610" fill="#FFFFFF" font-family="Inter, SF Pro Display, Arial, sans-serif" font-size="360" font-weight="800" letter-spacing="1" text-anchor="start">T</text>
+    <text x="510" y="610" fill="url(#bpm-gradient)" font-family="Inter, SF Pro Display, Arial, sans-serif" font-size="360" font-weight="800" letter-spacing="1" text-anchor="start">B</text>
+</svg>

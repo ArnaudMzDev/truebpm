@@ -18,6 +18,7 @@ import AppHeader from "../components/ui/AppHeader";
 import AppCard from "../components/ui/AppCard";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -25,7 +26,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -297,7 +298,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const socketRef = useRef<Socket | null>(null);
 
     const fetchNotifications = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             setItems([]);
             return;
@@ -318,7 +319,7 @@ export default function NotificationsScreen({ navigation }: any) {
     }, []);
 
     const markAllRead = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) return;
 
         await fetch(`${API_URL}/api/notifications/read-all`, {
@@ -340,7 +341,7 @@ export default function NotificationsScreen({ navigation }: any) {
         let alive = true;
 
         (async () => {
-            const stored = await AsyncStorage.getItem("token");
+            const stored = await getStoredToken();
             const rawToken = stripToken(stored);
             if (!rawToken) return;
 
@@ -397,7 +398,6 @@ export default function NotificationsScreen({ navigation }: any) {
         <AppScreen>
             <AppHeader
                 title="Notifications"
-                subtitle="Toute l’activité autour de ton univers musical"
             />
 
             <FlatList
@@ -422,9 +422,6 @@ export default function NotificationsScreen({ navigation }: any) {
                             />
                         </View>
                         <Text style={styles.emptyTitle}>Aucune notification</Text>
-                        <Text style={styles.emptyText}>
-                            Les interactions autour de tes posts apparaîtront ici.
-                        </Text>
                     </View>
                 }
                 renderItem={({ item }) => (

@@ -2,6 +2,10 @@ import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
+import { requireUserId } from "@/lib/requestAuth";
+import { cleanHttpUrl, cleanMultilineText, cleanText } from "@/lib/sanitize";
+
+export const dynamic = "force-dynamic";
 
 /* -------------------- HELPERS -------------------- */
 
@@ -12,10 +16,12 @@ function clampRating(value: number) {
 function sanitizeRatings(ratings: Record<string, any>) {
     const clean: Record<string, number> = {};
 
-    for (const key in ratings) {
+    for (const key of Object.keys(ratings).slice(0, 8)) {
+        const cleanKey = cleanText(key, 40);
+        if (!cleanKey) continue;
         const val = Number(ratings[key]);
         if (!isNaN(val)) {
-            clean[key] = clampRating(val);
+            clean[cleanKey] = clampRating(val);
         }
     }
 
@@ -28,7 +34,7 @@ export async function POST(req: Request) {
     try {
         await connectDB();
 
-        const userId = req.headers.get("x-user-id");
+        const userId = await requireUserId(req);
         if (!userId) {
             return NextResponse.json(
                 { error: "Non authentifié." },
@@ -38,21 +44,16 @@ export async function POST(req: Request) {
 
         const body = await req.json();
 
-        const {
-            entityType = "song",
-            entityId = null,
-
-            trackTitle,
-            artist,
-            coverUrl,
-            previewUrl,
-
-            mode,
-            rating,
-            ratings,
-
-            comment,
-        } = body;
+        const entityType = cleanText(body?.entityType || "song", 20);
+        const entityId = cleanText(body?.entityId || "", 160) || null;
+        const trackTitle = cleanText(body?.trackTitle, 160);
+        const artist = cleanText(body?.artist, 160);
+        const coverUrl = cleanHttpUrl(body?.coverUrl) || null;
+        const previewUrl = cleanHttpUrl(body?.previewUrl) || null;
+        const mode = cleanText(body?.mode, 20);
+        const rating = body?.rating;
+        const ratings = body?.ratings;
+        const comment = cleanMultilineText(body?.comment, 1000);
 
         /* -------------------- BASIC VALIDATION -------------------- */
 
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
             rating: finalRating,
             ratings: finalRatings,
 
-            comment: comment?.trim() || "",
+            comment,
         });
 
         return NextResponse.json(

@@ -2,11 +2,27 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { RegisterSchema } from "@/lib/validators/auth";
+import { signToken } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
     try {
-        const { pseudo, email, password } = await req.json();
+        const body = await req.json().catch(() => null);
+        const parsed = RegisterSchema.safeParse(body);
+        if (!parsed.success) {
+            return NextResponse.json(
+                { error: parsed.error.issues[0]?.message || "Champs invalides." },
+                { status: 400 }
+            );
+        }
+
+        const pseudo = parsed.data.pseudo;
+        const email = parsed.data.email.trim().toLowerCase();
+        const password = parsed.data.password;
+        const termsVersion = parsed.data.termsVersion || "2026-05-26";
+        const privacyVersion = parsed.data.privacyVersion || "2026-05-26";
 
         await connectDB();
 
@@ -20,26 +36,25 @@ export async function POST(req: Request) {
         }
 
         // Hash PW
-        const hashed = await bcrypt.hash(password, 10);
+        const hashed = await bcrypt.hash(password, 12);
 
         // Création user
         const newUser = await User.create({
             pseudo,
             email,
             password: hashed,
+            legalAcceptedAt: new Date(),
+            termsVersion,
+            privacyVersion,
         });
 
         // Générer token
-        const token = jwt.sign(
-            { id: newUser._id },
-            process.env.JWT_SECRET!,
-            { expiresIn: "7d" }
-        );
+        const token = signToken(newUser._id.toString());
 
         return NextResponse.json(
             {
                 user: {
-                    id: newUser._id,
+                    _id: newUser._id,
                     pseudo: newUser.pseudo,
                     email: newUser.email,
                 },

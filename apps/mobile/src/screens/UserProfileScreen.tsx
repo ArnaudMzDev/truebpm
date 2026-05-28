@@ -15,11 +15,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import { API_URL } from "../lib/config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 import { useUser } from "../context/UserContext";
 import { usePlayer } from "../context/PlayerContext";
+import { getStoredToken } from "../lib/authStorage";
+import { useAppBottomSpacing } from "../hooks/useAppBottomSpacing";
 import {
     colors,
     spacing,
@@ -47,7 +50,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -197,6 +200,8 @@ function MiniWave({ active }: { active: boolean }) {
 
 export default function UserProfileScreen({ route, navigation }: any) {
     const { userId } = route.params;
+    const insets = useSafeAreaInsets();
+    const bottomSpacing = useAppBottomSpacing({ extra: 28 });
 
     const { me, toggleFollow, subscribe, refreshMe } = useUser();
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
@@ -229,7 +234,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
     const isFollowing = followStatus === "following";
 
     const fetchUser = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
 
         const res = await fetch(`${API_URL}/api/user/${userId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -251,7 +256,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
             return;
         }
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             setPendingRequestId(null);
             return;
@@ -283,7 +288,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
     }, [isSelf, userId]);
 
     const fetchTabPosts = useCallback(async (uid: string, tab: ProfileTab) => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
 
         const res = await fetch(
             `${API_URL}/api/posts/user/${uid}?tab=${tab}&limit=${LIMIT}`,
@@ -364,7 +369,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
         try {
             setLoadingMore(true);
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
 
             const res = await fetch(
                 `${API_URL}/api/posts/user/${userId}?tab=${activeTab}&limit=${LIMIT}&cursor=${encodeURIComponent(cursor)}`,
@@ -459,7 +464,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
         async (action: "accept" | "decline") => {
             if (!pendingRequestId || requestActionLoading) return;
 
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
             if (!token) {
                 Alert.alert("Erreur", "Tu n'es pas connecté.");
                 return;
@@ -533,7 +538,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
             return;
         }
 
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             Alert.alert("Erreur", "Tu n'es pas connecté.");
             return;
@@ -655,18 +660,42 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     <Image
                         source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
                         style={styles.banner}
+                        resizeMode="cover"
                     />
                     <View style={styles.bannerOverlay} />
-                    <View style={styles.bannerShade} />
+                </View>
+
+                <View style={[styles.topActionsLeft, { top: insets.top + 10 }]}>
+                    <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => navigation.goBack()}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="arrow-back" size={20} color={colors.text} />
+                    </TouchableOpacity>
                 </View>
             </View>
 
             <View style={styles.identityBlock}>
-                <View style={styles.avatarWrap}>
-                    <Image
-                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                        style={styles.avatar}
-                    />
+                <View style={styles.identityTopRow}>
+                    <View style={styles.avatarWrap}>
+                        <Image
+                            source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
+                            style={styles.avatar}
+                            resizeMode="cover"
+                        />
+                    </View>
+
+                    <View style={styles.profileStatusPill}>
+                        <Ionicons
+                            name={isFollowing ? "checkmark-circle" : user?.isPrivate ? "lock-closed" : "pulse"}
+                            size={13}
+                            color={colors.primary}
+                        />
+                        <Text style={styles.profileStatusText}>
+                            {isFollowing ? "Suivi" : user?.isPrivate ? "Privé" : "Public"}
+                        </Text>
+                    </View>
                 </View>
 
                 <Text style={styles.pseudo}>{user.pseudo}</Text>
@@ -903,7 +932,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
             <FlatList
                 ListHeaderComponent={Header}
                 data={[]}
-                keyExtractor={(item) => item._id}
+                keyExtractor={(_, index) => String(index)}
                 renderItem={() => null}
                 ListEmptyComponent={
                     <PrivateLockedState
@@ -912,7 +941,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
                         loading={followLoading}
                     />
                 }
-                contentContainerStyle={styles.listContentPrivate}
+                contentContainerStyle={[styles.listContentPrivate, { paddingBottom: bottomSpacing }]}
                 style={styles.list}
                 refreshControl={
                     <RefreshControl
@@ -937,7 +966,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 </View>
             )}
             ListEmptyComponent={<EmptyPostsState tab={activeTab} />}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: bottomSpacing }]}
             style={styles.list}
             onEndReached={loadMore}
             onEndReachedThreshold={0.4}
@@ -979,11 +1008,13 @@ const styles = StyleSheet.create({
 
     heroWrap: {
         position: "relative",
+        marginTop: 0,
+        marginHorizontal: 0,
     },
 
     bannerBox: {
         width: "100%",
-        height: 220,
+        height: 228,
         backgroundColor: colors.surface2,
         position: "relative",
         overflow: "hidden",
@@ -996,44 +1027,80 @@ const styles = StyleSheet.create({
 
     bannerOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "rgba(0,0,0,0.18)",
+        backgroundColor: "rgba(0,0,0,0.22)",
     },
 
-    bannerShade: {
+    topActionsLeft: {
         position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 90,
-        backgroundColor: "rgba(0,0,0,0.45)",
+        top: 12,
+        left: 12,
+        zIndex: 3,
+    },
+
+    backButton: {
+        width: 40,
+        height: 40,
+        borderRadius: radius.lg,
+        backgroundColor: "rgba(18, 22, 31, 0.88)",
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: "center",
+        justifyContent: "center",
     },
 
     identityBlock: {
-        marginTop: -52,
-        paddingHorizontal: 20,
+        marginTop: -58,
+        marginHorizontal: 20,
+    },
+
+    identityTopRow: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        gap: spacing.md,
     },
 
     avatarWrap: {
-        alignSelf: "flex-start",
         borderRadius: 999,
         padding: 4,
         backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
     },
 
     avatar: {
-        width: 104,
-        height: 104,
-        borderRadius: 52,
+        width: 112,
+        height: 112,
+        borderRadius: 56,
         borderWidth: 3,
         borderColor: colors.surface4,
         backgroundColor: colors.surface2,
+    },
+
+    profileStatusPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.xs,
+        backgroundColor: "#12101B",
+        borderWidth: 1,
+        borderColor: colors.borderAccent,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 7,
+        borderRadius: radius.pill,
+        marginBottom: spacing.sm,
+    },
+
+    profileStatusText: {
+        color: colors.textSoft,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
     },
 
     pseudo: {
         fontSize: 28,
         color: colors.text,
         fontWeight: fontWeights.black,
-        marginTop: 12,
+        marginTop: spacing.sm,
         lineHeight: 32,
     },
 
@@ -1042,7 +1109,6 @@ const styles = StyleSheet.create({
         fontSize: typography.body,
         lineHeight: 21,
         marginTop: 8,
-        marginRight: 16,
     },
 
     badgesRow: {
@@ -1084,20 +1150,19 @@ const styles = StyleSheet.create({
 
     statsRow: {
         flexDirection: "row",
-        marginTop: 22,
-        marginHorizontal: 16,
-        paddingVertical: 8,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
+        marginTop: spacing.lg,
+        marginHorizontal: 20,
+        paddingVertical: spacing.md,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
         borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
     },
 
     statBox: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 10,
+        paddingVertical: 2,
     },
 
     statNumber: {
@@ -1115,9 +1180,9 @@ const styles = StyleSheet.create({
 
     actionsRow: {
         flexDirection: "row",
-        gap: 12,
+        gap: spacing.sm,
         marginHorizontal: 16,
-        marginTop: 14,
+        marginTop: spacing.md,
     },
 
     msgBtn: {
@@ -1126,7 +1191,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
         paddingVertical: 12,
-        borderRadius: radius.lg,
+        borderRadius: radius.xl,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -1145,7 +1210,7 @@ const styles = StyleSheet.create({
     followBtn: {
         flex: 1,
         paddingVertical: 12,
-        borderRadius: radius.lg,
+        borderRadius: radius.xl,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -1253,13 +1318,13 @@ const styles = StyleSheet.create({
     },
 
     sectionBlock: {
-        marginTop: 22,
+        marginTop: spacing.md,
         marginHorizontal: 16,
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.borderSoft,
-        borderRadius: radius.xxl,
-        padding: 14,
+        borderRadius: radius.xl,
+        padding: spacing.md,
     },
 
     sectionHeader: {
@@ -1292,9 +1357,9 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface3,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: radius.xl,
-        padding: 12,
-        gap: 12,
+        borderRadius: radius.lg,
+        padding: spacing.md,
+        gap: spacing.md,
     },
 
     pinnedCardPlaying: {
@@ -1306,7 +1371,7 @@ const styles = StyleSheet.create({
     pinnedCover: {
         width: 64,
         height: 64,
-        borderRadius: 14,
+        borderRadius: radius.lg,
         backgroundColor: colors.surface4,
     },
 
@@ -1349,12 +1414,12 @@ const styles = StyleSheet.create({
 
     musicCard: {
         width: 148,
-        marginRight: 12,
+        marginRight: spacing.sm,
         backgroundColor: colors.surface3,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: radius.xl,
-        padding: 12,
+        borderRadius: radius.lg,
+        padding: spacing.sm,
     },
 
     musicCardCompact: {
@@ -1364,9 +1429,9 @@ const styles = StyleSheet.create({
     musicCardCover: {
         width: "100%",
         height: 124,
-        borderRadius: 14,
+        borderRadius: radius.lg,
         backgroundColor: colors.surface4,
-        marginBottom: 12,
+        marginBottom: spacing.sm,
     },
 
     musicPlaceholder: {
@@ -1408,7 +1473,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginTop: 8,
         padding: 20,
-        borderRadius: radius.xxl,
+        borderRadius: radius.xl,
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.borderSoft,
@@ -1458,17 +1523,19 @@ const styles = StyleSheet.create({
 
     tabsRow: {
         flexDirection: "row",
-        gap: 10,
+        gap: spacing.sm,
         marginHorizontal: 16,
-        marginTop: 24,
-        marginBottom: 12,
+        marginTop: spacing.lg,
+        marginBottom: spacing.md,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: 4,
     },
 
     tabBtn: {
         flex: 1,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.border,
         borderRadius: radius.lg,
         paddingVertical: 11,
         alignItems: "center",

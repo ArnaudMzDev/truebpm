@@ -5,6 +5,8 @@ import { requireUserId } from "@/lib/requestAuth";
 import Notification from "@/models/Notification";
 import mongoose from "mongoose";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
     try {
         await connectDB();

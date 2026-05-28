@@ -7,6 +7,8 @@ import User from "@/models/User";
 import FollowRequest from "@/models/FollowRequest";
 import { createNotification } from "@/lib/notifications";
 
+export const dynamic = "force-dynamic";
+
 function isObjectId(id: string) {
     return mongoose.Types.ObjectId.isValid(id);
 }
@@ -51,22 +53,32 @@ export async function POST(req: Request) {
             await Promise.all([
                 User.updateOne(
                     { _id: meId },
-                    {
-                        $pull: { followingList: new mongoose.Types.ObjectId(targetUserId) },
-                        $inc: { following: -1 },
-                    }
+                    { $pull: { followingList: new mongoose.Types.ObjectId(targetUserId) } }
                 ),
                 User.updateOne(
                     { _id: targetUserId },
-                    {
-                        $pull: { followersList: new mongoose.Types.ObjectId(meId) },
-                        $inc: { followers: -1 },
-                    }
+                    { $pull: { followersList: new mongoose.Types.ObjectId(meId) } }
                 ),
                 FollowRequest.deleteMany({
                     requesterId: meId,
                     targetUserId,
                 }),
+            ]);
+
+            const [freshMe, freshTarget] = await Promise.all([
+                User.findById(meId).select("followingList").lean(),
+                User.findById(targetUserId).select("followersList").lean(),
+            ]);
+
+            await Promise.all([
+                User.updateOne(
+                    { _id: meId },
+                    { $set: { following: Array.isArray(freshMe?.followingList) ? freshMe.followingList.length : 0 } }
+                ),
+                User.updateOne(
+                    { _id: targetUserId },
+                    { $set: { followers: Array.isArray(freshTarget?.followersList) ? freshTarget.followersList.length : 0 } }
+                ),
             ]);
 
             return NextResponse.json(
@@ -125,23 +137,39 @@ export async function POST(req: Request) {
         await Promise.all([
             User.updateOne(
                 { _id: meId },
-                {
-                    $addToSet: { followingList: new mongoose.Types.ObjectId(targetUserId) },
-                    $inc: { following: 1 },
-                }
+                { $addToSet: { followingList: new mongoose.Types.ObjectId(targetUserId) } }
             ),
             User.updateOne(
                 { _id: targetUserId },
-                {
-                    $addToSet: { followersList: new mongoose.Types.ObjectId(meId) },
-                    $inc: { followers: 1 },
-                }
+                { $addToSet: { followersList: new mongoose.Types.ObjectId(meId) } }
             ),
             FollowRequest.deleteMany({
                 requesterId: meId,
                 targetUserId,
             }),
         ]);
+
+        const [freshMe, freshTarget] = await Promise.all([
+            User.findById(meId).select("followingList").lean(),
+            User.findById(targetUserId).select("followersList").lean(),
+        ]);
+
+        await Promise.all([
+            User.updateOne(
+                { _id: meId },
+                { $set: { following: Array.isArray(freshMe?.followingList) ? freshMe.followingList.length : 0 } }
+            ),
+            User.updateOne(
+                { _id: targetUserId },
+                { $set: { followers: Array.isArray(freshTarget?.followersList) ? freshTarget.followersList.length : 0 } }
+            ),
+        ]);
+
+        await createNotification({
+            recipientId: String(targetUserId),
+            actorId: String(meId),
+            type: "follow",
+        });
 
         return NextResponse.json(
             { success: true, status: "following" },

@@ -37,4 +37,6 @@ const PushTokenSchema = new Schema(
 
 PushTokenSchema.index({ userId: 1, token: 1 }, { unique: true });
 
-export default models.PushToken || model("PushToken", PushTokenSchema);
+const PushToken: any = models.PushToken || model("PushToken", PushTokenSchema);
+
+export default PushToken;

@@ -7,6 +7,9 @@ import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
 import User from "@/models/User";
 import { sendPushToUser } from "@/lib/push";
+import { cleanHttpUrl, cleanMultilineText } from "@/lib/sanitize";
+
+export const dynamic = "force-dynamic";
 
 async function ensureParticipant(conversationId: string, meId: string) {
     const convo = await Conversation.findById(conversationId).select("participants").lean();
@@ -100,7 +103,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             if (typeof body?.text !== "string") {
                 return NextResponse.json({ error: "text requis." }, { status: 400 });
             }
-            text = body.text.trim();
+            text = cleanMultilineText(body.text, 2000);
             if (!text) return NextResponse.json({ error: "Message vide." }, { status: 400 });
         }
 
@@ -109,17 +112,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
                 return NextResponse.json({ error: "postId invalide." }, { status: 400 });
             }
             postId = body.postId;
-            text = typeof body?.text === "string" ? body.text.trim() : "";
+            text = cleanMultilineText(body?.text, 500);
         }
 
         if (type === "image") {
-            if (typeof body?.imageUrl !== "string" || !body.imageUrl.trim()) {
+            imageUrl = cleanHttpUrl(body?.imageUrl);
+            if (!imageUrl) {
                 return NextResponse.json({ error: "imageUrl requis." }, { status: 400 });
             }
-            imageUrl = body.imageUrl.trim();
             imageWidth = typeof body?.imageWidth === "number" ? body.imageWidth : null;
             imageHeight = typeof body?.imageHeight === "number" ? body.imageHeight : null;
-            text = typeof body?.text === "string" ? body.text.trim() : "";
+            text = cleanMultilineText(body?.text, 500);
         }
 
         const created = await Message.create({

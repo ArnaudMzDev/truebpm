@@ -5,6 +5,8 @@ import User from "@/models/User";
 import Post from "@/models/Post";
 import mongoose from "mongoose";
 
+export const dynamic = "force-dynamic";
+
 type SearchType = "all" | "users" | "posts";
 
 type CursorPiece = {
@@ -26,6 +28,27 @@ function normalizeQuery(q: string) {
     // Multi-mots : Mongo $text traite les mots comme une requête
     // et ressort selon pertinence. Un seul mot matchant suffit.
     return q.trim().replace(/\s+/g, " ");
+}
+
+function escapeRegex(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function queryTokens(q: string) {
+    return q
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .split(/\s+/)
+        .map((x) => x.trim())
+        .filter((x) => x.length >= 2)
+        .slice(0, 5);
+}
+
+function buildLooseRegex(q: string) {
+    const tokens = queryTokens(q);
+    if (!tokens.length) return null;
+    return new RegExp(tokens.map(escapeRegex).join("|"), "i");
 }
 
 function encodeCursor(value: unknown): string {
@@ -80,6 +103,29 @@ async function searchUsers(q: string, limit: number, cursor: CursorPiece | null)
         const last = rows.pop();
         if (last?._id) {
             nextCursor = { score: Number(last.score ?? 0), id: String(last._id) };
+        }
+    }
+
+    const fallbackNeed = cursor ? 0 : Math.max(0, Math.min(limit, limit - rows.length));
+    if (fallbackNeed > 0) {
+        const loose = buildLooseRegex(q);
+        const existingIds = rows.map((u: any) => u._id);
+        if (loose) {
+            const fallback = await User.find({
+                _id: { $nin: existingIds },
+                $or: [{ pseudo: loose }, { bio: loose }],
+            })
+                .sort({ followers: -1, notesCount: -1, _id: -1 })
+                .limit(fallbackNeed)
+                .select("-password -email -__v")
+                .lean();
+
+            rows.push(
+                ...fallback.map((u: any) => ({
+                    ...u,
+                    score: 0.1,
+                }))
+            );
         }
     }
 
@@ -151,6 +197,30 @@ async function searchPosts(q: string, limit: number, cursor: CursorPiece | null)
         const last = rows.pop();
         if (last?._id) {
             nextCursor = { score: Number(last.score ?? 0), id: String(last._id) };
+        }
+    }
+
+    const fallbackNeed = cursor ? 0 : Math.max(0, Math.min(limit, limit - rows.length));
+    if (fallbackNeed > 0) {
+        const loose = buildLooseRegex(q);
+        const existingIds = rows.map((p: any) => p._id);
+        if (loose) {
+            const fallback = await Post.find({
+                _id: { $nin: existingIds },
+                type: "post",
+                $or: [{ trackTitle: loose }, { artist: loose }, { comment: loose }],
+            })
+                .sort({ likesCount: -1, commentsCount: -1, repostsCount: -1, _id: -1 })
+                .limit(fallbackNeed)
+                .populate("userId", "pseudo avatarUrl")
+                .lean();
+
+            rows.push(
+                ...fallback.map((p: any) => ({
+                    ...p,
+                    score: 0.1,
+                }))
+            );
         }
     }
 

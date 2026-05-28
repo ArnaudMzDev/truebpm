@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { colors, spacing, typography, fontWeights } from "../../theme";
+import { colors, spacing, radius, typography, fontWeights } from "../../theme";
 
 type Props = {
     rating: number | null;
@@ -24,7 +24,7 @@ function buildBarsFromRating(rating: number) {
     return rawHeights.map((v) => clamp(v, 0.18, 1));
 }
 
-export default function RatingSimple({ rating }: Props) {
+function RatingSimple({ rating }: Props) {
     const safeRating = typeof rating === "number" ? rating : null;
 
     const bars = useMemo(() => {
@@ -35,89 +35,122 @@ export default function RatingSimple({ rating }: Props) {
     if (safeRating === null) return null;
 
     return (
-        <View style={styles.wrap}>
-            <View style={styles.left}>
-                <Text style={styles.eyebrow}>NOTE</Text>
-
-                <View style={styles.scoreRow}>
-                    <Text style={styles.score}>{safeRating.toFixed(1)}</Text>
-                    <Text style={styles.outOf}>/5</Text>
+        <View style={styles.summary}>
+            <View style={styles.summaryLeft}>
+                <Text style={styles.eyebrow}>Note générale</Text>
+                <View style={styles.scoreLine}>
+                    <Text style={styles.avgScore}>{Number(safeRating.toFixed(1)).toString()}</Text>
+                    <Text style={styles.avgOutOf}>/5</Text>
                 </View>
             </View>
 
-            <View style={styles.equalizerWrap}>
-                {bars.map((h, index) => (
-                    <View
-                        key={index}
-                        style={[
-                            styles.bar,
-                            {
-                                height: `${h * 100}%`,
-                                opacity: 0.7 + index * 0.06,
-                            },
-                        ]}
-                    />
-                ))}
+            <View style={styles.summaryRight}>
+                <View style={styles.miniEq}>
+                    {bars.map((h, index) => (
+                        <View key={index} style={styles.miniEqTrack}>
+                            <View
+                                style={[
+                                    styles.miniEqFill,
+                                    {
+                                        height: `${h * 100}%`,
+                                        opacity: 0.8 + index * 0.04,
+                                    },
+                                ]}
+                            />
+                        </View>
+                    ))}
+                </View>
+
+                <Text style={styles.summaryHint}>Score public</Text>
             </View>
         </View>
     );
 }
 
+export default React.memo(RatingSimple);
+
 const styles = StyleSheet.create({
-    wrap: {
+    summary: {
         marginTop: spacing.sm,
         marginBottom: spacing.xs,
-        paddingVertical: 6,
+        width: "100%",
+        minHeight: 72,
+        backgroundColor: colors.surfaceInset,
+        borderWidth: 1,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "center",
         justifyContent: "space-between",
+        gap: spacing.lg,
     },
 
-    left: {
+    summaryLeft: {
         flex: 1,
+        minWidth: 0,
     },
 
     eyebrow: {
         color: colors.primary,
-        fontSize: typography.tiny,
-        fontWeight: fontWeights.black,
-        letterSpacing: 1,
-        marginBottom: 4,
-        textTransform: "uppercase",
-    },
-
-    scoreRow: {
-        flexDirection: "row",
-        alignItems: "flex-end",
-    },
-
-    score: {
-        color: colors.text,
-        fontSize: 32,
-        lineHeight: 34,
-        fontWeight: fontWeights.black,
-    },
-
-    outOf: {
-        color: colors.primary,
-        fontSize: 17,
-        lineHeight: 22,
+        fontSize: typography.caption,
         fontWeight: fontWeights.extraBold,
-        marginLeft: 4,
         marginBottom: 2,
     },
 
-    equalizerWrap: {
-        width: 52,
-        height: 34,
+    scoreLine: {
+        flexDirection: "row",
+        alignItems: "baseline",
+    },
+
+    summaryHint: {
+        color: colors.textFaint,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.bold,
+    },
+
+    summaryRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+    },
+
+    avgScore: {
+        color: colors.text,
+        fontSize: 28,
+        lineHeight: 31,
+        fontWeight: fontWeights.black,
+        fontVariant: ["tabular-nums"],
+    },
+
+    avgOutOf: {
+        color: colors.primary,
+        fontSize: 13,
+        lineHeight: 15,
+        fontWeight: fontWeights.extraBold,
+        marginLeft: 3,
+    },
+
+    miniEq: {
+        width: 54,
+        height: 24,
         flexDirection: "row",
         alignItems: "flex-end",
         justifyContent: "space-between",
-        marginLeft: spacing.md,
     },
 
-    bar: {
-        width: 6,
+    miniEqTrack: {
+        width: 7,
+        height: "100%",
+        backgroundColor: colors.surfacePressed,
+        borderRadius: 999,
+        justifyContent: "flex-end",
+        overflow: "hidden",
+    },
+
+    miniEqFill: {
+        width: "100%",
         backgroundColor: colors.primary,
         borderRadius: 999,
     },

@@ -1,5 +1,4 @@
-// 🔥 Mets ton IP ici
-const API_URL = "http://192.168.1.147:3000";
+import { API_URL } from "./config";
 
 // GET sécurisé avec token
 export async function apiGet(path: string, token: string) {

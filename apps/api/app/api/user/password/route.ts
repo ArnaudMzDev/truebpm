@@ -4,6 +4,9 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
+import { PasswordSchema } from "@/lib/validators/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function PATCH(req: Request) {
     try {
@@ -30,9 +33,10 @@ export async function PATCH(req: Request) {
             );
         }
 
-        if (newPassword.length < 6) {
+        const parsedPassword = PasswordSchema.safeParse(newPassword);
+        if (!parsedPassword.success) {
             return NextResponse.json(
-                { error: "Le nouveau mot de passe doit contenir au moins 6 caractères." },
+                { error: parsedPassword.error.issues[0]?.message || "Mot de passe invalide." },
                 { status: 400, headers: { "Cache-Control": "no-store" } }
             );
         }
@@ -60,7 +64,7 @@ export async function PATCH(req: Request) {
             );
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
 
         user.password = hashedPassword;
         await user.save();

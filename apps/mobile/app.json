@@ -1,23 +1,37 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "TrueBPM",
+    "slug": "truebpm",
     "version": "1.0.0",
     "entryPoint": "./index.js",
+    "scheme": "truebpm",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/brand/truebpm-app-icon.png",
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/brand/truebpm-wordmark-on-dark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#030407"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.truebpm.mobile"
+      "bundleIdentifier": "fr.truebpm.app",
+      "entitlements": {
+        "com.apple.developer.shazamkit": true
+      },
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "TrueBPM utilise le micro pour identifier le morceau que tu écoutes.",
+        "NSPhotoLibraryUsageDescription": "TrueBPM utilise ta galerie pour choisir une photo de profil, une bannière ou une image de message.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.truebpm.mobile",
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -27,13 +41,29 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withTrueBPMShazam",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TrueBPM utilise ta galerie pour choisir une photo de profil, une bannière ou une image de message."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "TrueBPM utilise le micro pour identifier le morceau que tu écoutes."
+        }
+      ],
       "expo-secure-store",
       "expo-notifications"
     ],
     "extra": {
+      "apiUrl": "http://192.168.1.25:3000",
+      "socketUrl": "http://192.168.1.25:3001",
       "eas": {
         "projectId": "335d51ee-7576-409d-b8d2-a34797ed8339"
       }
-    }
+    },
+    "owner": "arnaud_mz"
   }
 }

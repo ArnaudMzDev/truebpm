@@ -10,6 +10,7 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "strict": true,
+    "types": [],
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {

@@ -7,9 +7,11 @@ import {
     Alert,
     ScrollView,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
+import { colors, spacing, radius, typography, fontWeights } from "../theme";
+import { getStoredToken, clearStoredSession } from "../lib/authStorage";
 
 function SettingsRow({
                          icon,
@@ -55,7 +57,17 @@ function SettingsSection({
     );
 }
 
+function resetToLogin(navigation: any) {
+    let rootNavigation = navigation;
+    while (rootNavigation?.getParent?.()) {
+        rootNavigation = rootNavigation.getParent();
+    }
+    rootNavigation.reset({ index: 0, routes: [{ name: "Login" }] });
+}
+
 export default function SettingsScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
+
     const handleLogout = useCallback(async () => {
         Alert.alert("Déconnexion", "Tu veux vraiment te déconnecter ?", [
             { text: "Annuler", style: "cancel" },
@@ -63,7 +75,7 @@ export default function SettingsScreen({ navigation }: any) {
                 text: "Se déconnecter",
                 style: "destructive",
                 onPress: async () => {
-                    const stored = await AsyncStorage.getItem("token");
+                    const stored = await getStoredToken();
                     const bearer =
                         stored && stored.startsWith("Bearer ")
                             ? stored
@@ -78,15 +90,15 @@ export default function SettingsScreen({ navigation }: any) {
                         }).catch(() => {});
                     }
 
-                    await AsyncStorage.multiRemove(["token", "user"]);
-                    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+                    await clearStoredSession();
+                    resetToLogin(navigation);
                 },
             },
         ]);
     }, [navigation]);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
             <View style={styles.topBar}>
                 <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.85}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -97,12 +109,11 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={{ width: 24 }} />
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            <ScrollView contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 32 }}>
                 <SettingsSection title="Profil">
                     <SettingsRow
                         icon="create-outline"
                         title="Modifier mon profil"
-                        subtitle="Bio, avatar, bannière, musique de profil"
                         onPress={() => navigation.navigate("EditProfile")}
                     />
                 </SettingsSection>
@@ -111,7 +122,6 @@ export default function SettingsScreen({ navigation }: any) {
                     <SettingsRow
                         icon="mail-outline"
                         title="Adresse e-mail"
-                        subtitle="Modifier ton adresse e-mail"
                         onPress={() => navigation.navigate("ChangeEmail")}
                     />
 
@@ -120,7 +130,6 @@ export default function SettingsScreen({ navigation }: any) {
                     <SettingsRow
                         icon="lock-closed-outline"
                         title="Mot de passe"
-                        subtitle="Modifier ton mot de passe"
                         onPress={() => navigation.navigate("ChangePassword")}
                     />
                 </SettingsSection>
@@ -129,7 +138,6 @@ export default function SettingsScreen({ navigation }: any) {
                     <SettingsRow
                         icon="shield-checkmark-outline"
                         title="Confidentialité"
-                        subtitle="Compte privé, messages, visibilité"
                         onPress={() => navigation.navigate("PrivacySettings")}
                     />
 
@@ -138,8 +146,64 @@ export default function SettingsScreen({ navigation }: any) {
                     <SettingsRow
                         icon="person-add-outline"
                         title="Demandes d’abonnement"
-                        subtitle="Accepter ou refuser les demandes"
                         onPress={() => navigation.navigate("FollowRequests")}
+                    />
+                </SettingsSection>
+
+                <SettingsSection title="Sécurité">
+                    <SettingsRow
+                        icon="trash-outline"
+                        title="Supprimer mon compte"
+                        danger
+                        onPress={() => navigation.navigate("DeleteAccount")}
+                    />
+                </SettingsSection>
+
+                <SettingsSection title="Aide">
+                    <SettingsRow
+                        icon="help-circle-outline"
+                        title="Support"
+                        onPress={() => navigation.navigate("Support")}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                        icon="bulb-outline"
+                        title="Feedback"
+                        onPress={() => navigation.navigate("Feedback")}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                        icon="flag-outline"
+                        title="Règles de communauté"
+                        onPress={() => navigation.navigate("Legal", { document: "community" })}
+                    />
+                </SettingsSection>
+
+                <SettingsSection title="Légal">
+                    <SettingsRow
+                        icon="document-text-outline"
+                        title="Conditions d'utilisation"
+                        onPress={() => navigation.navigate("Legal", { document: "terms" })}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                        icon="lock-closed-outline"
+                        title="Politique de confidentialité"
+                        onPress={() => navigation.navigate("Legal", { document: "privacy" })}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                        icon="receipt-outline"
+                        title="CGV et mentions"
+                        onPress={() => navigation.navigate("Legal", { document: "sales" })}
                     />
                 </SettingsSection>
 
@@ -147,7 +211,6 @@ export default function SettingsScreen({ navigation }: any) {
                     <SettingsRow
                         icon="log-out-outline"
                         title="Se déconnecter"
-                        subtitle="Fermer la session sur cet appareil"
                         danger
                         onPress={handleLogout}
                     />
@@ -161,7 +224,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#000",
-        paddingTop: 54,
         paddingHorizontal: 16,
     },
     topBar: {
@@ -177,21 +239,22 @@ const styles = StyleSheet.create({
     },
 
     section: {
-        marginBottom: 22,
+        marginBottom: spacing.lg,
     },
     sectionTitle: {
-        color: "#9A9A9A",
-        fontSize: 13,
-        fontWeight: "800",
-        marginBottom: 10,
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
+        marginBottom: spacing.sm,
         marginLeft: 2,
         textTransform: "uppercase",
     },
     sectionCard: {
-        backgroundColor: "#0F0F0F",
+        width: "100%",
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#1F1F1F",
-        borderRadius: 18,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
         overflow: "hidden",
     },
     row: {

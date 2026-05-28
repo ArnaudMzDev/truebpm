@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import PushToken from "@/models/PushToken";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
     try {
         await connectDB();

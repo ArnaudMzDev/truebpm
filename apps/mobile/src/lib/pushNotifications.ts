@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../lib/config";
+import { getStoredToken } from "./authStorage";
 
 
 Notifications.setNotificationHandler({
@@ -54,7 +55,7 @@ export async function registerPushTokenOnBackend() {
     const token = await registerForPushNotificationsAsync();
     if (!token) return null;
 
-    const authToken = await AsyncStorage.getItem("token");
+    const authToken = await getStoredToken();
     if (!authToken) return token;
 
     const deviceName = Device.deviceName || "";

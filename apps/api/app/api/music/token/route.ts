@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // apps/api/app/api/music/token/route.ts
 import jwt from "jsonwebtoken";
 

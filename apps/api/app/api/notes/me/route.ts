@@ -5,6 +5,8 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import Note from "@/models/Note";
 
+export const dynamic = "force-dynamic";
+
 // DELETE /api/notes/me
 export async function DELETE(req: Request) {
     try {

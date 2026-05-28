@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 // apps/api/app/api/comments/[commentId]/thread/route.ts
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
@@ -31,8 +33,6 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
             query._id = { $lt: cursor };
         }
 
-        // ✅ me optionnel (middleware injecte x-user-id si Bearer présent)
-        const meId = req.headers.get("x-user-id");
         const me =
             meId && mongoose.Types.ObjectId.isValid(meId) ? new mongoose.Types.ObjectId(meId) : null;
 

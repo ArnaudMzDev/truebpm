@@ -13,6 +13,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../lib/config";
 import { usePlayer } from "../context/PlayerContext";
+import { colors, radius, spacing, typography, fontWeights } from "../theme";
+import { getStoredToken } from "../lib/authStorage";
 
 type NoteUser = {
     _id: string;
@@ -44,7 +46,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -57,7 +59,7 @@ export default function NotesStrip({ navigation }: any) {
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const fetchNotes = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         const rawUser = await AsyncStorage.getItem("user");
 
         if (rawUser) {
@@ -147,7 +149,7 @@ export default function NotesStrip({ navigation }: any) {
             >
                 <TouchableOpacity style={styles.createBubble} activeOpacity={0.85} onPress={openCreate}>
                     <View style={styles.createAvatarWrap}>
-                        <Ionicons name={myNote ? "create-outline" : "add"} size={22} color="#fff" />
+                        <Ionicons name={myNote ? "create-outline" : "add"} size={22} color={colors.text} />
                     </View>
                     <Text style={styles.name}>Ta note</Text>
                     <Text style={styles.preview} numberOfLines={2}>
@@ -182,7 +184,7 @@ export default function NotesStrip({ navigation }: any) {
                                             <Image source={{ uri: selectedTrack.coverUrl }} style={styles.trackCover} />
                                         ) : (
                                             <View style={[styles.trackCover, styles.trackPlaceholder]}>
-                                                <Ionicons name="musical-notes" size={16} color="#999" />
+                                                <Ionicons name="musical-notes" size={16} color={colors.textMuted} />
                                             </View>
                                         )}
 
@@ -215,7 +217,7 @@ export default function NotesStrip({ navigation }: any) {
                                                 <Ionicons
                                                     name={isCurrentTrack && isPlaying ? "pause" : "play"}
                                                     size={16}
-                                                    color="#fff"
+                                                    color={colors.text}
                                                 />
                                             </TouchableOpacity>
                                         ) : null}
@@ -232,35 +234,35 @@ export default function NotesStrip({ navigation }: any) {
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 12,
+        marginBottom: spacing.md,
     },
     scrollContent: {
-        paddingRight: 16,
+        paddingRight: spacing.lg,
         paddingLeft: 2,
     },
     createBubble: {
-        width: 110,
-        marginRight: 12,
-        backgroundColor: "#111",
+        width: 116,
+        marginRight: spacing.md,
+        backgroundColor: "#151122",
         borderWidth: 1,
-        borderColor: "#242424",
-        borderRadius: 16,
-        padding: 10,
+        borderColor: colors.borderAccent,
+        borderRadius: radius.xl,
+        padding: spacing.md,
     },
     noteBubble: {
-        width: 110,
-        marginRight: 12,
-        backgroundColor: "#0f0f0f",
+        width: 116,
+        marginRight: spacing.md,
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#1d1d1d",
-        borderRadius: 16,
-        padding: 10,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.xl,
+        padding: spacing.md,
     },
     createAvatarWrap: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 8,
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
         height: 44,
         borderRadius: 22,
         padding: 2,
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
         marginBottom: 8,
     },
     avatar: {
@@ -279,37 +281,37 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     name: {
-        color: "#fff",
-        fontSize: 12,
-        fontWeight: "800",
+        color: colors.text,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
     },
     preview: {
-        color: "#aaa",
-        fontSize: 11,
+        color: colors.textMuted,
+        fontSize: typography.tiny,
         marginTop: 4,
         lineHeight: 15,
     },
 
     modalBackdrop: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.72)",
+        backgroundColor: "rgba(0,0,0,0.78)",
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 20,
     },
     modalCard: {
         width: "100%",
-        backgroundColor: "#0d0d0d",
+        backgroundColor: colors.surface2,
         borderWidth: 1,
-        borderColor: "#1f1f1f",
-        borderRadius: 22,
-        padding: 16,
+        borderColor: colors.border,
+        borderRadius: radius.xl,
+        padding: spacing.lg,
     },
     modalHeader: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 10,
-        marginBottom: 14,
+        gap: spacing.md,
+        marginBottom: spacing.lg,
     },
     modalAvatar: {
         width: 46,
@@ -317,49 +319,50 @@ const styles = StyleSheet.create({
         borderRadius: 23,
     },
     modalName: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 16,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
     modalSubtitle: {
-        color: "#888",
-        fontSize: 12,
+        color: colors.primary,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
         marginTop: 3,
     },
     modalText: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 18,
-        fontWeight: "700",
+        fontWeight: fontWeights.extraBold,
         lineHeight: 25,
         marginBottom: 14,
     },
     trackCard: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 10,
-        backgroundColor: "#131313",
+        gap: spacing.md,
+        backgroundColor: colors.surface3,
         borderWidth: 1,
-        borderColor: "#232323",
-        borderRadius: 14,
-        padding: 10,
+        borderColor: colors.borderSoft,
+        borderRadius: radius.lg,
+        padding: spacing.md,
     },
     trackCover: {
         width: 50,
         height: 50,
-        borderRadius: 10,
-        backgroundColor: "#1b1b1b",
+        borderRadius: radius.md,
+        backgroundColor: colors.surface4,
     },
     trackPlaceholder: {
         alignItems: "center",
         justifyContent: "center",
     },
     trackTitle: {
-        color: "#fff",
-        fontWeight: "800",
+        color: colors.text,
+        fontWeight: fontWeights.black,
         fontSize: 14,
     },
     trackArtist: {
-        color: "#999",
+        color: colors.textMuted,
         fontSize: 12,
         marginTop: 4,
     },
@@ -369,6 +372,6 @@ const styles = StyleSheet.create({
         borderRadius: 17,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.primaryDark,
     },
 });

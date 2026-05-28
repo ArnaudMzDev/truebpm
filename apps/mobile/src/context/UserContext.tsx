@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL } from "../lib/config";
+import { getStoredToken } from "../lib/authStorage";
 
 type FollowStatus = "none" | "requested" | "following";
 
@@ -33,7 +34,7 @@ async function safeJson(res: Response): Promise<any | null> {
     try {
         return JSON.parse(text);
     } catch {
-        console.log("Non-JSON response:", text.slice(0, 200));
+        if (__DEV__) console.log("Non-JSON response:", text.slice(0, 200));
         return null;
     }
 }
@@ -51,7 +52,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const refreshMe = useCallback(async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await getStoredToken();
         if (!token) {
             setMe(null);
             return;
@@ -81,7 +82,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     const toggleFollow = useCallback(
         async (targetUserId: string): Promise<FollowToggleResult> => {
-            const token = await AsyncStorage.getItem("token");
+            const token = await getStoredToken();
             if (!token) {
                 return { ok: false, error: "Non authentifié." };
             }

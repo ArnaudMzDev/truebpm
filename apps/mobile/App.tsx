@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { View, StatusBar } from "react-native";
-import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +23,10 @@ import ChangeEmailScreen from "./src/screens/ChangeEmailScreen";
 import PrivacySettingsScreen from "./src/screens/PrivacySettingsScreen";
 import FollowRequestsScreen from "./src/screens/FollowRequestsScreen";
 import NotificationsScreen from "./src/screens/NotificationsScreen";
+import LegalScreen from "./src/screens/LegalScreen";
+import DeleteAccountScreen from "./src/screens/DeleteAccountScreen";
+import SupportScreen from "./src/screens/SupportScreen";
+import FeedbackScreen from "./src/screens/FeedbackScreen";
 
 import CreatePostScreen from "./src/screens/CreatePostScreen";
 import SearchScreen from "./src/screens/SearchScreen";
@@ -42,6 +46,7 @@ import { PlayerProvider } from "./src/context/PlayerContext";
 import { UserProvider } from "./src/context/UserContext";
 import { registerPushTokenOnBackend } from "./src/lib/pushNotifications";
 import { API_URL, SOCKET_URL } from "./src/lib/config";
+import { colors, radius } from "./src/theme";
 
 const RootStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
@@ -97,7 +102,7 @@ function HomeNavigator() {
             <HomeStack.Screen name="FollowingList" component={FollowingListScreen} />
             <HomeStack.Screen name="SocialNotifications" component={NotificationsScreen} />
             <HomeStack.Screen name="MusicSearch" component={SearchScreen} />
-            <HomeStack.Screen name="CreatePost" component={CreatePostScreen} />
+            <HomeStack.Screen name="CreatePost" component={CreatePostScreen as any} />
             <HomeStack.Screen name="CreateNote" component={CreateNoteScreen} />
         </HomeStack.Navigator>
     );
@@ -108,7 +113,7 @@ function SearchNavigator() {
         <SearchStack.Navigator screenOptions={{ headerShown: false }}>
             <SearchStack.Screen name="ExploreIndex" component={ExploreSearchScreen} />
             <SearchStack.Screen name="MusicSearch" component={SearchScreen} />
-            <SearchStack.Screen name="CreatePost" component={CreatePostScreen} />
+            <SearchStack.Screen name="CreatePost" component={CreatePostScreen as any} />
             <SearchStack.Screen name="CreateNote" component={CreateNoteScreen} />
             <SearchStack.Screen name="PostDetail" component={PostScreen} />
             <SearchStack.Screen name="UserProfile" component={UserProfileScreen} />
@@ -141,11 +146,16 @@ function ProfileNavigator() {
             <ProfileStack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
             <ProfileStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
             <ProfileStack.Screen name="FollowRequests" component={FollowRequestsScreen} />
+            <ProfileStack.Screen name="Legal" component={LegalScreen} />
+            <ProfileStack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
+            <ProfileStack.Screen name="Support" component={SupportScreen} />
+            <ProfileStack.Screen name="Feedback" component={FeedbackScreen} />
             <ProfileStack.Screen name="FollowersList" component={FollowersListScreen} />
             <ProfileStack.Screen name="FollowingList" component={FollowingListScreen} />
             <ProfileStack.Screen name="UserProfile" component={UserProfileScreen} />
             <ProfileStack.Screen name="PostDetail" component={PostScreen} />
             <ProfileStack.Screen name="SocialNotifications" component={NotificationsScreen} />
+            <ProfileStack.Screen name="MusicSearch" component={SearchScreen} />
         </ProfileStack.Navigator>
     );
 }
@@ -219,47 +229,60 @@ function MainTabs() {
     }, [fetchMessagesUnread]);
 
     const tabBarHeight = 62 + insets.bottom;
+    const tabRootRoutes: Record<string, string> = {
+        HomeTab: "HomeIndex",
+        SearchTab: "ExploreIndex",
+        MessagesTab: "Conversations",
+        ProfileTab: "ProfileIndex",
+    };
 
     return (
         <Tabs.Navigator
-            screenOptions={({ route }) => ({
-                headerShown: false,
-                tabBarHideOnKeyboard: true,
-                tabBarActiveTintColor: "#FFFFFF",
-                tabBarInactiveTintColor: "#6F6F78",
-                tabBarLabelStyle: {
-                    fontSize: 10,
-                    fontWeight: "800",
-                    marginTop: 2,
-                    paddingBottom: 0,
-                },
-                tabBarStyle: {
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: tabBarHeight,
-                    paddingTop: 8,
-                    paddingBottom: Math.max(insets.bottom, 8),
-                    paddingHorizontal: 12,
-                    borderTopWidth: 1,
-                    borderTopColor: "#23232A",
-                    backgroundColor: "#0F0F13",
-                    borderTopLeftRadius: 24,
-                    borderTopRightRadius: 24,
-                },
-                tabBarItemStyle: {
-                    borderRadius: 16,
-                },
-                tabBarBadgeStyle: {
-                    backgroundColor: "#9B5CFF",
-                    color: "#000",
-                    fontWeight: "900",
-                    fontSize: 10,
-                    minWidth: 18,
-                    height: 18,
-                },
-                tabBarIcon: ({ color, focused }) => {
+            screenOptions={({ route }) => {
+                const focusedRoute = getFocusedRouteNameFromRoute(route);
+                const rootRoute = tabRootRoutes[route.name];
+                const hideTabBar = !!focusedRoute && !!rootRoute && focusedRoute !== rootRoute;
+
+                return {
+                    headerShown: false,
+                    tabBarHideOnKeyboard: true,
+                    tabBarActiveTintColor: "#FFFFFF",
+                    tabBarInactiveTintColor: colors.textFaint,
+                    tabBarLabelStyle: {
+                        fontSize: 10,
+                        fontWeight: "800",
+                        marginTop: 2,
+                        paddingBottom: 0,
+                    },
+                    tabBarStyle: hideTabBar
+                        ? { display: "none" }
+                        : {
+                            position: "absolute",
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: tabBarHeight,
+                            paddingTop: 8,
+                            paddingBottom: Math.max(insets.bottom, 8),
+                            paddingHorizontal: 12,
+                            borderTopWidth: 1,
+                            borderTopColor: colors.border,
+                            backgroundColor: colors.surface,
+                            borderTopLeftRadius: radius.xxl,
+                            borderTopRightRadius: radius.xxl,
+                        },
+                    tabBarItemStyle: {
+                        borderRadius: radius.lg,
+                    },
+                    tabBarBadgeStyle: {
+                        backgroundColor: colors.primary,
+                        color: colors.bg,
+                        fontWeight: "900",
+                        fontSize: 10,
+                        minWidth: 18,
+                        height: 18,
+                    },
+                    tabBarIcon: ({ color, focused }) => {
                     let icon: keyof typeof Ionicons.glyphMap = "home-outline";
 
                     if (route.name === "HomeTab") icon = focused ? "home" : "home-outline";
@@ -275,7 +298,7 @@ function MainTabs() {
                                     width: 38,
                                     height: 38,
                                     borderRadius: 19,
-                                    backgroundColor: "#5E17EB",
+                                    backgroundColor: colors.primaryDark,
                                     alignItems: "center",
                                     justifyContent: "center",
                                     marginTop: -1,
@@ -300,14 +323,15 @@ function MainTabs() {
                                 justifyContent: "center",
                                 backgroundColor: focused ? "#1A1327" : "transparent",
                                 borderWidth: focused ? 1 : 0,
-                                borderColor: focused ? "#2E2050" : "transparent",
+                                borderColor: focused ? colors.borderAccent : "transparent",
                             }}
                         >
                             <Ionicons name={icon} size={21} color={focused ? "#FFFFFF" : color} />
                         </View>
                     );
-                },
-            })}
+                    },
+                };
+            }}
         >
             <Tabs.Screen
                 name="HomeTab"
@@ -444,7 +468,9 @@ export default function App() {
                             <RootStack.Screen name="Splash" component={SplashScreen} />
                             <RootStack.Screen name="Login" component={LoginScreen} />
                             <RootStack.Screen name="Register" component={RegisterScreen} />
+                            <RootStack.Screen name="Legal" component={LegalScreen} />
                             <RootStack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                            <RootStack.Screen name="MusicSearch" component={SearchScreen} />
                             <RootStack.Screen name="Main" component={MainTabs} />
                         </RootStack.Navigator>
                     </NavigationContainer>
