@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TrueBPM",
-    "slug": "truebpm",
+    "slug": "mobile",
     "version": "1.0.0",
     "entryPoint": "./index.js",
     "scheme": "truebpm",
@@ -16,8 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "fr.truebpm.app",
+      "usesAppleSignIn": true,
       "entitlements": {
-        "com.apple.developer.shazamkit": true
+        "aps-environment": "production"
       },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "TrueBPM utilise le micro pour identifier le morceau que tu écoutes.",

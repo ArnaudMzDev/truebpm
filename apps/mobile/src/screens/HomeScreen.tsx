@@ -4,6 +4,7 @@ import {
     Text,
     StyleSheet,
     FlatList,
+    PanResponder,
     RefreshControl,
     TouchableOpacity,
     Image,
@@ -38,10 +39,12 @@ type SuggestedUser = {
 };
 
 type HomeFeed = "forYou" | "following";
+type FeedListItem =
+    | { type: "post"; post: PostType }
+    | { type: "suggestions"; id: string; suggestions: SuggestedUser[] };
 
 const LIMIT = 15;
 const SUGGESTIONS_LIMIT = 8;
-const SUGGESTIONS_COLLAPSED_KEY = "home_suggestions_collapsed";
 const HIDDEN_SUGGESTIONS_KEY = "home_hidden_suggestions";
 
 async function safeJson(res: Response): Promise<any | null> {
@@ -158,13 +161,13 @@ export default function HomeScreen({ navigation }: any) {
 
     const [suggestions, setSuggestions] = useState<SuggestedUser[]>([]);
     const [loadingSuggestions, setLoadingSuggestions] = useState(true);
-    const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
     const [hiddenSuggestionIds, setHiddenSuggestionIds] = useState<string[]>([]);
     const [followLoadingMap, setFollowLoadingMap] = useState<Record<string, boolean>>({});
 
     const didInit = useRef(false);
     const lastFeedRef = useRef<HomeFeed>("forYou");
     const socketRef = useRef<Socket | null>(null);
+    const suggestionsTouchRef = useRef(false);
 
     const followingIds = useMemo(() => {
         const arr = Array.isArray(me?.followingList) ? me.followingList : [];
@@ -180,12 +183,6 @@ export default function HomeScreen({ navigation }: any) {
         );
     }, [suggestions, hiddenSuggestionIds, followingIds]);
 
-    const persistCollapsed = useCallback(async (value: boolean) => {
-        try {
-            await AsyncStorage.setItem(SUGGESTIONS_COLLAPSED_KEY, JSON.stringify(value));
-        } catch {}
-    }, []);
-
     const persistHiddenIds = useCallback(async (ids: string[]) => {
         try {
             await AsyncStorage.setItem(HIDDEN_SUGGESTIONS_KEY, JSON.stringify(ids));
@@ -194,16 +191,7 @@ export default function HomeScreen({ navigation }: any) {
 
     const fetchPrefs = useCallback(async () => {
         try {
-            const [rawCollapsed, rawHidden] = await Promise.all([
-                AsyncStorage.getItem(SUGGESTIONS_COLLAPSED_KEY),
-                AsyncStorage.getItem(HIDDEN_SUGGESTIONS_KEY),
-            ]);
-
-            if (rawCollapsed) {
-                try {
-                    setSuggestionsCollapsed(!!JSON.parse(rawCollapsed));
-                } catch {}
-            }
+            const rawHidden = await AsyncStorage.getItem(HIDDEN_SUGGESTIONS_KEY);
 
             if (rawHidden) {
                 try {
@@ -412,14 +400,6 @@ export default function HomeScreen({ navigation }: any) {
         );
     }, []);
 
-    const toggleSuggestionsCollapsed = useCallback(async () => {
-        setSuggestionsCollapsed((prev) => {
-            const next = !prev;
-            persistCollapsed(next).catch(() => {});
-            return next;
-        });
-    }, [persistCollapsed]);
-
     const hideSuggestion = useCallback(
         async (userId: string) => {
             setHiddenSuggestionIds((prev) => {
@@ -468,15 +448,6 @@ export default function HomeScreen({ navigation }: any) {
         navigation.navigate("SocialNotifications");
     }, [navigation]);
 
-    const postKeyExtractor = useCallback((item: PostType) => item._id, []);
-
-    const renderPostItem = useCallback(
-        ({ item }: { item: PostType }) => (
-            <PostCard post={item} onDeleted={handleDeleted} />
-        ),
-        [handleDeleted]
-    );
-
     const suggestionKeyExtractor = useCallback((item: SuggestedUser) => item._id, []);
 
     const renderSuggestionItem = useCallback(
@@ -491,6 +462,146 @@ export default function HomeScreen({ navigation }: any) {
             />
         ),
         [followLoadingMap, followingIds, handleFollowSuggestion, hideSuggestion, navigation]
+    );
+
+    const markSuggestionsTouchStart = useCallback(() => {
+        suggestionsTouchRef.current = true;
+    }, []);
+
+    const markSuggestionsTouchEnd = useCallback(() => {
+        setTimeout(() => {
+            suggestionsTouchRef.current = false;
+        }, 80);
+    }, []);
+
+    const feedSeed = useMemo(() => {
+        return posts.reduce((acc, post, index) => {
+            const id = String(post?._id || "");
+            return acc + id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) + index * 17;
+        }, activeFeed === "forYou" ? 11 : 29);
+    }, [activeFeed, posts]);
+
+    const feedItems = useMemo<FeedListItem[]>(() => {
+        const postItems = posts.map<FeedListItem>((post) => ({ type: "post", post }));
+
+        if (loadingSuggestions || visibleSuggestions.length === 0 || posts.length < 2) {
+            return postItems;
+        }
+
+        const maxFirstSlot = Math.max(1, Math.min(4, posts.length - 1));
+        const firstAfter = Math.min(posts.length - 2, 1 + (feedSeed % maxFirstSlot));
+        const secondAfter = firstAfter + 6 + (feedSeed % 3);
+        const rails = new Map<number, SuggestedUser[]>();
+
+        rails.set(firstAfter, visibleSuggestions.slice(0, 4));
+
+        if (visibleSuggestions.length > 4 && secondAfter < posts.length - 1) {
+            rails.set(secondAfter, visibleSuggestions.slice(4, 8));
+        }
+
+        const nextItems: FeedListItem[] = [];
+        posts.forEach((post, index) => {
+            nextItems.push({ type: "post", post });
+
+            const railSuggestions = rails.get(index);
+            if (railSuggestions?.length) {
+                nextItems.push({
+                    type: "suggestions",
+                    id: `suggestions-${activeFeed}-${index}-${railSuggestions.map((user) => user._id).join("-")}`,
+                    suggestions: railSuggestions,
+                });
+            }
+        });
+
+        return nextItems;
+    }, [activeFeed, feedSeed, loadingSuggestions, posts, visibleSuggestions]);
+
+    const feedKeyExtractor = useCallback((item: FeedListItem) => {
+        if (item.type === "post") return item.post._id;
+        return item.id;
+    }, []);
+
+    const renderFeedItem = useCallback(
+        ({ item }: { item: FeedListItem }) => {
+            if (item.type === "post") {
+                return <PostCard post={item.post} onDeleted={handleDeleted} />;
+            }
+
+            return (
+                <View
+                    style={styles.inlineSuggestionsBlock}
+                    onTouchStart={markSuggestionsTouchStart}
+                    onTouchEnd={markSuggestionsTouchEnd}
+                    onTouchCancel={markSuggestionsTouchEnd}
+                >
+                    <View style={styles.inlineSuggestionsHeader}>
+                        <View style={styles.inlineSuggestionsTitleWrap}>
+                            <Text style={styles.inlineSuggestionsEyebrow}>À suivre</Text>
+                            <Text style={styles.inlineSuggestionsTitle}>Quelques profils pour ton feed</Text>
+                        </View>
+
+                        {hiddenSuggestionIds.length > 0 ? (
+                            <TouchableOpacity onPress={restoreSuggestions} activeOpacity={0.85}>
+                                <Text style={styles.inlineSuggestionsLink}>Réafficher</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity onPress={openExplore} activeOpacity={0.85}>
+                                <Text style={styles.inlineSuggestionsLink}>Explorer</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    <FlatList
+                        data={item.suggestions}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyExtractor={suggestionKeyExtractor}
+                        renderItem={renderSuggestionItem}
+                        contentContainerStyle={styles.suggestionsListContent}
+                    />
+                </View>
+            );
+        },
+        [
+            handleDeleted,
+            hiddenSuggestionIds.length,
+            markSuggestionsTouchEnd,
+            markSuggestionsTouchStart,
+            openExplore,
+            renderSuggestionItem,
+            restoreSuggestions,
+            suggestionKeyExtractor,
+        ]
+    );
+
+    const switchFeed = useCallback((nextFeed: HomeFeed) => {
+        setActiveFeed((current) => (current === nextFeed ? current : nextFeed));
+    }, []);
+
+    const panResponder = useMemo(
+        () =>
+            PanResponder.create({
+                onMoveShouldSetPanResponder: (_, gesture) => {
+                    if (suggestionsTouchRef.current) return false;
+
+                    const horizontal = Math.abs(gesture.dx);
+                    const vertical = Math.abs(gesture.dy);
+                    return horizontal > 28 && horizontal > vertical * 1.35;
+                },
+                onPanResponderRelease: (_, gesture) => {
+                    const horizontal = Math.abs(gesture.dx);
+                    const vertical = Math.abs(gesture.dy);
+
+                    if (horizontal < 72 || horizontal < vertical * 1.2) return;
+
+                    if (gesture.dx < 0 && activeFeed === "forYou") {
+                        switchFeed("following");
+                    } else if (gesture.dx > 0 && activeFeed === "following") {
+                        switchFeed("forYou");
+                    }
+                },
+            }),
+        [activeFeed, switchFeed]
     );
 
     const listContentStyle = useMemo(
@@ -529,105 +640,32 @@ export default function HomeScreen({ navigation }: any) {
 
     const listHeader = useMemo(() => (
         <View>
-            <View style={styles.heroIntro}>
-                <Text style={styles.heroEyebrow}>TrueBPM</Text>
-                <Text style={styles.heroTitle}>Feed</Text>
+            <View style={styles.feedTabsWrap}>
+                <View style={styles.feedTabs}>
+                    <TouchableOpacity
+                        style={[styles.feedTabBtn, activeFeed === "forYou" && styles.feedTabBtnActive]}
+                        activeOpacity={0.86}
+                        onPress={() => switchFeed("forYou")}
+                    >
+                        <Text style={[styles.feedTabText, activeFeed === "forYou" && styles.feedTabTextActive]}>
+                            Pour toi
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.feedTabBtn, activeFeed === "following" && styles.feedTabBtnActive]}
+                        activeOpacity={0.86}
+                        onPress={() => switchFeed("following")}
+                    >
+                        <Text style={[styles.feedTabText, activeFeed === "following" && styles.feedTabTextActive]}>
+                            Abonnements
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.notesWrap}>
                 <NotesStrip navigation={navigation} />
-            </View>
-
-            <View style={styles.suggestionsBlock}>
-                <View style={styles.suggestionsHeader}>
-                    <TouchableOpacity
-                        style={styles.suggestionsHeaderLeft}
-                        onPress={toggleSuggestionsCollapsed}
-                        activeOpacity={0.85}
-                    >
-                        <View style={styles.suggestionsTitleWrap}>
-                            <Text style={styles.suggestionsEyebrow}>À écouter avec eux</Text>
-                            <Text style={styles.suggestionsTitle}>Profils à suivre</Text>
-                        </View>
-
-                        <View style={styles.suggestionsChevronWrap}>
-                            <Ionicons
-                                name={suggestionsCollapsed ? "chevron-down" : "chevron-up"}
-                                size={16}
-                                color={colors.textMuted}
-                            />
-                        </View>
-                    </TouchableOpacity>
-
-                    {hiddenSuggestionIds.length > 0 ? (
-                        <TouchableOpacity onPress={restoreSuggestions} activeOpacity={0.85}>
-                            <Text style={styles.suggestionsLink}>Réafficher</Text>
-                        </TouchableOpacity>
-                    ) : (
-                        <TouchableOpacity
-                            onPress={openExplore}
-                            activeOpacity={0.85}
-                        >
-                            <Text style={styles.suggestionsLink}>Explorer</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                {!suggestionsCollapsed ? (
-                    loadingSuggestions ? (
-                        <AppSectionLoader />
-                    ) : visibleSuggestions.length > 0 ? (
-                        <FlatList
-                            data={visibleSuggestions}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            keyExtractor={suggestionKeyExtractor}
-                            renderItem={renderSuggestionItem}
-                            contentContainerStyle={styles.suggestionsListContent}
-                        />
-                    ) : (
-                        <View style={styles.emptySuggestionsBox}>
-                            <View style={styles.emptySuggestionsIconWrap}>
-                                <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-                            </View>
-                            <Text style={styles.emptySuggestionsText}>
-                                Plus personne à proposer là, reviens après quelques écoutes.
-                            </Text>
-                        </View>
-                    )
-                ) : null}
-            </View>
-
-            <View style={styles.feedTabs}>
-                <TouchableOpacity
-                    style={[styles.feedTabBtn, activeFeed === "forYou" && styles.feedTabBtnActive]}
-                    activeOpacity={0.86}
-                    onPress={() => setActiveFeed("forYou")}
-                >
-                    <Ionicons
-                        name="sparkles-outline"
-                        size={15}
-                        color={activeFeed === "forYou" ? colors.bg : colors.textMuted}
-                    />
-                    <Text style={[styles.feedTabText, activeFeed === "forYou" && styles.feedTabTextActive]}>
-                        Pour toi
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.feedTabBtn, activeFeed === "following" && styles.feedTabBtnActive]}
-                    activeOpacity={0.86}
-                    onPress={() => setActiveFeed("following")}
-                >
-                    <Ionicons
-                        name="people-outline"
-                        size={15}
-                        color={activeFeed === "following" ? colors.bg : colors.textMuted}
-                    />
-                    <Text style={[styles.feedTabText, activeFeed === "following" && styles.feedTabTextActive]}>
-                        Abonnements
-                    </Text>
-                </TouchableOpacity>
             </View>
 
             <Text style={styles.feedTitle}>
@@ -636,16 +674,8 @@ export default function HomeScreen({ navigation }: any) {
         </View>
     ), [
         activeFeed,
-        hiddenSuggestionIds.length,
-        loadingSuggestions,
         navigation,
-        openExplore,
-        renderSuggestionItem,
-        restoreSuggestions,
-        suggestionKeyExtractor,
-        suggestionsCollapsed,
-        toggleSuggestionsCollapsed,
-        visibleSuggestions,
+        switchFeed,
     ]);
 
     if (initialLoading && posts.length === 0) {
@@ -675,53 +705,44 @@ export default function HomeScreen({ navigation }: any) {
                 }
             />
 
-            <FlatList
-                data={posts}
-                keyExtractor={postKeyExtractor}
-                renderItem={renderPostItem}
-                ListHeaderComponent={listHeader}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={listContentStyle}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={colors.primary}
-                    />
-                }
-                onEndReached={loadMore}
-                onEndReachedThreshold={0.5}
-                ListEmptyComponent={listEmpty}
-                ListFooterComponent={listFooter}
-            />
+            <View style={styles.feedGestureArea} {...panResponder.panHandlers}>
+                <FlatList
+                    data={feedItems}
+                    keyExtractor={feedKeyExtractor}
+                    renderItem={renderFeedItem}
+                    ListHeaderComponent={listHeader}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={listContentStyle}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor={colors.primary}
+                        />
+                    }
+                    onEndReached={loadMore}
+                    onEndReachedThreshold={0.5}
+                    ListEmptyComponent={listEmpty}
+                    ListFooterComponent={listFooter}
+                />
+            </View>
         </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
+    feedGestureArea: {
+        flex: 1,
+    },
+
     listContent: {
         paddingBottom: spacing.xxxl,
     },
 
-    heroIntro: {
-        marginBottom: spacing.lg,
+    feedTabsWrap: {
+        alignItems: "center",
         paddingTop: spacing.xs,
-    },
-
-    heroEyebrow: {
-        color: colors.primary,
-        fontSize: typography.tiny,
-        fontWeight: fontWeights.black,
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginBottom: 4,
-    },
-
-    heroTitle: {
-        color: colors.text,
-        fontSize: 26,
-        fontWeight: fontWeights.black,
-        lineHeight: 30,
+        marginBottom: spacing.lg,
     },
 
     notesWrap: {
@@ -733,8 +754,6 @@ const styles = StyleSheet.create({
         height: 42,
         borderRadius: radius.lg,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
         justifyContent: "center",
         alignItems: "center",
         position: "relative",
@@ -761,48 +780,31 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.black,
     },
 
-    suggestionsBlock: {
+    inlineSuggestionsBlock: {
+        marginTop: spacing.sm,
         marginBottom: spacing.xl,
-        padding: spacing.md,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        paddingVertical: spacing.md,
+        backgroundColor: "rgba(9, 11, 16, 0.72)",
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: "rgba(130, 146, 171, 0.14)",
     },
 
-    suggestionsHeader: {
+    inlineSuggestionsHeader: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        paddingHorizontal: spacing.xs,
         marginBottom: spacing.sm,
         gap: spacing.md,
     },
 
-    suggestionsHeaderLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.sm,
-        flex: 1,
-        justifyContent: "space-between",
-    },
-
-    suggestionsTitleWrap: {
+    inlineSuggestionsTitleWrap: {
         flex: 1,
         paddingRight: spacing.sm,
     },
 
-    suggestionsChevronWrap: {
-        width: 28,
-        height: 28,
-        borderRadius: radius.pill,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-
-    suggestionsEyebrow: {
+    inlineSuggestionsEyebrow: {
         color: colors.primary,
         fontSize: typography.tiny,
         fontWeight: fontWeights.black,
@@ -811,20 +813,20 @@ const styles = StyleSheet.create({
         letterSpacing: 1,
     },
 
-    suggestionsTitle: {
+    inlineSuggestionsTitle: {
         color: colors.text,
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: fontWeights.black,
     },
 
-    suggestionsLink: {
+    inlineSuggestionsLink: {
         color: colors.primary,
-        fontSize: typography.bodySm,
+        fontSize: typography.caption,
         fontWeight: fontWeights.extraBold,
     },
 
     suggestionsListContent: {
-        paddingRight: 4,
+        paddingHorizontal: spacing.xs,
     },
 
     suggestionCard: {
@@ -832,10 +834,8 @@ const styles = StyleSheet.create({
         marginRight: spacing.sm,
         position: "relative",
         padding: spacing.md,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        borderRadius: radius.xxl,
     },
 
     suggestionHideBtn: {
@@ -849,8 +849,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface4,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     suggestionTopRow: {
@@ -866,8 +864,6 @@ const styles = StyleSheet.create({
         borderRadius: 23,
         backgroundColor: colors.surface4,
         marginRight: spacing.sm,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     suggestionIdentity: {
@@ -907,9 +903,7 @@ const styles = StyleSheet.create({
     },
 
     suggestionActionFollowing: {
-        backgroundColor: "transparent",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
     },
 
     suggestionActionDisabled: {
@@ -926,67 +920,36 @@ const styles = StyleSheet.create({
         color: colors.primary,
     },
 
-    emptySuggestionsBox: {
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.xl,
-        padding: spacing.md,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.sm,
-    },
-
-    emptySuggestionsIconWrap: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
-    },
-
-    emptySuggestionsText: {
-        color: colors.textMuted,
-        fontSize: typography.bodySm,
-        flex: 1,
-    },
-
     feedTabs: {
         flexDirection: "row",
-        gap: 4,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
-        padding: 4,
-        marginBottom: spacing.md,
+        alignItems: "center",
+        gap: 2,
+        backgroundColor: "rgba(20, 24, 33, 0.34)",
+        borderRadius: radius.pill,
+        padding: 3,
     },
 
     feedTabBtn: {
-        flex: 1,
-        minHeight: 42,
+        minHeight: 30,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: spacing.xs,
-        borderRadius: radius.lg,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.md,
     },
 
     feedTabBtnActive: {
-        backgroundColor: colors.primary,
+        backgroundColor: "rgba(151, 89, 255, 0.18)",
     },
 
     feedTabText: {
         color: colors.textMuted,
-        fontSize: typography.bodySm,
+        fontSize: typography.caption,
         fontWeight: fontWeights.extraBold,
     },
 
     feedTabTextActive: {
-        color: colors.bg,
+        color: colors.text,
         fontWeight: fontWeights.black,
     },
 
@@ -1000,10 +963,8 @@ const styles = StyleSheet.create({
 
     emptyFeedBox: {
         marginTop: spacing.xs,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        borderRadius: radius.xxl,
         padding: spacing.lg,
         alignItems: "center",
     },
@@ -1014,9 +975,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
         marginBottom: spacing.md,
     },
 

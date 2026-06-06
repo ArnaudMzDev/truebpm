@@ -210,6 +210,9 @@ export default function AdminDashboard() {
     const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
     const [banReason, setBanReason] = useState("");
     const [banUntil, setBanUntil] = useState("");
+    const [selectedDeleteUser, setSelectedDeleteUser] = useState<AdminUser | null>(null);
+    const [deleteUserReason, setDeleteUserReason] = useState("");
+    const [deleteUserConfirmation, setDeleteUserConfirmation] = useState("");
     const [selectedPost, setSelectedPost] = useState<AdminPost | null>(null);
     const [deleteReason, setDeleteReason] = useState("");
     const [selectedSupport, setSelectedSupport] = useState<SupportTicket | null>(null);
@@ -411,6 +414,37 @@ export default function AdminDashboard() {
                 body: JSON.stringify({ action: "unban", reason: "Réactivation depuis le dashboard admin" }),
             });
             setNotice(`${user.pseudo} est réactivé.`);
+            await loadEverything();
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function openDeleteUserModal(user: AdminUser) {
+        setSelectedDeleteUser(user);
+        setDeleteUserReason("");
+        setDeleteUserConfirmation("");
+    }
+
+    async function deleteUser() {
+        if (!selectedDeleteUser) return;
+        setBusy(true);
+        try {
+            const data = await api(`/api/admin/users/${selectedDeleteUser._id}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    reason: deleteUserReason,
+                    confirmation: deleteUserConfirmation,
+                }),
+            });
+            const counts = data?.counts || {};
+            setNotice(
+                `${selectedDeleteUser.pseudo} supprimé · ${counts.posts || 0} posts · ${counts.comments || 0} commentaires.`
+            );
+            setSelectedDeleteUser(null);
+            setDeleteUserReason("");
+            setDeleteUserConfirmation("");
             await loadEverything();
         } finally {
             setBusy(false);
@@ -632,6 +666,9 @@ export default function AdminDashboard() {
                                         ) : (
                                             <button className={styles.dangerButton} disabled={busy} onClick={() => setSelectedUser(user)}>Ban</button>
                                         )}
+                                        <button className={styles.dangerGhostButton} disabled={busy} onClick={() => openDeleteUserModal(user)}>
+                                            Supprimer
+                                        </button>
                                     </div>
                                 </article>
                             ))}
@@ -807,6 +844,45 @@ export default function AdminDashboard() {
                         <div className={styles.modalActions}>
                             <button className={styles.secondaryButton} onClick={() => setSelectedUser(null)}>Annuler</button>
                             <button className={styles.dangerButton} disabled={busy || !banReason.trim()} onClick={banUser}>Confirmer le ban</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedDeleteUser && (
+                <div className={styles.modalBackdrop}>
+                    <div className={styles.modal}>
+                        <h3>Supprimer le compte</h3>
+                        <p className={styles.muted}>
+                            Cette action supprime définitivement {selectedDeleteUser.pseudo}, ses posts,
+                            commentaires, notes, messages, follows, demandes, notifications, tickets support
+                            et feedbacks.
+                        </p>
+                        <label className={styles.field}>
+                            <span>Raison admin</span>
+                            <textarea
+                                value={deleteUserReason}
+                                onChange={(event) => setDeleteUserReason(event.target.value)}
+                                maxLength={500}
+                            />
+                        </label>
+                        <label className={styles.field}>
+                            <span>Confirmation : écris SUPPRIMER</span>
+                            <input
+                                value={deleteUserConfirmation}
+                                onChange={(event) => setDeleteUserConfirmation(event.target.value)}
+                                autoComplete="off"
+                            />
+                        </label>
+                        <div className={styles.modalActions}>
+                            <button className={styles.secondaryButton} onClick={() => setSelectedDeleteUser(null)}>Annuler</button>
+                            <button
+                                className={styles.dangerButton}
+                                disabled={busy || !deleteUserReason.trim() || deleteUserConfirmation !== "SUPPRIMER"}
+                                onClick={deleteUser}
+                            >
+                                Supprimer définitivement
+                            </button>
                         </div>
                     </div>
                 </div>

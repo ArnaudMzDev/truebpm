@@ -13,6 +13,7 @@ import SplashScreen from "./src/screens/SplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import ProfileSetupScreen from "./src/screens/ProfileSetupScreen";
+import AppDiscoveryScreen from "./src/screens/AppDiscoveryScreen";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
@@ -44,7 +45,10 @@ import ChatScreen from "./src/screens/ChatScreen";
 import PlayerBar from "./src/components/PlayerBar";
 import { PlayerProvider } from "./src/context/PlayerContext";
 import { UserProvider } from "./src/context/UserContext";
-import { registerPushTokenOnBackend } from "./src/lib/pushNotifications";
+import {
+    registerPushTokenOnBackend,
+    syncEngagementReminderNotifications,
+} from "./src/lib/pushNotifications";
 import { API_URL, SOCKET_URL } from "./src/lib/config";
 import { colors, radius } from "./src/theme";
 
@@ -235,13 +239,18 @@ function MainTabs() {
         MessagesTab: "Conversations",
         ProfileTab: "ProfileIndex",
     };
+    const tabVisibleNestedRoutes = new Set(["UserProfile"]);
 
     return (
         <Tabs.Navigator
             screenOptions={({ route }) => {
                 const focusedRoute = getFocusedRouteNameFromRoute(route);
                 const rootRoute = tabRootRoutes[route.name];
-                const hideTabBar = !!focusedRoute && !!rootRoute && focusedRoute !== rootRoute;
+                const hideTabBar =
+                    !!focusedRoute &&
+                    !!rootRoute &&
+                    focusedRoute !== rootRoute &&
+                    !tabVisibleNestedRoutes.has(focusedRoute);
 
                 return {
                     headerShown: false,
@@ -396,9 +405,15 @@ function PushBootstrap() {
     const receivedListener = useRef<any>(null);
 
     useEffect(() => {
-        registerPushTokenOnBackend().catch((e) => {
-            console.log("registerPushTokenOnBackend error:", e);
-        });
+        registerPushTokenOnBackend()
+            .catch((e) => {
+                console.log("registerPushTokenOnBackend error:", e);
+            })
+            .finally(() => {
+                syncEngagementReminderNotifications().catch((e) => {
+                    console.log("syncEngagementReminderNotifications error:", e);
+                });
+            });
 
         receivedListener.current = Notifications.addNotificationReceivedListener((notification) => {
             console.log("push received:", notification.request.content.data);
@@ -408,6 +423,16 @@ function PushBootstrap() {
             const data: any = response.notification.request.content.data || {};
 
             if (!navigationRef.isReady()) return;
+
+            if (data?.type === "engagement_reminder") {
+                navigationRef.navigate("Main", {
+                    screen: "HomeTab",
+                    params: {
+                        screen: "HomeIndex",
+                    },
+                });
+                return;
+            }
 
             if (data?.type === "message" && data?.conversationId) {
                 navigationRef.navigate("Main", {
@@ -470,6 +495,7 @@ export default function App() {
                             <RootStack.Screen name="Register" component={RegisterScreen} />
                             <RootStack.Screen name="Legal" component={LegalScreen} />
                             <RootStack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+                            <RootStack.Screen name="AppDiscovery" component={AppDiscoveryScreen} />
                             <RootStack.Screen name="MusicSearch" component={SearchScreen} />
                             <RootStack.Screen name="Main" component={MainTabs} />
                         </RootStack.Navigator>

@@ -75,7 +75,17 @@ export async function GET(req: Request) {
         const ordered = [
             ...notes.filter((n: any) => String(n.userId?._id) === String(meId)),
             ...notes.filter((n: any) => String(n.userId?._id) !== String(meId)),
-        ];
+        ].map((note: any) => {
+            const likes = Array.isArray(note.likes) ? note.likes : [];
+            const likedByMe = likes.some((id: any) => String(id) === String(meId));
+
+            return {
+                ...note,
+                likedByMe,
+                likesCount: typeof note.likesCount === "number" ? note.likesCount : likes.length,
+                likes: undefined,
+            };
+        });
 
         return NextResponse.json({ notes: ordered }, { status: 200 });
     } catch (e) {
@@ -127,7 +137,20 @@ export async function POST(req: Request) {
             .populate("userId", "_id pseudo avatarUrl")
             .lean();
 
-        return NextResponse.json({ success: true, note }, { status: 200 });
+        return NextResponse.json(
+            {
+                success: true,
+                note: note
+                    ? {
+                        ...note,
+                        likedByMe: false,
+                        likesCount: typeof note.likesCount === "number" ? note.likesCount : 0,
+                        likes: undefined,
+                    }
+                    : note,
+            },
+            { status: 200 }
+        );
     } catch (e) {
         console.error("❌ POST /api/notes error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

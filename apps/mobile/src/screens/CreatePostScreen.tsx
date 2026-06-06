@@ -10,6 +10,8 @@ import {
     TextInput,
     ScrollView,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
 } from "react-native";
 import { API_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
@@ -250,18 +252,23 @@ export default function CreatePostScreen({ route, navigation }: Props) {
 
     return (
         <AppScreen>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[
-                    styles.content,
-                    {
-                        paddingTop: insets.top + 10,
-                        paddingBottom: Math.max(insets.bottom, 12) + 96,
-                    },
-                ]}
+            <KeyboardAvoidingView
+                style={styles.keyboardWrap}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
-                <View style={styles.topBar}>
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+                    contentContainerStyle={[
+                        styles.content,
+                        {
+                            paddingTop: insets.top + 10,
+                            paddingBottom: Math.max(insets.bottom, 12) + 96,
+                        },
+                    ]}
+                >
+                    <View style={styles.topBar}>
                     <TouchableOpacity
                         style={styles.iconButton}
                         onPress={() => navigation.goBack()}
@@ -417,13 +424,16 @@ export default function CreatePostScreen({ route, navigation }: Props) {
 
                 <View style={styles.commentCard}>
                     <View style={styles.commentHeader}>
-                        <Text style={styles.eyebrow}>Avis</Text>
+                        <View>
+                            <Text style={styles.eyebrow}>Avis</Text>
+                            <Text style={styles.optionalHint}>Optionnel</Text>
+                        </View>
                         <Text style={styles.commentCount}>{comment.trim().length}/280</Text>
                     </View>
 
                     <TextInput
                         style={styles.input}
-                        placeholder="Ton avis..."
+                        placeholder="Ajoute un avis si tu veux..."
                         placeholderTextColor={colors.textFaint}
                         multiline
                         maxLength={280}
@@ -433,18 +443,23 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                     />
                 </View>
 
-                <AppButton
-                    label={publishing ? "Publication..." : "Publier"}
-                    onPress={handlePublish}
-                    disabled={publishing}
-                    style={styles.publishBtn}
-                />
-            </ScrollView>
+                    <AppButton
+                        label={publishing ? "Publication..." : "Publier"}
+                        onPress={handlePublish}
+                        disabled={publishing}
+                        style={styles.publishBtn}
+                    />
+                </ScrollView>
+            </KeyboardAvoidingView>
         </AppScreen>
     );
 }
 
 const styles = StyleSheet.create({
+    keyboardWrap: {
+        flex: 1,
+    },
+
     content: {
         paddingBottom: 120,
     },
@@ -461,8 +476,6 @@ const styles = StyleSheet.create({
         height: 42,
         borderRadius: radius.lg,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -496,12 +509,10 @@ const styles = StyleSheet.create({
         width: "100%",
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: colors.surface,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
         padding: spacing.md,
-        borderRadius: radius.xl,
+        borderRadius: radius.xxl,
         marginBottom: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
     },
 
     cover: {
@@ -510,8 +521,6 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         marginRight: spacing.md,
         backgroundColor: colors.surface4,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     coverFallback: {
@@ -532,9 +541,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 9,
         paddingVertical: 5,
         borderRadius: radius.pill,
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
-        backgroundColor: "#151122",
+        backgroundColor: colors.primaryFaint,
         marginBottom: 8,
     },
 
@@ -567,8 +574,6 @@ const styles = StyleSheet.create({
         marginTop: spacing.sm,
         gap: spacing.xs,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
         borderRadius: radius.pill,
         paddingHorizontal: spacing.sm,
         paddingVertical: 7,
@@ -583,11 +588,9 @@ const styles = StyleSheet.create({
     modeCard: {
         width: "100%",
         flexDirection: "row",
-        backgroundColor: colors.surface,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        borderRadius: radius.xxl,
         marginBottom: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
         padding: 4,
         gap: 4,
     },
@@ -619,10 +622,8 @@ const styles = StyleSheet.create({
 
     ratingCard: {
         width: "100%",
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.md,
     },
@@ -646,9 +647,7 @@ const styles = StyleSheet.create({
     averagePill: {
         flexDirection: "row",
         alignItems: "baseline",
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.surfacePressed,
         borderRadius: radius.pill,
         paddingHorizontal: spacing.sm,
         paddingVertical: 6,
@@ -678,16 +677,13 @@ const styles = StyleSheet.create({
 
     ratingControl: {
         width: "100%",
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        borderRadius: radius.xl,
         padding: spacing.md,
     },
 
     ratingControlFeatured: {
-        backgroundColor: "#10131A",
-        borderColor: "#2B3342",
+        backgroundColor: "rgba(20, 24, 33, 0.86)",
     },
 
     ratingControlHeader: {
@@ -708,9 +704,7 @@ const styles = StyleSheet.create({
     scorePill: {
         flexDirection: "row",
         alignItems: "baseline",
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.surfacePressed,
         borderRadius: radius.pill,
         paddingHorizontal: spacing.sm,
         paddingVertical: 6,
@@ -744,8 +738,6 @@ const styles = StyleSheet.create({
         height: 12,
         borderRadius: radius.pill,
         backgroundColor: colors.surface4,
-        borderWidth: 1,
-        borderColor: colors.border,
         overflow: "hidden",
     },
 
@@ -801,19 +793,24 @@ const styles = StyleSheet.create({
 
     commentCard: {
         width: "100%",
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.md,
     },
 
     commentHeader: {
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "space-between",
         marginBottom: spacing.sm,
+    },
+
+    optionalHint: {
+        color: colors.textFaint,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
+        marginTop: 3,
     },
 
     commentCount: {
@@ -825,11 +822,9 @@ const styles = StyleSheet.create({
     input: {
         minHeight: 118,
         color: colors.text,
-        backgroundColor: colors.surface2,
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(8, 10, 14, 0.7)",
+        borderRadius: radius.xl,
         padding: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
         fontSize: typography.body,
         lineHeight: 21,
         fontWeight: fontWeights.medium,

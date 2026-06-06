@@ -87,7 +87,7 @@ export async function GET(req: Request) {
             SupportTicket.countDocuments({ createdAt: { $gte: last24h } }),
             Feedback.countDocuments({ status: { $in: ["new", "reviewed", "planned"] } }),
             Feedback.countDocuments({ createdAt: { $gte: last24h } }),
-            AdminAuditLog.countDocuments({ action: "post_delete", createdAt: { $gte: last24h } }),
+            AdminAuditLog.countDocuments({ action: { $in: ["post_delete", "user_delete"] }, createdAt: { $gte: last24h } }),
             AdminAuditLog.countDocuments({ action: "user_ban", createdAt: { $gte: last24h } }),
             AdminAuditLog.find({}).sort({ _id: -1 }).limit(8).lean(),
             User.find({ lastSeenAt: { $gte: last12h } }).select("lastSeenAt").lean(),

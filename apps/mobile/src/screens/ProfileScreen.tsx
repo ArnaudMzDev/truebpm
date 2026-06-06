@@ -796,10 +796,8 @@ const styles = StyleSheet.create({
     sectionBlock: {
         marginTop: spacing.md,
         marginHorizontal: 16,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        borderRadius: radius.xxl,
         padding: spacing.md,
     },
 
@@ -816,9 +814,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
     },
 
     sectionBlockTitle: {
@@ -830,17 +826,14 @@ const styles = StyleSheet.create({
     pinnedCard: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(20, 24, 33, 0.76)",
+        borderRadius: radius.xl,
         padding: spacing.md,
         gap: spacing.md,
     },
 
     pinnedCardPlaying: {
-        borderColor: colors.borderAccent,
-        backgroundColor: "#151022",
+        backgroundColor: colors.primaryFaint,
         ...shadows.glowPrimary,
     },
 
@@ -904,10 +897,8 @@ const styles = StyleSheet.create({
     musicCard: {
         width: 148,
         marginRight: spacing.sm,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        borderRadius: radius.xl,
         padding: spacing.sm,
     },
 
@@ -945,10 +936,8 @@ const styles = StyleSheet.create({
     emptyBox: {
         alignItems: "flex-start",
         gap: 8,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(20, 24, 33, 0.62)",
+        borderRadius: radius.xl,
         padding: 14,
     },
 
@@ -971,9 +960,7 @@ const styles = StyleSheet.create({
         marginTop: spacing.lg,
         marginBottom: spacing.md,
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        borderRadius: radius.xxl,
         padding: 4,
     },
 
@@ -1004,9 +991,7 @@ const styles = StyleSheet.create({
         marginTop: 6,
         padding: 16,
         borderRadius: radius.xl,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
+        backgroundColor: "rgba(15, 18, 24, 0.62)",
         flexDirection: "row",
         alignItems: "center",
         gap: 10,

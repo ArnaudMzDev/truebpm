@@ -1,5 +1,4 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
@@ -7,17 +6,25 @@
         "./*"
       ]
     },
+    "lib": [
+      "DOM",
+      "ESNext"
+    ],
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowJs": true,
     "strict": false,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "noEmit": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "jsx": "preserve",
     "incremental": true,
     "plugins": [
@@ -29,5 +36,8 @@
   "include": [
     "./**/*",
     ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }

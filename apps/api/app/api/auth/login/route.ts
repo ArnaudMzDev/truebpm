@@ -12,6 +12,35 @@ const INVALID_CREDENTIALS = "Identifiants invalides.";
 const DUMMY_PASSWORD_HASH =
     "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
+function formatBanRemaining(bannedUntil: Date | null) {
+    if (!bannedUntil) return "durée indéterminée";
+
+    const ms = bannedUntil.getTime() - Date.now();
+    if (ms <= 0) return "";
+
+    const minutes = Math.ceil(ms / 60000);
+    if (minutes < 60) return `${minutes} min`;
+
+    const hours = Math.ceil(minutes / 60);
+    if (hours < 24) return `${hours} h`;
+
+    const days = Math.ceil(hours / 24);
+    return `${days} j`;
+}
+
+function buildBanMessage(userDoc: any, bannedUntil: Date | null) {
+    const reason = typeof userDoc?.banReason === "string" ? userDoc.banReason.trim() : "";
+    const remaining = formatBanRemaining(bannedUntil);
+    const details = [];
+
+    if (reason) details.push(`Raison : ${reason}`);
+    if (remaining) details.push(`Durée restante : ${remaining}`);
+
+    return details.length > 0
+        ? `Ce compte est suspendu. ${details.join(". ")}.`
+        : "Ce compte est suspendu.";
+}
+
 export async function POST(req: Request) {
     try {
         await connectDB();
@@ -37,7 +66,14 @@ export async function POST(req: Request) {
         const bannedUntil = userDoc.bannedUntil ? new Date(userDoc.bannedUntil) : null;
         if (userDoc.isBanned && (!bannedUntil || bannedUntil.getTime() > Date.now())) {
             return NextResponse.json(
-                { error: "Ce compte est suspendu." },
+                {
+                    error: buildBanMessage(userDoc, bannedUntil),
+                    ban: {
+                        reason: userDoc.banReason || "",
+                        bannedUntil: bannedUntil?.toISOString() || null,
+                        remaining: formatBanRemaining(bannedUntil),
+                    },
+                },
                 { status: 403 }
             );
         }

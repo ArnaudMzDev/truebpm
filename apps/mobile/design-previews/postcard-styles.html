@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrueBPM PostCard Styles</title>
+  <style>
+    :root {
+      --bg: #030407;
+      --panel: #0b0d12;
+      --panel-2: #11141c;
+      --panel-3: #151823;
+      --line: #242939;
+      --line-soft: #1a1f2d;
+      --text: #f7f7fb;
+      --muted: #9aa1ae;
+      --faint: #687082;
+      --purple: #9b5cff;
+      --purple-2: #5b18e8;
+      --pink: #ff4d72;
+      --green: #42d386;
+      --amber: #ffc45f;
+      --blue: #54c7ff;
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 14% 4%, rgba(155, 92, 255, .18), transparent 24%),
+        radial-gradient(circle at 84% 14%, rgba(84, 199, 255, .08), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      letter-spacing: 0;
+    }
+
+    .board {
+      width: max-content;
+      padding: 46px;
+      display: grid;
+      grid-template-columns: repeat(5, 390px);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .phone {
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      border-radius: 44px;
+      border: 1px solid #171b25;
+      background: #020305;
+      box-shadow: 0 34px 80px rgba(0, 0, 0, .62), inset 0 0 0 1px rgba(255,255,255,.025);
+      position: relative;
+    }
+
+    .screen {
+      height: 100%;
+      padding: 52px 18px 20px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.018), transparent 30%),
+        var(--bg);
+    }
+
+    .status {
+      position: absolute;
+      top: 17px;
+      left: 30px;
+      right: 30px;
+      height: 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .island {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      width: 112px;
+      height: 31px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: #000;
+      opacity: .95;
+    }
+
+    .page-label {
+      margin: 0 0 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .kicker {
+      color: var(--purple);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: 2.4px;
+    }
+
+    .headline {
+      margin-top: 3px;
+      font-size: 26px;
+      line-height: 1;
+      font-weight: 950;
+    }
+
+    .small-btn {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .feed-note {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.35;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      background: #050509;
+      border: 1px solid rgba(155, 92, 255, .42);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 950;
+    }
+
+    .avatar span {
+      color: var(--purple);
+    }
+
+    .user-row {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .user-name {
+      font-size: 15px;
+      font-weight: 950;
+    }
+
+    .time {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .art {
+      object-fit: cover;
+      background: #151515;
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      color: var(--purple);
+      border: 1px solid rgba(155, 92, 255, .34);
+      background: rgba(155, 92, 255, .12);
+      font-size: 11px;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    .track-title {
+      color: var(--text);
+      font-size: 24px;
+      line-height: 1.04;
+      font-weight: 950;
+    }
+
+    .track-artist {
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 720;
+      margin-top: 5px;
+      line-height: 1.2;
+    }
+
+    .quote {
+      color: #d7d9e2;
+      font-size: 17px;
+      line-height: 1.35;
+      font-weight: 760;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .action {
+      height: 36px;
+      min-width: 48px;
+      padding: 0 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border-radius: 999px;
+      background: #090b10;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .heart {
+      color: var(--pink);
+      background: rgba(255, 77, 114, .13);
+      border-color: rgba(255, 77, 114, .32);
+    }
+
+    .rating-bars {
+      display: flex;
+      align-items: end;
+      gap: 5px;
+      height: 31px;
+    }
+
+    .rating-bars i {
+      display: block;
+      width: 7px;
+      border-radius: 99px;
+      background: #202638;
+    }
+
+    .rating-bars i.on {
+      background: var(--purple);
+    }
+
+    .rating-number {
+      font-size: 44px;
+      line-height: .9;
+      font-weight: 950;
+      letter-spacing: -.8px;
+    }
+
+    .out-of {
+      color: var(--purple);
+      font-size: 20px;
+      font-weight: 950;
+    }
+
+    .style-name {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 18px;
+      color: #5f6675;
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 1.9px;
+    }
+
+    /* 1. Editorial Club */
+    .editorial-card {
+      margin-top: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: linear-gradient(180deg, #11151f, #0a0d13);
+      box-shadow: 0 22px 42px rgba(0,0,0,.35);
+    }
+
+    .editorial-track {
+      margin-top: 15px;
+      display: grid;
+      grid-template-columns: 116px 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .editorial-track .art {
+      width: 116px;
+      height: 116px;
+      border-radius: 21px;
+      box-shadow: 0 18px 34px rgba(0,0,0,.5);
+    }
+
+    .editorial-score {
+      margin-top: 16px;
+      padding: 14px 0 12px;
+      border-top: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .editorial-card .quote {
+      margin-top: 14px;
+      padding-left: 12px;
+      border-left: 3px solid var(--purple);
+    }
+
+    .editorial-card .actions {
+      margin-top: 16px;
+    }
+
+    /* 2. Cover First */
+    .cover-card {
+      margin-top: 12px;
+      overflow: hidden;
+      border-radius: 30px;
+      border: 1px solid var(--line);
+      background: #0a0b0f;
+      box-shadow: 0 26px 58px rgba(0,0,0,.48);
+    }
+
+    .cover-hero {
+      height: 275px;
+      position: relative;
+    }
+
+    .cover-hero .art {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .cover-hero:after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.72) 78%, #0a0b0f);
+    }
+
+    .cover-overlay {
+      position: absolute;
+      z-index: 1;
+      left: 16px;
+      right: 16px;
+      bottom: 15px;
+    }
+
+    .cover-body {
+      padding: 0 16px 16px;
+    }
+
+    .cover-score {
+      margin-top: -2px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cover-card .quote {
+      margin-top: 12px;
+      color: #e9eaf0;
+    }
+
+    .cover-card .actions {
+      margin-top: 15px;
+    }
+
+    /* 3. Critic Ledger */
+    .ledger-card {
+      margin-top: 12px;
+      padding: 15px;
+      border: 1px solid #2c3141;
+      border-radius: 20px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
+        linear-gradient(180deg, #10131b, #090a0e);
+      background-size: 18px 18px, auto;
+    }
+
+    .ledger-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .ledger-art {
+      width: 72px;
+      height: 72px;
+      border-radius: 15px;
+    }
+
+    .ledger-rating {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 92px 1fr 42px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .meter {
+      height: 8px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: #202638;
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--purple);
+    }
+
+    .ledger-label {
+      color: #d9dbe4;
+      font-size: 12px;
+      font-weight: 880;
+    }
+
+    .ledger-value {
+      color: #fff;
+      font-size: 13px;
+      font-weight: 950;
+      text-align: right;
+    }
+
+    .ledger-note {
+      margin-top: 15px;
+      padding-top: 13px;
+      border-top: 1px dashed #343949;
+    }
+
+    .ledger-card .actions {
+      margin-top: 16px;
+    }
+
+    /* 4. Social Pulse */
+    .pulse-card {
+      margin-top: 12px;
+      padding: 15px;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: #090b11;
+    }
+
+    .pulse-track {
+      margin-top: 14px;
+      display: flex;
+      gap: 13px;
+      align-items: center;
+    }
+
+    .pulse-track .art {
+      width: 86px;
+      height: 86px;
+      border-radius: 18px;
+    }
+
+    .pulse-comment {
+      margin-top: 18px;
+      color: #fff;
+      font-size: 25px;
+      line-height: 1.12;
+      font-weight: 950;
+    }
+
+    .pulse-row {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wave {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .wave i {
+      width: 5px;
+      border-radius: 99px;
+      background: var(--purple);
+    }
+
+    .wave i:nth-child(1) { height: 13px; opacity: .55; }
+    .wave i:nth-child(2) { height: 27px; }
+    .wave i:nth-child(3) { height: 19px; opacity: .75; }
+    .wave i:nth-child(4) { height: 33px; }
+    .wave i:nth-child(5) { height: 16px; opacity: .55; }
+
+    /* 5. Ticket Stack */
+    .ticket-card {
+      margin-top: 12px;
+      position: relative;
+      padding: 15px;
+      border-radius: 24px;
+      border: 1px solid #303548;
+      background: linear-gradient(180deg, #171b26, #0b0d13);
+      box-shadow: 0 24px 55px rgba(0,0,0,.42);
+    }
+
+    .ticket-card:before,
+    .ticket-card:after {
+      content: "";
+      position: absolute;
+      top: 148px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 1px solid #303548;
+    }
+
+    .ticket-card:before { left: -12px; }
+    .ticket-card:after { right: -12px; }
+
+    .ticket-track {
+      display: grid;
+      grid-template-columns: 104px 1fr;
+      gap: 13px;
+      align-items: center;
+      padding-bottom: 18px;
+      border-bottom: 1px dashed #34394a;
+    }
+
+    .ticket-track .art {
+      width: 104px;
+      height: 104px;
+      border-radius: 19px;
+    }
+
+    .ticket-score {
+      padding: 16px 0 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed #34394a;
+    }
+
+    .ticket-card .quote {
+      margin-top: 14px;
+    }
+
+    .ticket-card .actions {
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <section class="phone" id="style-1">
+      <div class="island"></div><div class="status"><span>12:04</span><span>5G 74</span></div>
+      <div class="screen">
+        <div class="page-label"><div><div class="kicker">Feed</div><div class="headline">Pour toi</div></div><div class="small-btn">+</div></div>
+        <p class="feed-note">Une card plus éditoriale, pensée comme un avis publié plutôt qu’un module.</p>
+        <article class="editorial-card">
+          <div class="user-row"><div class="avatar">T<span>BPM</span></div><div><div class="user-name">Malo</div><div class="time">vient de noter un son</div></div></div>
+          <div class="editorial-track">
+            <img class="art" src="https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/a8/69/90/a869906a-dd48-b772-785b-871459b36df2/10UMGIM03438.rgb.jpg/600x600bb.jpg" alt="">
+            <div><div class="chip">Son</div><div class="track-title" style="margin-top:10px">Alors on danse</div><div class="track-artist">Stromae</div></div>
+          </div>
+          <div class="editorial-score"><div><span class="rating-number">4.8</span><span class="out-of">/5</span></div><div class="rating-bars"><i class="on" style="height:19px"></i><i class="on" style="height:25px"></i><i class="on" style="height:31px"></i><i class="on" style="height:27px"></i><i class="on" style="height:30px"></i></div></div>
+          <div class="quote">Un classique qui rentre encore en deux secondes. Sobre, direct, increvable.</div>
+          <div class="actions"><div class="action heart">J'aime 18</div><div class="action">Réponses 4</div><div class="action">Partager</div></div>
+        </article>
+        <div class="style-name">01 Editorial Club</div>
+      </div>
+    </section>
+
+    <section class="phone" id="style-2">
+      <div class="island"></div><div class="status"><span>12:04</span><span>5G 74</span></div>
+      <div class="screen">
+        <div class="page-label"><div><div class="kicker">Post</div><div class="headline">Détail</div></div><div class="small-btn">↗</div></div>
+        <p class="feed-note">L’artwork porte l’émotion. La note devient une signature en bas de cover.</p>
+        <article class="cover-card">
+          <div class="cover-hero">
+            <img class="art" src="https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e8/43/5f/e8435ffa-b6b9-b171-40ab-4ff3959ab661/886443919266.jpg/600x600bb.jpg" alt="">
+            <div class="cover-overlay"><div class="chip">Son</div><div class="track-title" style="margin-top:10px">Get Lucky</div><div class="track-artist">Daft Punk, Pharrell Williams</div></div>
+          </div>
+          <div class="cover-body">
+            <div class="user-row" style="margin-top:4px"><div class="avatar">A<span>M</span></div><div><div class="user-name">Arnaud</div><div class="time">avis court</div></div></div>
+            <div class="cover-score"><div><span class="rating-number">5</span><span class="out-of">/5</span></div><div class="rating-bars"><i class="on" style="height:22px"></i><i class="on" style="height:26px"></i><i class="on" style="height:28px"></i><i class="on" style="height:31px"></i><i class="on" style="height:29px"></i></div></div>
+            <div class="quote">La basse est propre, la voix rentre direct. Ça respire le soleil sans forcer.</div>
+            <div class="actions"><div class="action heart">J'aime 31</div><div class="action">Réponses 6</div></div>
+          </div>
+        </article>
+        <div class="style-name">02 Cover First</div>
+      </div>
+    </section>
+
+    <section class="phone" id="style-3">
+      <div class="island"></div><div class="status"><span>12:04</span><span>5G 74</span></div>
+      <div class="screen">
+        <div class="page-label"><div><div class="kicker">Critique</div><div class="headline">Multi</div></div><div class="small-btn">⋯</div></div>
+        <p class="feed-note">Un rendu plus critique musicale, avec détails lisibles et moins “badge violet”.</p>
+        <article class="ledger-card">
+          <div class="ledger-top">
+            <div class="user-row"><div class="avatar">T<span>B</span></div><div><div class="user-name">TrueBPM</div><div class="time">multi-critères</div></div></div>
+            <img class="art ledger-art" src="https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/8c/98/70/8c9870a0-dfaf-9fd4-7003-d0f2c4db52fe/190295329389.jpg/600x600bb.jpg" alt="">
+          </div>
+          <div style="margin-top:15px"><div class="chip">Album</div><div class="track-title" style="margin-top:10px">Nakamura</div><div class="track-artist">Aya Nakamura</div></div>
+          <div class="ledger-rating"><div class="ledger-label">Cohésion</div><div class="meter"><span style="width:96%"></span></div><div class="ledger-value">5</div></div>
+          <div class="ledger-rating"><div class="ledger-label">Production</div><div class="meter"><span style="width:92%"></span></div><div class="ledger-value">4.5</div></div>
+          <div class="ledger-rating"><div class="ledger-label">Originalité</div><div class="meter"><span style="width:86%"></span></div><div class="ledger-value">4.5</div></div>
+          <div class="ledger-note"><div><span class="rating-number">4.7</span><span class="out-of">/5</span></div><div class="quote">Direct, populaire, assumé. Le disque sait exactement où il veut aller.</div></div>
+          <div class="actions"><div class="action heart">J'aime 12</div><div class="action">Réagir</div></div>
+        </article>
+        <div class="style-name">03 Critic Ledger</div>
+      </div>
+    </section>
+
+    <section class="phone" id="style-4">
+      <div class="island"></div><div class="status"><span>12:04</span><span>5G 74</span></div>
+      <div class="screen">
+        <div class="page-label"><div><div class="kicker">Social</div><div class="headline">Live feed</div></div><div class="small-btn">⌕</div></div>
+        <p class="feed-note">Plus humain, plus spontané, proche d’un statut social musical.</p>
+        <article class="pulse-card">
+          <div class="user-row"><div class="avatar">L<span>R</span></div><div><div class="user-name">Lina</div><div class="time">écoute en boucle</div></div></div>
+          <div class="pulse-track">
+            <img class="art" src="https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/8c/98/70/8c9870a0-dfaf-9fd4-7003-d0f2c4db52fe/190295329389.jpg/600x600bb.jpg" alt="">
+            <div><div class="chip">Son</div><div class="track-title" style="margin-top:10px">Get Lucky</div><div class="track-artist">Daft Punk, Pharrell Williams</div></div>
+          </div>
+          <div class="pulse-comment">La basse arrive et tout devient évident.</div>
+          <div class="pulse-row"><div><span class="rating-number">4.5</span><span class="out-of">/5</span></div><div class="wave"><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="actions" style="margin-top:16px"><div class="action heart">J'aime 24</div><div class="action">Avis 3</div><div class="action">repost</div></div>
+        </article>
+        <div class="style-name">04 Social Pulse</div>
+      </div>
+    </section>
+
+    <section class="phone" id="style-5">
+      <div class="island"></div><div class="status"><span>12:04</span><span>5G 74</span></div>
+      <div class="screen">
+        <div class="page-label"><div><div class="kicker">Club</div><div class="headline">Avis récent</div></div><div class="small-btn">↑</div></div>
+        <p class="feed-note">Une card façon ticket de soirée, moins standard, mais toujours lisible en feed.</p>
+        <article class="ticket-card">
+          <div class="ticket-track">
+            <img class="art" src="https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/a8/69/90/a869906a-dd48-b772-785b-871459b36df2/10UMGIM03438.rgb.jpg/600x600bb.jpg" alt="">
+            <div><div class="chip">Son</div><div class="track-title" style="margin-top:10px">Alors on danse</div><div class="track-artist">Stromae</div></div>
+          </div>
+          <div class="ticket-score"><div><div class="kicker" style="letter-spacing:1.5px">Note finale</div><span class="rating-number">5</span><span class="out-of">/5</span></div><div class="rating-bars"><i class="on" style="height:17px"></i><i class="on" style="height:24px"></i><i class="on" style="height:31px"></i><i class="on" style="height:26px"></i><i class="on" style="height:28px"></i></div></div>
+          <div class="user-row" style="margin-top:15px"><div class="avatar">N<span>B</span></div><div><div class="user-name">Nico</div><div class="time">posté à 00:42</div></div></div>
+          <div class="quote">Pas nostalgique, juste efficace. Ça traverse les années sans demander la permission.</div>
+          <div class="actions"><div class="action heart">J'aime 9</div><div class="action">Réponse 1</div><div class="action">Envoyer</div></div>
+        </article>
+        <div class="style-name">05 Ticket Stack</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

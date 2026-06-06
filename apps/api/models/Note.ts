@@ -32,6 +32,16 @@ const NoteSchema = new Schema(
             type: Date,
             required: true,
         },
+
+        likes: {
+            type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+            default: [],
+        },
+
+        likesCount: {
+            type: Number,
+            default: 0,
+        },
     },
     { timestamps: true }
 );

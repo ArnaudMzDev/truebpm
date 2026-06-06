@@ -3,7 +3,6 @@ const path = require("path");
 const {
   createRunOncePlugin,
   withDangerousMod,
-  withEntitlementsPlist,
   withInfoPlist,
   withXcodeProject,
 } = require("@expo/config-plugins");
@@ -54,7 +53,7 @@ class TrueBPMShazam: NSObject {
           let session = SHManagedSession()
           self.managedSession = session
 
-          let result = await session.result()
+          var result = await session.result()
 
           if case .error(let error, _) = result, self.isMatchAttemptFailed(error) {
             try? await Task.sleep(nanoseconds: 700_000_000)
@@ -220,11 +219,6 @@ function withTrueBPMShazam(config) {
   config = withInfoPlist(config, (config) => {
     config.modResults.NSMicrophoneUsageDescription =
       config.modResults.NSMicrophoneUsageDescription || MICROPHONE_PERMISSION;
-    return config;
-  });
-
-  config = withEntitlementsPlist(config, (config) => {
-    config.modResults["com.apple.developer.shazamkit"] = true;
     return config;
   });
 

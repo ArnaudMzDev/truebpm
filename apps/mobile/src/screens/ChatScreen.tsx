@@ -1038,8 +1038,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     headerCenter: {
@@ -1055,8 +1053,6 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         padding: 2,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     headerAvatar: {
@@ -1150,8 +1146,6 @@ const styles = StyleSheet.create({
 
     bubbleOther: {
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
         borderTopLeftRadius: 7,
     },
 
@@ -1279,10 +1273,8 @@ const styles = StyleSheet.create({
         alignItems: "flex-end",
         gap: spacing.sm,
         padding: spacing.sm,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        backgroundColor: "#090B10",
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(9, 11, 16, 0.96)",
+        borderRadius: radius.xxl,
         ...shadows.card,
     },
 
@@ -1293,8 +1285,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface3,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     input: {
@@ -1303,8 +1293,6 @@ const styles = StyleSheet.create({
         maxHeight: 120,
         color: colors.text,
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
         borderRadius: radius.lg,
         paddingHorizontal: 12,
         paddingVertical: 10,

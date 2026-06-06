@@ -274,10 +274,8 @@ const styles = StyleSheet.create({
     },
     hero: {
         padding: spacing.lg,
-        borderRadius: radius.xl,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        backgroundColor: colors.surface2,
+        borderRadius: radius.xxl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
         marginBottom: spacing.xl,
     },
     heroTitle: {
@@ -316,13 +314,10 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 8,
         paddingHorizontal: spacing.md,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface2,
+        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
     },
     chipActive: {
-        borderColor: colors.primary,
         backgroundColor: colors.surface3,
     },
     chipText: {
@@ -335,10 +330,8 @@ const styles = StyleSheet.create({
     },
     input: {
         minHeight: 52,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface2,
+        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
         color: colors.text,
         paddingHorizontal: spacing.md,
         fontSize: typography.body,

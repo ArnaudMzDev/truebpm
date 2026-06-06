@@ -392,10 +392,8 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.md,
-        backgroundColor: "#111018",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
-        borderRadius: radius.xl,
+        backgroundColor: colors.primaryFaint,
+        borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.sm,
     },
@@ -406,9 +404,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
     },
 
     shareCopy: {
@@ -430,16 +426,16 @@ const styles = StyleSheet.create({
     },
 
     rowCard: {
-        marginBottom: spacing.sm,
+        marginBottom: 0,
         paddingVertical: spacing.md,
-        paddingHorizontal: spacing.md,
-        backgroundColor: colors.surface,
-        borderRadius: radius.xl,
+        paddingHorizontal: spacing.xs,
+        backgroundColor: "transparent",
+        borderBottomWidth: 1,
+        borderBottomColor: colors.separator,
     },
 
     rowCardUnread: {
-        borderColor: colors.borderAccent,
-        backgroundColor: "#10131B",
+        backgroundColor: "rgba(155, 92, 255, 0.045)",
     },
 
     row: {
@@ -453,8 +449,6 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         padding: 2,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     avatar: {
@@ -516,13 +510,10 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     previewIconWrapUnread: {
-        backgroundColor: "#151122",
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
     },
 
     name: {
@@ -595,9 +586,7 @@ const styles = StyleSheet.create({
         borderRadius: 22,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
         marginBottom: 14,
     },
 

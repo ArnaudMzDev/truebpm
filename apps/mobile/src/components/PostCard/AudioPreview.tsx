@@ -11,18 +11,22 @@ type Props = {
     coverUrl: string | null;
 };
 
-function MiniWave({ active }: { active: boolean }) {
+function MiniWave({
+                      active,
+                      scales,
+                  }: {
+    active: boolean;
+    scales: Animated.Value[];
+}) {
     return (
         <View style={styles.waveWrap}>
             {[0, 1, 2].map((i) => (
-                <View
+                <Animated.View
                     key={i}
                     style={[
                         styles.waveBar,
                         active ? styles.waveBarActive : styles.waveBarInactive,
-                        {
-                            height: i === 1 ? 12 : i === 0 ? 9 : 7,
-                        },
+                        { transform: [{ scaleY: active ? scales[i] : 0.52 + i * 0.13 }] },
                     ]}
                 />
             ))}
@@ -33,6 +37,11 @@ function MiniWave({ active }: { active: boolean }) {
 function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     const player = usePlayer();
     const scale = React.useRef(new Animated.Value(1)).current;
+    const waveScales = React.useRef([
+        new Animated.Value(0.48),
+        new Animated.Value(0.72),
+        new Animated.Value(0.56),
+    ]).current;
 
     const currentTrack = player?.currentTrack ?? null;
     const isPlaying = !!player?.isPlaying;
@@ -42,6 +51,39 @@ function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     }, [currentTrack, previewUrl]);
 
     const isActive = isCurrentTrack && isPlaying;
+
+    React.useEffect(() => {
+        if (!isActive) {
+            waveScales[0].setValue(0.48);
+            waveScales[1].setValue(0.72);
+            waveScales[2].setValue(0.56);
+            return;
+        }
+
+        const animations = waveScales.map((value, index) =>
+            Animated.loop(
+                Animated.sequence([
+                    Animated.delay(index * 90),
+                    Animated.timing(value, {
+                        toValue: index === 1 ? 0.48 : 1,
+                        duration: 320,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(value, {
+                        toValue: index === 1 ? 1 : 0.5,
+                        duration: 360,
+                        useNativeDriver: true,
+                    }),
+                ])
+            )
+        );
+
+        animations.forEach((animation) => animation.start());
+
+        return () => {
+            animations.forEach((animation) => animation.stop());
+        };
+    }, [isActive, waveScales]);
 
     const animateTo = useCallback(
         (value: number) => {
@@ -85,17 +127,24 @@ function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     if (!previewUrl) return null;
 
     return (
-        <View style={[styles.wrap, isActive && styles.wrapActive]}>
+        <View style={styles.wrap}>
             <Pressable
                 onPress={togglePlay}
-                onPressIn={() => animateTo(0.98)}
+                onPressIn={() => animateTo(0.97)}
                 onPressOut={() => animateTo(1)}
+                hitSlop={4}
             >
-                <Animated.View style={[styles.button, { transform: [{ scale }] }]}>
+                <Animated.View
+                    style={[
+                        styles.button,
+                        isActive && styles.buttonActive,
+                        { transform: [{ scale }] },
+                    ]}
+                >
                     <View style={[styles.playDot, isActive && styles.playDotActive]}>
                         <Ionicons
                             name={isActive ? "pause" : "play"}
-                            size={17}
+                            size={18}
                             color={colors.text}
                             style={!isActive && styles.playIconOffset}
                         />
@@ -103,14 +152,14 @@ function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
 
                     <View style={styles.copy}>
                         <Text style={[styles.titleText, isActive && styles.titleTextActive]}>
-                            {isActive ? "Lecture en cours" : "Extrait audio"}
+                            {isActive ? "En lecture" : "Écouter l’extrait"}
                         </Text>
                         <Text style={styles.subtitleText} numberOfLines={1}>
-                            {isActive ? "Extrait en cours dans le feed" : "Touche pour écouter l’extrait"}
+                            {isActive ? "Preview 30 secondes" : "Preview 30 secondes"}
                         </Text>
                     </View>
 
-                    <MiniWave active={isActive} />
+                    <MiniWave active={isActive} scales={waveScales} />
                 </Animated.View>
             </Pressable>
         </View>
@@ -121,44 +170,46 @@ export default React.memo(AudioPreview);
 
 const styles = StyleSheet.create({
     wrap: {
-        marginTop: spacing.sm,
+        marginTop: spacing.md,
         width: "100%",
-        borderRadius: radius.xl,
-    },
-
-    wrapActive: {
-        backgroundColor: colors.primaryFaint,
     },
 
     button: {
-        minHeight: 58,
+        minHeight: 54,
         width: "100%",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: "rgba(14, 17, 24, 0.72)",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
-        borderRadius: radius.xl,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
+        backgroundColor: "rgba(7, 9, 13, 0.5)",
+        borderRadius: radius.pill,
+        paddingLeft: 6,
+        paddingRight: spacing.md,
+        paddingVertical: 6,
+    },
+
+    buttonActive: {
+        backgroundColor: colors.primaryFaint,
     },
 
     playDot: {
-        width: 38,
-        height: 38,
+        width: 42,
+        height: 42,
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.surfacePressed,
+        backgroundColor: colors.primaryDark,
         borderWidth: 1,
-        borderColor: colors.borderStrong,
+        borderColor: colors.primaryGlow,
         marginRight: spacing.sm,
+        shadowColor: colors.primary,
+        shadowOpacity: 0.28,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 5,
     },
 
     playDotActive: {
-        backgroundColor: colors.primaryDark,
-        borderColor: colors.primaryGlow,
+        backgroundColor: colors.primary,
     },
 
     playIconOffset: {
@@ -172,7 +223,7 @@ const styles = StyleSheet.create({
 
     titleText: {
         color: colors.text,
-        fontSize: typography.bodySm,
+        fontSize: typography.body,
         fontWeight: fontWeights.extraBold,
     },
 
@@ -188,16 +239,17 @@ const styles = StyleSheet.create({
     },
 
     waveWrap: {
-        width: 18,
-        height: 14,
+        width: 24,
+        height: 22,
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "center",
         justifyContent: "space-between",
         marginLeft: spacing.sm,
     },
 
     waveBar: {
-        width: 3,
+        height: 18,
+        width: 4,
         borderRadius: 999,
     },
 

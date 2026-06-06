@@ -1,0 +1,196 @@
+<svg width="1800" height="1320" viewBox="0 0 1800 1320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1800" y2="1320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#050507"/>
+      <stop offset="0.5" stop-color="#090A0F"/>
+      <stop offset="1" stop-color="#050507"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#A764FF"/>
+      <stop offset="1" stop-color="#5E16F1"/>
+    </linearGradient>
+    <linearGradient id="lineViolet" x1="0" y1="0" x2="380" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9B5CFF"/>
+      <stop offset="0.52" stop-color="#9B5CFF" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#9B5CFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#000000" flood-opacity="0.46"/>
+    </filter>
+    <filter id="purpleShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="20" stdDeviation="28" flood-color="#6B1FF4" flood-opacity="0.28"/>
+    </filter>
+    <style>
+      .font { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+      .title { fill:#F4F1FF; font-size:42px; font-weight:900; letter-spacing:-0.5px; }
+      .subtitle { fill:#A2A5B4; font-size:20px; font-weight:700; }
+      .panel-title { fill:#F6F2FF; font-size:24px; font-weight:900; }
+      .panel-note { fill:#A064FF; font-size:15px; font-weight:900; letter-spacing:4px; }
+      .small { fill:#858998; font-size:14px; font-weight:700; }
+      .muted { fill:#9CA0AE; font-size:17px; font-weight:700; }
+      .quote { fill:#F6F2FF; font-size:24px; font-weight:900; letter-spacing:-0.2px; }
+      .quote2 { fill:#D7D9E4; font-size:20px; font-weight:850; }
+      .micro { fill:#737887; font-size:12px; font-weight:800; letter-spacing:1px; }
+      .purple { fill:#9B5CFF; }
+      .heart { fill:#FF5578; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1320" fill="url(#bg)"/>
+  <circle cx="1580" cy="90" r="260" fill="#6B1FF4" opacity="0.08"/>
+  <circle cx="130" cy="1180" r="300" fill="#6B1FF4" opacity="0.05"/>
+
+  <text x="80" y="88" class="font title">TrueBPM, 5 directions pour les notes</text>
+  <text x="80" y="124" class="font subtitle">Même contenu, cinq traitements possibles. Objectif : trouver la sensation juste avant d’intégrer.</text>
+
+  <!-- 1 -->
+  <g transform="translate(80 190)" filter="url(#softShadow)">
+    <rect width="520" height="500" rx="34" fill="#0C0F15"/>
+    <text x="30" y="48" class="font panel-note">DIRECTION 01</text>
+    <text x="30" y="82" class="font panel-title">Social line</text>
+    <text x="30" y="112" class="font small">Plus humain, moins widget</text>
+
+    <g transform="translate(30 160)">
+      <rect width="460" height="124" rx="28" fill="#11141C"/>
+      <circle cx="54" cy="55" r="27" fill="#090A0F" stroke="#232838" stroke-width="3"/>
+      <text x="36" y="62" class="font" fill="#F6F2FF" font-size="15" font-weight="900">TB</text>
+      <text x="92" y="48" class="font" fill="#F6F2FF" font-size="21" font-weight="900">Juste trop fort</text>
+      <text x="92" y="76" class="font muted">Damso, note du moment</text>
+      <path d="M92 98 H365" stroke="url(#lineViolet)" stroke-width="3" stroke-linecap="round"/>
+      <g transform="translate(392 39)">
+        <rect width="52" height="52" rx="26" fill="#171A22"/>
+        <path d="M26 37 C14 28 11 20 17 15 C22 11 26 15 26 15 C26 15 30 11 35 15 C41 20 38 28 26 37Z" fill="#9B5CFF"/>
+      </g>
+    </g>
+
+    <g transform="translate(30 314)">
+      <circle cx="26" cy="26" r="26" fill="#161A23"/>
+      <text x="17" y="33" class="font" fill="#9B5CFF" font-size="15" font-weight="900">AM</text>
+      <text x="68" y="23" class="font quote2">Ce son tourne en boucle.</text>
+      <text x="68" y="52" class="font small">Sexy Nana, 4 likes</text>
+      <rect x="374" y="5" width="86" height="44" rx="22" fill="#161A23"/>
+      <text x="402" y="33" class="font" fill="#FF5578" font-size="17" font-weight="900">4</text>
+    </g>
+
+    <text x="30" y="455" class="font small">À tester si tu veux des notes simples, sociales, très feed.</text>
+  </g>
+
+  <!-- 2 -->
+  <g transform="translate(640 190)" filter="url(#softShadow)">
+    <rect width="520" height="500" rx="34" fill="#090A0F"/>
+    <text x="30" y="48" class="font panel-note">DIRECTION 02</text>
+    <text x="30" y="82" class="font panel-title">Club ticket</text>
+    <text x="30" y="112" class="font small">Une note comme un pass rapide</text>
+
+    <g transform="translate(30 152)">
+      <rect width="460" height="154" rx="30" fill="#121018"/>
+      <rect x="0" y="0" width="460" height="154" rx="30" stroke="#2B203E" stroke-width="1"/>
+      <circle cx="0" cy="77" r="16" fill="#090A0F"/>
+      <circle cx="460" cy="77" r="16" fill="#090A0F"/>
+      <text x="30" y="42" class="font micro purple">NOTE LIVE</text>
+      <text x="30" y="82" class="font quote">Le refrain reste direct.</text>
+      <text x="30" y="112" class="font muted">Alors on danse, Stromae</text>
+      <g transform="translate(340 28)">
+        <rect width="90" height="90" rx="45" fill="url(#violet)" filter="url(#purpleShadow)"/>
+        <text x="27" y="57" class="font" fill="#F6F2FF" font-size="28" font-weight="900">12</text>
+      </g>
+    </g>
+
+    <g transform="translate(48 336)">
+      <rect width="84" height="38" rx="19" fill="#171A22"/>
+      <path d="M26 26 C18 20 16 15 20 12 C23 9 26 12 26 12 C26 12 29 9 32 12 C36 15 34 20 26 26Z" fill="#FF5578"/>
+      <text x="44" y="25" class="font small">4</text>
+      <rect x="104" width="112" height="38" rx="19" fill="#171A22"/>
+      <text x="126" y="25" class="font small">ouvrir</text>
+    </g>
+
+    <text x="30" y="455" class="font small">Plus marqué, plus identité. Peut devenir iconique si on garde sobre.</text>
+  </g>
+
+  <!-- 3 -->
+  <g transform="translate(1200 190)" filter="url(#softShadow)">
+    <rect width="520" height="500" rx="34" fill="#0B0D11"/>
+    <text x="30" y="48" class="font panel-note">DIRECTION 03</text>
+    <text x="30" y="82" class="font panel-title">Quote stack</text>
+    <text x="30" y="112" class="font small">La note devient le contenu principal</text>
+
+    <g transform="translate(30 148)">
+      <rect x="12" y="16" width="436" height="172" rx="34" fill="#12141B" opacity="0.62"/>
+      <rect x="0" y="0" width="460" height="174" rx="34" fill="#151820"/>
+      <text x="30" y="48" class="font micro purple">TRUEBPM NOTE</text>
+      <text x="30" y="90" class="font quote">Ça part direct dans</text>
+      <text x="30" y="122" class="font quote">la playlist.</text>
+      <text x="30" y="152" class="font muted">Get Lucky, Daft Punk</text>
+    </g>
+
+    <g transform="translate(30 340)">
+      <circle cx="25" cy="25" r="25" fill="#090A0F" stroke="#242939" stroke-width="2"/>
+      <text x="17" y="31" class="font" fill="#9B5CFF" font-size="12" font-weight="900">TB</text>
+      <text x="66" y="22" class="font" fill="#F6F2FF" font-size="17" font-weight="900">TrueBPM</text>
+      <text x="66" y="50" class="font small">il y a 2 min</text>
+      <rect x="350" y="3" width="110" height="46" rx="23" fill="#171A22"/>
+      <text x="382" y="31" class="font" fill="#FF5578" font-size="16" font-weight="900">like</text>
+    </g>
+
+    <text x="30" y="455" class="font small">Très premium en modal, peut marcher aussi dans une story horizontale.</text>
+  </g>
+
+  <!-- 4 -->
+  <g transform="translate(360 750)" filter="url(#softShadow)">
+    <rect width="520" height="500" rx="34" fill="#08090D"/>
+    <text x="30" y="48" class="font panel-note">DIRECTION 04</text>
+    <text x="30" y="82" class="font panel-title">Mini journal</text>
+    <text x="30" y="112" class="font small">Plus avis musical, moins bouton</text>
+
+    <g transform="translate(30 146)">
+      <rect width="460" height="218" rx="30" fill="#101219"/>
+      <path d="M32 62 H420" stroke="#242838" stroke-width="1"/>
+      <circle cx="38" cy="34" r="20" fill="#090A0F" stroke="#222635" stroke-width="2"/>
+      <text x="31" y="40" class="font" fill="#A064FF" font-size="11" font-weight="900">LZ</text>
+      <text x="68" y="30" class="font" fill="#F6F2FF" font-size="18" font-weight="900">La zone</text>
+      <text x="68" y="52" class="font small">note publiée</text>
+      <text x="32" y="105" class="font quote2">Une vibe douce, directe</text>
+      <text x="32" y="134" class="font quote2">et efficace.</text>
+      <text x="32" y="172" class="font muted">Bruxelles je t’aime, Angèle</text>
+      <g transform="translate(334 152)">
+        <rect width="94" height="42" rx="21" fill="#171A22"/>
+        <path d="M27 28 C19 22 17 16 21 13 C24 10 27 13 27 13 C27 13 30 10 34 13 C38 16 35 22 27 28Z" fill="#FF5578"/>
+        <text x="49" y="27" class="font small">8</text>
+      </g>
+    </g>
+
+    <text x="30" y="455" class="font small">Ma préférée pour l’instant : crédible, sociale, pas trop décorative.</text>
+  </g>
+
+  <!-- 5 -->
+  <g transform="translate(920 750)" filter="url(#softShadow)">
+    <rect width="520" height="500" rx="34" fill="#0A0B10"/>
+    <text x="30" y="48" class="font panel-note">DIRECTION 05</text>
+    <text x="30" y="82" class="font panel-title">Wave sheet</text>
+    <text x="30" y="112" class="font small">Pensée pour ouverture en bas de l’écran</text>
+
+    <g transform="translate(30 140)">
+      <rect width="460" height="258" rx="34" fill="#10121A"/>
+      <rect x="190" y="18" width="80" height="5" rx="3" fill="#333747"/>
+      <text x="34" y="64" class="font micro purple">NOTE DU MOMENT</text>
+      <text x="34" y="110" class="font quote">Ce morceau a un truc</text>
+      <text x="34" y="142" class="font quote">qui reste.</text>
+      <path d="M34 174 H426" stroke="#242838" stroke-width="1"/>
+      <g transform="translate(34 198)">
+        <rect width="42" height="42" rx="21" fill="rgba(151,89,255,0.14)"/>
+        <rect x="12" y="18" width="5" height="14" rx="3" fill="#9B5CFF"/>
+        <rect x="21" y="10" width="5" height="22" rx="3" fill="#9B5CFF"/>
+        <rect x="30" y="15" width="5" height="17" rx="3" fill="#9B5CFF"/>
+        <text x="58" y="18" class="font" fill="#F6F2FF" font-size="17" font-weight="900">Sexy Nana</text>
+        <text x="58" y="42" class="font small">Aya Nakamura &amp; La Rvfleuze</text>
+      </g>
+      <g transform="translate(356 198)">
+        <rect width="70" height="42" rx="21" fill="#171A22"/>
+        <path d="M26 29 C18 23 16 17 20 14 C23 11 26 14 26 14 C26 14 29 11 33 14 C37 17 34 23 26 29Z" fill="#FF5578"/>
+        <text x="45" y="28" class="font small">4</text>
+      </g>
+    </g>
+
+    <text x="30" y="455" class="font small">Très bon si la modal devient l’expérience principale des notes.</text>
+  </g>
+</svg>

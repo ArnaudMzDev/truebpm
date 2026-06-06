@@ -267,7 +267,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
             }
 
             setLoading(false);
-            navigation.replace("Main");
+            navigation.replace("AppDiscovery");
         } catch (err) {
             console.log(err);
             setLoading(false);
@@ -285,7 +285,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
             <ScrollView contentContainerStyle={styles.container}>
                 {/* Bouton PASSER */}
                 <TouchableOpacity
-                    onPress={() => navigation.replace("Main")}
+                    onPress={() => navigation.replace("AppDiscovery")}
                     style={styles.skipButton}
                 >
                     <Text style={styles.skipText}>Passer</Text>
@@ -481,9 +481,7 @@ const styles = StyleSheet.create({
         width: "100%",
         height: 120,
         borderRadius: 18,
-        backgroundColor: "#141414",
-        borderWidth: 1,
-        borderColor: "#333",
+        backgroundColor: "rgba(15, 18, 24, 0.76)",
         justifyContent: "center",
         alignItems: "center",
         overflow: "hidden",
@@ -495,9 +493,7 @@ const styles = StyleSheet.create({
         width: 72,
         height: 72,
         borderRadius: 36,
-        backgroundColor: "#141414",
-        borderWidth: 1,
-        borderColor: "#333",
+        backgroundColor: "rgba(15, 18, 24, 0.76)",
         justifyContent: "center",
         alignItems: "center",
         overflow: "hidden",
@@ -511,9 +507,7 @@ const styles = StyleSheet.create({
         minHeight: 90,
         borderRadius: 14,
         padding: 12,
-        backgroundColor: "#141414",
-        borderWidth: 1,
-        borderColor: "#333",
+        backgroundColor: "rgba(15, 18, 24, 0.76)",
         color: "#fff",
         textAlignVertical: "top",
         fontSize: 14,
@@ -526,8 +520,6 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     selectBtn: {
-        borderWidth: 1,
-        borderColor: "#5E17EB",
         backgroundColor: "rgba(94, 23, 235, 0.14)",
         paddingVertical: 12,
         paddingHorizontal: 14,
@@ -544,9 +536,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        backgroundColor: "#141414",
-        borderWidth: 1,
-        borderColor: "#333",
+        backgroundColor: "rgba(15, 18, 24, 0.76)",
         borderRadius: 14,
         padding: 10,
         marginBottom: 8,

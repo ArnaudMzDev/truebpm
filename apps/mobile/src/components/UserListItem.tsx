@@ -20,6 +20,7 @@ type Props = {
         _id: string;
         pseudo: string;
         avatarUrl?: string;
+        bio?: string;
     };
     navigation: any;
 };
@@ -130,13 +131,20 @@ export default function UserListItem({ user, navigation }: Props) {
     return (
         <View style={styles.container}>
             <TouchableOpacity style={styles.userInfo} onPress={goToProfile} activeOpacity={0.8}>
-                <Image
-                    source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                    style={styles.avatar}
-                />
-                <Text style={styles.pseudo} numberOfLines={1}>
-                    {user.pseudo}
-                </Text>
+                <View style={styles.avatarRing}>
+                    <Image
+                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
+                        style={styles.avatar}
+                    />
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.pseudo} numberOfLines={1}>
+                        {user.pseudo}
+                    </Text>
+                    <Text style={styles.userMeta} numberOfLines={1}>
+                        {user.bio?.trim() || "Voir le profil"}
+                    </Text>
+                </View>
             </TouchableOpacity>
 
             {!isSelf && (
@@ -182,51 +190,74 @@ export default function UserListItem({ user, navigation }: Props) {
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: spacing.md,
-        paddingVertical: spacing.md,
+        marginBottom: spacing.sm,
+        paddingVertical: 12,
         paddingHorizontal: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        borderRadius: 24,
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        backgroundColor: colors.surface2,
+        backgroundColor: "rgba(12, 15, 21, 0.68)",
     },
-    userInfo: { flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 12 },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+    userInfo: {
+        flexDirection: "row",
+        alignItems: "center",
+        flex: 1,
+        paddingRight: 12,
+    },
+    avatarRing: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        padding: 2,
         marginRight: spacing.md,
-        backgroundColor: colors.surface4,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: "rgba(151, 89, 255, 0.14)",
     },
-    pseudo: { color: colors.text, fontSize: 16, fontWeight: fontWeights.extraBold, flexShrink: 1 },
+    avatar: {
+        width: "100%",
+        height: "100%",
+        borderRadius: 23,
+        backgroundColor: colors.surface4,
+    },
+    pseudo: {
+        color: colors.text,
+        fontSize: 16,
+        fontWeight: fontWeights.black,
+        flexShrink: 1,
+    },
+    userMeta: {
+        color: colors.textFaint,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.bold,
+        marginTop: 3,
+    },
 
     actions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
 
     msgBtn: {
-        width: 40,
-        height: 40,
+        width: 38,
+        height: 38,
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: radius.md,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        borderRadius: 19,
+        backgroundColor: "rgba(255,255,255,0.045)",
     },
 
     followBtn: {
-        minWidth: 104,
+        minWidth: 92,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.primary,
         paddingVertical: 8,
-        paddingHorizontal: 14,
-        borderRadius: radius.md,
+        paddingHorizontal: 13,
+        borderRadius: radius.pill,
     },
-    following: { backgroundColor: "#24151B", borderWidth: 1, borderColor: colors.danger },
-    followText: { color: colors.text, fontSize: typography.bodySm, fontWeight: fontWeights.extraBold },
+    following: {
+        backgroundColor: colors.dangerSoft,
+    },
+    followText: {
+        color: colors.text,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
+    },
 });

@@ -83,9 +83,7 @@ const styles = StyleSheet.create({
     },
 
     secondary: {
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: "rgba(20, 24, 33, 0.78)",
     },
 
     ghost: {
@@ -95,9 +93,7 @@ const styles = StyleSheet.create({
     },
 
     danger: {
-        backgroundColor: "#2A1015",
-        borderWidth: 1,
-        borderColor: "#4A1E28",
+        backgroundColor: "rgba(255, 77, 109, 0.13)",
     },
 
     disabled: {

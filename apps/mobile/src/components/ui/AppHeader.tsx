@@ -6,6 +6,7 @@ import { colors, spacing, typography, fontWeights } from "../../theme";
 type Props = {
     title: string;
     subtitle?: string;
+    left?: React.ReactNode;
     right?: React.ReactNode;
     style?: ViewStyle;
     compact?: boolean;
@@ -14,6 +15,7 @@ type Props = {
 export default function AppHeader({
                                       title,
                                       subtitle,
+                                      left,
                                       right,
                                       style,
                                       compact = false,
@@ -31,6 +33,8 @@ export default function AppHeader({
                 style,
             ]}
         >
+            {left ? <View style={styles.leftSlot}>{left}</View> : null}
+
             <View style={styles.left}>
                 <Text style={styles.title} numberOfLines={1}>
                     {title}
@@ -68,6 +72,12 @@ const styles = StyleSheet.create({
     left: {
         flex: 1,
         paddingRight: spacing.md,
+    },
+
+    leftSlot: {
+        marginRight: spacing.sm,
+        justifyContent: "center",
+        alignItems: "center",
     },
 
     right: {

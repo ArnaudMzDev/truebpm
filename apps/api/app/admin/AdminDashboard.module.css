@@ -78,7 +78,8 @@
 .nav button,
 .secondaryButton,
 .primaryButton,
-.dangerButton {
+.dangerButton,
+.dangerGhostButton {
     min-height: 40px;
     border: 0;
     border-radius: 8px;
@@ -364,9 +365,15 @@
     background: #b42318;
 }
 
+.dangerGhostButton {
+    color: #b42318;
+    background: #fee4e2;
+}
+
 .primaryButton:disabled,
 .secondaryButton:disabled,
-.dangerButton:disabled {
+.dangerButton:disabled,
+.dangerGhostButton:disabled {
     cursor: not-allowed;
     opacity: 0.55;
 }

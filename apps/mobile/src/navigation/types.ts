@@ -4,6 +4,7 @@ export type RootStackParamList = {
     Register: undefined;
     Legal: { document?: "terms" | "privacy" | "community" | "sales" } | undefined;
     ProfileSetup: undefined;
+    AppDiscovery: undefined;
     Main: undefined;
     Home: undefined;
     Profile: { userId?: string } | undefined;

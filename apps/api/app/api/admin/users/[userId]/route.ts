@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/db";
 import { requireAdminRequest, writeAdminAuditLog } from "@/lib/adminAuth";
 import { cleanText } from "@/lib/sanitize";
+import { deleteUserCascade } from "@/lib/deleteUserCascade";
 import User from "@/models/User";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +101,61 @@ export async function PATCH(req: Request, { params }: { params: { userId: string
         return NextResponse.json({ error: "Action admin invalide." }, { status: 400 });
     } catch (e) {
         console.error("PATCH /api/admin/users/[userId] error:", e);
+        return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: Request, { params }: { params: { userId: string } }) {
+    const auth = requireAdminRequest(req, { csrf: true });
+    if (auth.response) return auth.response;
+
+    try {
+        await connectDB();
+
+        const { userId } = params;
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return NextResponse.json({ error: "userId invalide." }, { status: 400 });
+        }
+
+        const body = await req.json().catch(() => null);
+        const reason = cleanText(body?.reason, 500);
+        const confirmation = cleanText(body?.confirmation, 80);
+
+        if (confirmation !== "SUPPRIMER") {
+            return NextResponse.json({ error: "Confirmation invalide." }, { status: 400 });
+        }
+
+        if (!reason) {
+            return NextResponse.json({ error: "Raison de suppression obligatoire." }, { status: 400 });
+        }
+
+        const result = await deleteUserCascade(userId);
+        if (!result) {
+            return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+        }
+
+        await writeAdminAuditLog({
+            req,
+            adminId: auth.session!.adminId,
+            action: "user_delete",
+            targetType: "user",
+            targetId: userId,
+            reason,
+            metadata: {
+                pseudo: (result.user as any).pseudo || "",
+                email: (result.user as any).email || "",
+                counts: result.counts,
+            },
+        });
+
+        return NextResponse.json({
+            success: true,
+            deletedId: userId,
+            user: result.user,
+            counts: result.counts,
+        });
+    } catch (e) {
+        console.error("DELETE /api/admin/users/[userId] error:", e);
         return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
     }
 }

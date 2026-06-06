@@ -531,10 +531,8 @@ const styles = StyleSheet.create({
 
     commentPreview: {
         marginTop: spacing.md,
-        backgroundColor: "#0C0C0F",
-        borderWidth: 1,
-        borderColor: "#1E1E24",
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        borderRadius: radius.xl,
         padding: spacing.md,
     },
 
@@ -563,10 +561,8 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.sm,
-        backgroundColor: "#0C0C0F",
-        borderWidth: 1,
-        borderColor: "#1E1E24",
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        borderRadius: radius.xl,
         padding: 10,
     },
 
@@ -623,9 +619,7 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
         marginBottom: 14,
     },
 

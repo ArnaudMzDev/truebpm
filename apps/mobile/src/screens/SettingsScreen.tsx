@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -6,12 +6,17 @@ import {
     TouchableOpacity,
     Alert,
     ScrollView,
+    Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import { getStoredToken, clearStoredSession } from "../lib/authStorage";
+import {
+    getEngagementRemindersEnabled,
+    setEngagementRemindersEnabled,
+} from "../lib/pushNotifications";
 
 function SettingsRow({
                          icon,
@@ -42,16 +47,62 @@ function SettingsRow({
     );
 }
 
+function SettingsToggleRow({
+                               icon,
+                               title,
+                               subtitle,
+                               value,
+                               disabled = false,
+                               onValueChange,
+                           }: {
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    subtitle?: string;
+    value: boolean;
+    disabled?: boolean;
+    onValueChange: (value: boolean) => void;
+}) {
+    return (
+        <View style={[styles.row, disabled && styles.rowDisabled]}>
+            <View style={styles.rowIconWrap}>
+                <Ionicons name={icon} size={18} color="#fff" />
+            </View>
+
+            <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{title}</Text>
+                {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+            </View>
+
+            <Switch
+                value={value}
+                disabled={disabled}
+                onValueChange={onValueChange}
+                trackColor={{
+                    false: "rgba(255,255,255,0.14)",
+                    true: "rgba(151, 89, 255, 0.45)",
+                }}
+                thumbColor={value ? colors.primary : "#727782"}
+                ios_backgroundColor="rgba(255,255,255,0.14)"
+            />
+        </View>
+    );
+}
+
 function SettingsSection({
                              title,
+                             hint,
                              children,
                          }: {
     title: string;
+    hint?: string;
     children: React.ReactNode;
 }) {
     return (
         <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{title}</Text>
+            <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{title}</Text>
+                {hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}
+            </View>
             <View style={styles.sectionCard}>{children}</View>
         </View>
     );
@@ -67,6 +118,46 @@ function resetToLogin(navigation: any) {
 
 export default function SettingsScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
+    const [engagementRemindersEnabled, setEngagementRemindersEnabledState] = useState(true);
+    const [savingReminders, setSavingReminders] = useState(false);
+
+    useEffect(() => {
+        let alive = true;
+
+        getEngagementRemindersEnabled()
+            .then((enabled) => {
+                if (alive) setEngagementRemindersEnabledState(enabled);
+            })
+            .catch(() => {});
+
+        return () => {
+            alive = false;
+        };
+    }, []);
+
+    const handleToggleEngagementReminders = useCallback(async (nextValue: boolean) => {
+        if (savingReminders) return;
+
+        const previous = engagementRemindersEnabled;
+        setEngagementRemindersEnabledState(nextValue);
+        setSavingReminders(true);
+
+        try {
+            const result = await setEngagementRemindersEnabled(nextValue);
+            if (nextValue && result.permission === "denied") {
+                setEngagementRemindersEnabledState(false);
+                Alert.alert(
+                    "Notifications désactivées",
+                    "Active les notifications dans les réglages iOS pour recevoir les rappels TrueBPM."
+                );
+            }
+        } catch (e) {
+            setEngagementRemindersEnabledState(previous);
+            Alert.alert("Impossible de modifier les rappels", "Réessaie dans quelques secondes.");
+        } finally {
+            setSavingReminders(false);
+        }
+    }, [engagementRemindersEnabled, savingReminders]);
 
     const handleLogout = useCallback(async () => {
         Alert.alert("Déconnexion", "Tu veux vraiment te déconnecter ?", [
@@ -109,8 +200,19 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={{ width: 24 }} />
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 32 }}>
-                <SettingsSection title="Profil">
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 32 }}
+            >
+                <View style={styles.introBlock}>
+                    <Text style={styles.introEyebrow}>TrueBPM</Text>
+                    <Text style={styles.introTitle}>Gère ton compte sans bruit.</Text>
+                    <Text style={styles.introText}>
+                        Profil, sécurité, confidentialité et aide, tout reste au même endroit.
+                    </Text>
+                </View>
+
+                <SettingsSection title="Profil" hint="Ton identité musicale">
                     <SettingsRow
                         icon="create-outline"
                         title="Modifier mon profil"
@@ -118,7 +220,7 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Compte">
+                <SettingsSection title="Compte" hint="Connexion">
                     <SettingsRow
                         icon="mail-outline"
                         title="Adresse e-mail"
@@ -134,7 +236,7 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Confidentialité">
+                <SettingsSection title="Confidentialité" hint="Ce que les autres voient">
                     <SettingsRow
                         icon="shield-checkmark-outline"
                         title="Confidentialité"
@@ -150,7 +252,18 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Sécurité">
+                <SettingsSection title="Notifications" hint="Rappels doux">
+                    <SettingsToggleRow
+                        icon="notifications-outline"
+                        title="Rappels TrueBPM"
+                        subtitle="Quelques rappels par semaine pour revenir noter un son ou regarder le feed."
+                        value={engagementRemindersEnabled}
+                        disabled={savingReminders}
+                        onValueChange={handleToggleEngagementReminders}
+                    />
+                </SettingsSection>
+
+                <SettingsSection title="Sécurité" hint="Actions sensibles">
                     <SettingsRow
                         icon="trash-outline"
                         title="Supprimer mon compte"
@@ -159,7 +272,7 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Aide">
+                <SettingsSection title="Aide" hint="Support et retours">
                     <SettingsRow
                         icon="help-circle-outline"
                         title="Support"
@@ -183,7 +296,7 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Légal">
+                <SettingsSection title="Légal" hint="Documents officiels">
                     <SettingsRow
                         icon="document-text-outline"
                         title="Conditions d'utilisation"
@@ -207,7 +320,7 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Session">
+                <SettingsSection title="Session" hint="Quitter l’app">
                     <SettingsRow
                         icon="log-out-outline"
                         title="Se déconnecter"
@@ -223,75 +336,116 @@ export default function SettingsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         paddingHorizontal: 16,
     },
     topBar: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 20,
+        marginBottom: spacing.lg,
     },
     title: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 20,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
+    },
+    introBlock: {
+        paddingVertical: spacing.lg,
+        paddingHorizontal: spacing.xs,
+        marginBottom: spacing.md,
+    },
+    introEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 4,
+        textTransform: "uppercase",
+        marginBottom: spacing.sm,
+    },
+    introTitle: {
+        color: colors.text,
+        fontSize: 26,
+        lineHeight: 31,
+        fontWeight: fontWeights.black,
+    },
+    introText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        lineHeight: 20,
+        fontWeight: fontWeights.bold,
+        marginTop: spacing.sm,
     },
 
     section: {
-        marginBottom: spacing.lg,
+        marginBottom: spacing.xl,
+    },
+    sectionHeader: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        gap: spacing.md,
+        marginBottom: spacing.sm,
+        paddingHorizontal: spacing.xs,
     },
     sectionTitle: {
-        color: colors.textMuted,
+        color: colors.text,
         fontSize: typography.caption,
         fontWeight: fontWeights.black,
-        marginBottom: spacing.sm,
-        marginLeft: 2,
         textTransform: "uppercase",
+        letterSpacing: 2,
+    },
+    sectionHint: {
+        flex: 1,
+        color: colors.textFaint,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.bold,
+        textAlign: "right",
     },
     sectionCard: {
         width: "100%",
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(12, 15, 21, 0.68)",
+        borderRadius: 24,
         overflow: "hidden",
     },
     row: {
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 14,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 15,
+    },
+    rowDisabled: {
+        opacity: 0.65,
     },
     rowIconWrap: {
         width: 36,
         height: 36,
-        borderRadius: 12,
-        backgroundColor: "#171717",
+        borderRadius: 18,
+        backgroundColor: "rgba(255,255,255,0.045)",
         alignItems: "center",
         justifyContent: "center",
     },
     rowIconWrapDanger: {
-        backgroundColor: "#221212",
+        backgroundColor: colors.dangerSoft,
     },
     rowTitle: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
     rowTitleDanger: {
         color: "#FF8A8A",
     },
     rowSubtitle: {
-        color: "#888",
+        color: colors.textFaint,
         fontSize: 12,
         marginTop: 4,
         lineHeight: 17,
     },
     divider: {
-        height: 1,
-        backgroundColor: "#1E1E1E",
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: colors.separator,
         marginLeft: 62,
     },
 });

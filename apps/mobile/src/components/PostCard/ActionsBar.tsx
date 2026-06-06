@@ -239,13 +239,10 @@ export default React.memo(ActionsBar);
 const styles = StyleSheet.create({
     row: {
         width: "100%",
-        marginTop: spacing.lg,
+        marginTop: spacing.md,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        borderTopWidth: 1,
-        borderTopColor: colors.borderSoft,
-        paddingTop: spacing.md,
     },
 
     leftGroup: {
@@ -264,9 +261,9 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 11,
         borderRadius: radius.pill,
-        backgroundColor: "rgba(8, 10, 14, 0.68)",
+        backgroundColor: "rgba(8, 10, 14, 0.78)",
         borderWidth: 1,
-        borderColor: colors.borderSoft,
+        borderColor: colors.borderSubtle,
     },
 
     actionBtnIconOnly: {

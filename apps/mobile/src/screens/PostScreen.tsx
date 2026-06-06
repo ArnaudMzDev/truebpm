@@ -643,6 +643,22 @@ export default function PostScreen({ route, navigation }: any) {
     const bottomInset = Math.max(insets.bottom, 12);
     const composerBottom = keyboardHeight > 0 ? keyboardHeight + 8 : bottomInset;
     const listBottomPadding = composerHeight + composerBottom + 18;
+    const listHeader = (
+        <View>
+            {post ? <PostCard post={post} onDeleted={handleDeleted} disableOpenDetail /> : null}
+
+            <View style={styles.sectionHeader}>
+                <View>
+                    <Text style={styles.sectionEyebrow}>Discussion</Text>
+                    <Text style={styles.sectionTitle}>Commentaires</Text>
+                </View>
+
+                <View style={styles.sectionBadge}>
+                    <Text style={styles.sectionBadgeText}>{comments.length}</Text>
+                </View>
+            </View>
+        </View>
+    );
 
     return (
         <View style={styles.keyboard}>
@@ -663,36 +679,30 @@ export default function PostScreen({ route, navigation }: any) {
                     </TouchableOpacity>
                 </View>
 
-                {post ? <PostCard post={post} onDeleted={handleDeleted} disableOpenDetail /> : null}
-
-                <View style={styles.sectionHeader}>
-                    <View>
-                        <Text style={styles.sectionEyebrow}>Discussion</Text>
-                        <Text style={styles.sectionTitle}>Commentaires</Text>
-                    </View>
-
-                    <View style={styles.sectionBadge}>
-                        <Text style={styles.sectionBadgeText}>{comments.length}</Text>
-                    </View>
-                </View>
-
-                {loadingComments ? (
-                    <View style={{ marginTop: 14 }}>
-                        <Text style={styles.threadLoading}>Chargement des commentaires...</Text>
-                    </View>
-                ) : (
-                    <FlatList
-                        data={comments}
-                        keyExtractor={(i) => i._id}
-                        renderItem={renderComment}
-                        style={{ flex: 1 }}
-                        keyboardShouldPersistTaps="handled"
-                        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-                        onScrollBeginDrag={Keyboard.dismiss}
-                        contentContainerStyle={{ paddingBottom: listBottomPadding }}
-                        showsVerticalScrollIndicator={false}
-                    />
-                )}
+                <FlatList
+                    data={loadingComments ? [] : comments}
+                    keyExtractor={(i) => i._id}
+                    renderItem={renderComment}
+                    ListHeaderComponent={listHeader}
+                    ListEmptyComponent={
+                        loadingComments ? (
+                            <View style={styles.commentsLoadingWrap}>
+                                <Text style={styles.threadLoading}>Chargement des commentaires...</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.emptyCommentsBox}>
+                                <Text style={styles.emptyCommentsTitle}>Aucun commentaire pour l'instant.</Text>
+                                <Text style={styles.emptyCommentsText}>Lance la discussion sous ce post.</Text>
+                            </View>
+                        )
+                    }
+                    style={styles.commentsList}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+                    onScrollBeginDrag={Keyboard.dismiss}
+                    contentContainerStyle={{ paddingBottom: listBottomPadding }}
+                    showsVerticalScrollIndicator={false}
+                />
 
                 <View
                     onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
@@ -763,8 +773,6 @@ const styles = StyleSheet.create({
         height: 40,
         borderRadius: radius.lg,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -816,9 +824,7 @@ const styles = StyleSheet.create({
         minWidth: 28,
         height: 28,
         borderRadius: 14,
-        backgroundColor: "#171122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 8,
@@ -830,13 +836,41 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.black,
     },
 
+    commentsList: {
+        flex: 1,
+    },
+
+    commentsLoadingWrap: {
+        paddingVertical: 14,
+    },
+
+    emptyCommentsBox: {
+        paddingVertical: 18,
+        paddingHorizontal: spacing.md,
+        marginBottom: spacing.md,
+        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        borderRadius: radius.xxl,
+    },
+
+    emptyCommentsTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+
+    emptyCommentsText: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        lineHeight: 19,
+        marginTop: 4,
+    },
+
     commentCard: {
         padding: spacing.md,
-        marginBottom: spacing.sm,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        marginBottom: spacing.xs,
+        backgroundColor: "transparent",
+        borderBottomWidth: 1,
+        borderBottomColor: colors.separator,
     },
 
     userLine: {
@@ -856,8 +890,6 @@ const styles = StyleSheet.create({
         borderRadius: 17,
         marginRight: 10,
         backgroundColor: colors.surface4,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     pseudo: {
@@ -914,13 +946,10 @@ const styles = StyleSheet.create({
         paddingVertical: 7,
         borderRadius: radius.pill,
         backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
     },
 
     likeBtnActive: {
-        backgroundColor: "#1D1118",
-        borderColor: "#3A1C2A",
+        backgroundColor: colors.dangerSoft,
     },
 
     likeCount: {
@@ -944,9 +973,7 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 10,
         marginBottom: 8,
-        backgroundColor: "#0F0F12",
-        borderWidth: 1,
-        borderColor: "#18181C",
+        backgroundColor: "rgba(15, 18, 24, 0.58)",
         borderRadius: radius.lg,
     },
 
@@ -992,9 +1019,7 @@ const styles = StyleSheet.create({
     },
 
     composer: {
-        backgroundColor: "#0F0F12",
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: "rgba(15, 18, 24, 0.94)",
         borderRadius: radius.xxl,
         padding: 10,
         ...shadows.card,

@@ -221,9 +221,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         fontSize: 16,
         color: colors.text,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: "rgba(15, 18, 24, 0.76)",
     },
     inputFocused: {
         borderColor: colors.primary,

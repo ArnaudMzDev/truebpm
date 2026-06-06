@@ -21,6 +21,7 @@ import {
     recognizeWithShazamKit,
     ShazamKitTrack,
 } from "../lib/shazamKit";
+import { usePlayer } from "../context/PlayerContext";
 
 const PROFILE_MUSIC_PICK_KEY = "edit_profile_pending_music_pick";
 const NOTE_TRACK_PICK_KEY = "create_note_pending_track_pick";
@@ -162,6 +163,7 @@ export default function SearchScreen({ navigation, route }: any) {
     const [recognitionResult, setRecognitionResult] = useState<RecognizedTrack | null>(null);
     const [recognitionError, setRecognitionError] = useState("");
     const lastRequestKey = useRef("");
+    const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const typeCopy = useMemo(() => {
         if (type === "artist") return "Artistes populaires";
@@ -366,8 +368,36 @@ export default function SearchScreen({ navigation, route }: any) {
         });
     };
 
+    const isCurrentPreview = useCallback(
+        (item: SongItem) => {
+            return !!item.previewUrl && currentTrack?.url === item.previewUrl;
+        },
+        [currentTrack]
+    );
+
+    const playSongPreview = useCallback(
+        async (item: SongItem) => {
+            if (!item.previewUrl) return;
+
+            if (isCurrentPreview(item)) {
+                await togglePlay();
+                return;
+            }
+
+            await playPreview({
+                title: item.title,
+                artist: item.artist,
+                url: item.previewUrl,
+                coverUrl: item.cover || "",
+            });
+        },
+        [isCurrentPreview, playPreview, togglePlay]
+    );
+
     const renderItem = ({ item }: { item: AnyItem }) => {
         if (item.type === "song") {
+            const isPreviewActive = isCurrentPreview(item);
+
             return (
                 <TouchableOpacity style={styles.item} onPress={() => handlePress(item)}>
                     {item.cover ? (
@@ -388,9 +418,23 @@ export default function SearchScreen({ navigation, route }: any) {
                     </View>
 
                     {item.previewUrl ? (
-                        <View style={styles.playPill}>
-                            <Ionicons name="play" size={14} color={colors.text} />
-                        </View>
+                        <TouchableOpacity
+                            style={[
+                                styles.playPill,
+                                isPreviewActive && styles.playPillActive,
+                            ]}
+                            activeOpacity={0.82}
+                            onPress={(event) => {
+                                event.stopPropagation();
+                                playSongPreview(item).catch(() => {});
+                            }}
+                        >
+                            <Ionicons
+                                name={isPreviewActive && isPlaying ? "pause" : "play"}
+                                size={14}
+                                color={colors.text}
+                            />
+                        </TouchableOpacity>
                     ) : null}
                 </TouchableOpacity>
             );
@@ -460,10 +504,25 @@ export default function SearchScreen({ navigation, route }: any) {
 
     const visibleItems = query.trim().length >= 2 ? results : discoverItems;
     const isSearching = query.trim().length >= 2;
+    const canGoBack = typeof navigation?.canGoBack === "function" && navigation.canGoBack();
 
     return (
         <AppScreen>
-            <AppHeader title={screenTitle} compact />
+            <AppHeader
+                title={screenTitle}
+                compact
+                left={
+                    canGoBack ? (
+                        <TouchableOpacity
+                            onPress={() => navigation.goBack()}
+                            style={styles.headerBackButton}
+                            activeOpacity={0.85}
+                        >
+                            <Ionicons name="arrow-back" size={20} color={colors.text} />
+                        </TouchableOpacity>
+                    ) : undefined
+                }
+            />
 
             <View style={styles.searchBox}>
                 <Ionicons name="search" size={18} color={colors.textMuted} />
@@ -501,7 +560,7 @@ export default function SearchScreen({ navigation, route }: any) {
                             <Ionicons
                                 name={t === "song" ? "musical-notes-outline" : t === "album" ? "disc-outline" : "person-outline"}
                                 size={15}
-                                color={active ? colors.bg : colors.textMuted}
+                                color={active ? colors.text : colors.textFaint}
                             />
                             <Text style={[styles.filterText, active && styles.filterTextActive]}>
                                 {t === "song" ? "Sons" : t === "album" ? "Albums" : "Artistes"}
@@ -616,15 +675,22 @@ export default function SearchScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
+    headerBackButton: {
+        width: 38,
+        height: 38,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface3,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
     searchBox: {
         minHeight: 52,
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.sm,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.78)",
+        borderRadius: radius.xxl,
         paddingHorizontal: spacing.md,
     },
     input: {
@@ -644,41 +710,38 @@ const styles = StyleSheet.create({
     },
     filters: {
         flexDirection: "row",
-        gap: 4,
+        alignItems: "center",
+        gap: 3,
         marginTop: spacing.md,
-        marginBottom: spacing.md,
-        backgroundColor: colors.surface,
+        marginBottom: spacing.lg,
+        backgroundColor: "rgba(20, 24, 33, 0.42)",
         padding: 4,
-        borderRadius: radius.xl,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
+        borderRadius: radius.pill,
     },
     filter: {
         flex: 1,
-        minHeight: 40,
+        minHeight: 38,
         flexDirection: "row",
-        gap: spacing.xs,
+        gap: 6,
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: radius.lg,
+        borderRadius: radius.pill,
     },
     filterActive: {
-        backgroundColor: colors.primary,
+        backgroundColor: "rgba(151, 89, 255, 0.2)",
     },
     filterText: {
         color: colors.textMuted,
         fontWeight: fontWeights.extraBold,
-        fontSize: typography.bodySm,
+        fontSize: typography.caption,
     },
     filterTextActive: {
-        color: colors.bg,
+        color: colors.text,
         fontWeight: fontWeights.black,
     },
     recognitionCard: {
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.md,
     },
@@ -693,13 +756,10 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
     },
     recognitionIconActive: {
         backgroundColor: colors.primary,
-        borderColor: colors.primary,
     },
     recognitionCopy: {
         flex: 1,
@@ -805,20 +865,20 @@ const styles = StyleSheet.create({
         borderTopColor: colors.borderSoft,
     },
     sectionHead: {
-        marginBottom: spacing.sm,
+        marginBottom: spacing.md,
         paddingHorizontal: spacing.xs,
     },
     sectionEyebrow: {
         color: colors.primary,
         fontSize: typography.tiny,
         fontWeight: fontWeights.black,
-        letterSpacing: 1,
+        letterSpacing: 3,
         textTransform: "uppercase",
-        marginBottom: 3,
+        marginBottom: 4,
     },
     sectionTitle: {
         color: colors.text,
-        fontSize: 18,
+        fontSize: 21,
         fontWeight: fontWeights.black,
     },
     resultsContent: {
@@ -826,13 +886,11 @@ const styles = StyleSheet.create({
     },
     item: {
         flexDirection: "row",
-        padding: spacing.md,
-        backgroundColor: colors.surface,
-        borderRadius: radius.xl,
+        padding: 12,
+        backgroundColor: "rgba(12, 15, 21, 0.68)",
+        borderRadius: 24,
         marginBottom: spacing.sm,
         alignItems: "center",
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
     },
     cover: {
         width: 62,
@@ -847,8 +905,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface3,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 1,
-        borderColor: colors.border,
     },
     title: {
         color: colors.text,
@@ -862,19 +918,23 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.medium,
     },
     playPill: {
-        width: 34,
-        height: 34,
+        width: 38,
+        height: 38,
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: "rgba(151, 89, 255, 0.22)",
+        borderWidth: 1,
+        borderColor: "rgba(151, 89, 255, 0.34)",
+    },
+    playPillActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     emptyBox: {
         marginTop: spacing.xl,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderSoft,
-        borderRadius: radius.xl,
+        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        borderRadius: radius.xxl,
         padding: spacing.lg,
         alignItems: "center",
     },
@@ -884,9 +944,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.primaryFaint,
         marginBottom: spacing.md,
     },
     emptyTitle: {

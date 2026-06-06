@@ -244,13 +244,27 @@ export default function ExploreSearchScreen({ navigation }: Props) {
 
     const FilterButton = useMemo(
         () =>
-            function Btn({ value, label }: { value: Filter; label: string }) {
+            function Btn({
+                value,
+                label,
+                icon,
+            }: {
+                value: Filter;
+                label: string;
+                icon: keyof typeof Ionicons.glyphMap;
+            }) {
                 const active = filter === value;
                 return (
                     <TouchableOpacity
                         style={[styles.chip, active && styles.chipActive]}
+                        activeOpacity={0.86}
                         onPress={() => setFilter(value)}
                     >
+                        <Ionicons
+                            name={icon}
+                            size={15}
+                            color={active ? colors.text : colors.textFaint}
+                        />
                         <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
                     </TouchableOpacity>
                 );
@@ -304,9 +318,9 @@ export default function ExploreSearchScreen({ navigation }: Props) {
             </View>
 
             <View style={styles.chipsRow}>
-                <FilterButton value="all" label="Tout" />
-                <FilterButton value="posts" label="Posts" />
-                <FilterButton value="users" label="Utilisateurs" />
+                <FilterButton value="all" label="Tout" icon="sparkles-outline" />
+                <FilterButton value="posts" label="Avis" icon="albums-outline" />
+                <FilterButton value="users" label="Profils" icon="person-outline" />
             </View>
 
             <View style={styles.sectionHead}>
@@ -365,46 +379,67 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.sm,
-        backgroundColor: colors.surface2,
-        borderRadius: radius.lg,
+        backgroundColor: "rgba(12, 15, 21, 0.78)",
+        borderRadius: 24,
         paddingHorizontal: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.border,
         minHeight: 50,
     },
-    input: { flex: 1, height: 48, color: colors.text, fontSize: 15 },
+    input: {
+        flex: 1,
+        height: 48,
+        color: colors.text,
+        fontSize: 15,
+        fontWeight: fontWeights.bold,
+    },
     chipsRow: {
         flexDirection: "row",
-        gap: spacing.sm,
+        alignItems: "center",
+        gap: 3,
         marginTop: spacing.md,
-        marginBottom: spacing.md,
+        marginBottom: spacing.lg,
+        padding: 4,
+        borderRadius: radius.pill,
+        backgroundColor: "rgba(20, 24, 33, 0.42)",
     },
     chip: {
+        flex: 1,
+        minHeight: 38,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
         paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingHorizontal: 8,
         borderRadius: radius.pill,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: "transparent",
     },
-    chipActive: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
-    chipText: { color: colors.textMuted, fontWeight: fontWeights.extraBold, fontSize: typography.bodySm },
-    chipTextActive: { color: colors.text },
+    chipActive: {
+        backgroundColor: "rgba(151, 89, 255, 0.2)",
+    },
+    chipText: {
+        color: colors.textMuted,
+        fontWeight: fontWeights.extraBold,
+        fontSize: typography.caption,
+    },
+    chipTextActive: {
+        color: colors.text,
+        fontWeight: fontWeights.black,
+    },
     sectionHead: {
-        marginBottom: spacing.sm,
+        marginBottom: spacing.md,
         paddingHorizontal: spacing.xs,
     },
     sectionEyebrow: {
         color: colors.primary,
         fontSize: typography.tiny,
         fontWeight: fontWeights.black,
-        letterSpacing: 1,
+        letterSpacing: 3,
         textTransform: "uppercase",
-        marginBottom: 3,
+        marginBottom: 4,
     },
     sectionTitle: {
         color: colors.text,
-        fontSize: 18,
+        fontSize: 21,
         fontWeight: fontWeights.black,
     },
     resultsContent: {

@@ -12,12 +12,12 @@ rmSync(SVG_DIR, { recursive: true, force: true });
 mkdirSync(PNG_DIR, { recursive: true });
 mkdirSync(SVG_DIR, { recursive: true });
 
-const WIDTH = 1290;
-const HEIGHT = 2796;
-const PHONE_W = 944;
-const PHONE_H = 2052;
+const WIDTH = 1242;
+const HEIGHT = 2688;
+const PHONE_W = 912;
+const PHONE_H = 1982;
 const PHONE_X = Math.round((WIDTH - PHONE_W) / 2);
-const PHONE_Y = 690;
+const PHONE_Y = 660;
 
 const colors = {
     bg: "#030407",
@@ -35,52 +35,48 @@ const colors = {
 
 const pages = [
     {
-        file: "01-profile",
-        source: "01-profile.png",
-        kicker: "PROFIL MUSICAL",
-        title: ["Affiche ton", "univers musical."],
-        body: "Artistes favoris, son epingle, notes et identite sociale au meme endroit.",
-        offset: -8,
+        file: "00-overview",
+        kind: "overview",
     },
     {
-        file: "02-search",
-        source: "02-search.png",
+        file: "01-search",
+        source: "01-search.png",
         kicker: "RECHERCHE",
         title: ["Trouve le son", "en quelques secondes."],
         body: "Recherche, tendances et reconnaissance native Apple ShazamKit.",
         offset: 10,
     },
     {
-        file: "03-create",
-        source: "03-create.png",
+        file: "02-create",
+        source: "02-create.png",
         kicker: "CREATION",
-        title: ["Note simple", "ou multi-criteres."],
-        body: "Publie un avis musical precis, lisible et rapide a partager.",
+        title: ["Note puis publie", "ton avis."],
+        body: "Simple ou multi-criteres, tu gardes le controle du ressenti.",
         offset: -4,
     },
     {
-        file: "04-post-detail",
-        source: "04-post-detail.png",
+        file: "03-post-multi",
+        source: "03-post-multi.png",
         kicker: "AVIS",
-        title: ["Des notes", "qui lancent la discussion."],
-        body: "Un post rassemble score, extrait audio, reactions et commentaires.",
+        title: ["Des notes", "qui disent plus."],
+        body: "Detaille production, emotion et originalite sans perdre le rythme.",
         offset: 8,
     },
     {
-        file: "05-player",
-        source: "05-player.png",
-        kicker: "PREVIEW AUDIO",
-        title: ["Ecoute avant", "de noter."],
-        body: "Lance l'extrait, ressens le morceau, puis partage ton avis.",
-        offset: -10,
+        file: "04-comments",
+        source: "04-comments.png",
+        kicker: "DISCUSSION",
+        title: ["Chaque avis", "lance la discussion."],
+        body: "Likes, reposts et commentaires donnent vie aux morceaux.",
+        offset: 6,
     },
     {
-        file: "06-comments",
-        source: "06-comments.png",
-        kicker: "DISCUSSION",
-        title: ["Reagis aux avis", "de tes potes."],
-        body: "Commentaires, partages et reactions gardent la musique vivante.",
-        offset: 6,
+        file: "05-profile",
+        source: "05-profile.png",
+        kicker: "PROFIL",
+        title: ["Construis ton", "profil musical."],
+        body: "Son epingle, artistes favoris et activite sociale au meme endroit.",
+        offset: -8,
     },
 ];
 
@@ -115,7 +111,101 @@ function circle(cx, cy, r, fill, opts = {}) {
     return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" opacity="${opacity}"/>`;
 }
 
+function sourceHref(source) {
+    const sourcePath = join(SOURCE_DIR, source);
+
+    if (!existsSync(sourcePath)) {
+        throw new Error(`Capture introuvable: ${sourcePath}`);
+    }
+
+    return `data:image/png;base64,${readFileSync(sourcePath).toString("base64")}`;
+}
+
+function screenshotPanel(source, id, x, y, w, h, r, opts = {}) {
+    const { opacity = 1, rotate = 0, stroke = "#303849", sw = 2 } = opts;
+    const imageHref = sourceHref(source);
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const transform = rotate ? ` transform="rotate(${rotate} ${cx} ${cy})"` : "";
+
+    return `<g${transform} opacity="${opacity}">
+        <clipPath id="clip-${id}">
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/>
+        </clipPath>
+        ${rect(x - 18, y - 18, w + 36, h + 36, r + 24, "#020306", { stroke: "#222B3A", sw: 3 })}
+        <image href="${imageHref}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${id})"/>
+        ${rect(x, y, w, h, r, "transparent", { stroke, sw })}
+    </g>`;
+}
+
+function featurePill(label, x, y, w) {
+    return `<g>
+        ${rect(x, y, w, 74, 37, "#111621", { stroke: colors.stroke, sw: 2, opacity: 0.95 })}
+        ${circle(x + 38, y + 37, 9, colors.purple)}
+        ${text(label, x + 62, y + 48, 26, { weight: 850, fill: colors.soft })}
+    </g>`;
+}
+
+function composeOverview() {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+    <defs>
+        <radialGradient id="overview-ambient-a" cx="68%" cy="18%" r="64%">
+            <stop offset="0%" stop-color="${colors.purple}" stop-opacity="0.5"/>
+            <stop offset="45%" stop-color="${colors.purpleDeep}" stop-opacity="0.17"/>
+            <stop offset="100%" stop-color="${colors.bg}" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="overview-ambient-b" cx="18%" cy="78%" r="58%">
+            <stop offset="0%" stop-color="#224C38" stop-opacity="0.26"/>
+            <stop offset="100%" stop-color="${colors.bg}" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="overview-main-stroke" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#42516A"/>
+            <stop offset="58%" stop-color="#202838"/>
+            <stop offset="100%" stop-color="${colors.purple}"/>
+        </linearGradient>
+        <filter id="overview-shadow" x="-35%" y="-18%" width="170%" height="150%">
+            <feDropShadow dx="0" dy="56" stdDeviation="48" flood-color="#000000" flood-opacity="0.76"/>
+            <feDropShadow dx="0" dy="0" stdDeviation="34" flood-color="${colors.purpleDeep}" flood-opacity="0.2"/>
+        </filter>
+    </defs>
+
+    ${rect(0, 0, WIDTH, HEIGHT, 0, colors.bg)}
+    ${rect(0, 0, WIDTH, HEIGHT, 0, "url(#overview-ambient-a)")}
+    ${rect(0, 0, WIDTH, HEIGHT, 0, "url(#overview-ambient-b)")}
+    ${rect(0, 0, WIDTH, HEIGHT, 0, "#000000", { opacity: 0.08 })}
+
+    ${circle(1060, 138, 5, colors.purple, { opacity: 0.62 })}
+    ${circle(1108, 138, 5, colors.purple, { opacity: 0.34 })}
+    ${circle(1156, 138, 5, colors.purple, { opacity: 0.18 })}
+
+    ${text("TrueBPM", 82, 150, 48, { weight: 950, spacing: -1 })}
+    ${text("APP SOCIALE MUSICALE", 82, 274, 32, { weight: 950, spacing: 4, fill: colors.purple })}
+    ${text("Note, decouvre,", 82, 392, 102, { weight: 950 })}
+    ${text("partage la musique.", 82, 512, 98, { weight: 950 })}
+    ${text("Un profil musical vivant, des avis lisibles", 84, 604, 34, { weight: 760, fill: colors.soft })}
+    ${text("et les sons de tes potes au meme endroit.", 84, 654, 34, { weight: 760, fill: colors.soft })}
+
+    <g filter="url(#overview-shadow)">
+        ${screenshotPanel("01-search.png", "overview-search", 78, 1060, 362, 784, 54, { rotate: -4, opacity: 0.88, stroke: "#243246" })}
+        ${screenshotPanel("05-profile.png", "overview-profile", 802, 1112, 362, 784, 54, { rotate: 4, opacity: 0.88, stroke: "#38226A" })}
+        ${screenshotPanel("03-post-multi.png", "overview-post", 261, 792, 720, 1560, 74, { stroke: "url(#overview-main-stroke)", sw: 3 })}
+    </g>
+
+    ${featurePill("Recherche", 92, 2428, 252)}
+    ${featurePill("Notation", 372, 2428, 238)}
+    ${featurePill("Avis", 638, 2428, 168)}
+    ${featurePill("Profil", 834, 2428, 190)}
+    ${text("TrueBPM rassemble ce que tu ecoutes,", WIDTH / 2, 2580, 32, { weight: 760, fill: colors.muted, anchor: "middle" })}
+    ${text("ce que tu notes et ce que tu partages.", WIDTH / 2, 2626, 32, { weight: 760, fill: colors.muted, anchor: "middle" })}
+</svg>`;
+}
+
 function compose(page) {
+    if (page.kind === "overview") {
+        return composeOverview();
+    }
+
     const sourcePath = join(SOURCE_DIR, page.source);
 
     if (!existsSync(sourcePath)) {
@@ -212,12 +302,7 @@ Exports PNG 6.7 pouces : ${WIDTH} x ${HEIGHT}.
 Ce pack utilise les vraies captures de l'app stockees dans source/.
 
 Fichiers :
-- png/01-profile.png
-- png/02-search.png
-- png/03-create.png
-- png/04-post-detail.png
-- png/05-player.png
-- png/06-comments.png
+${pages.map((page) => `- png/${page.file}.png`).join("\n")}
 
 Sources SVG modifiables dans svg/.
 
