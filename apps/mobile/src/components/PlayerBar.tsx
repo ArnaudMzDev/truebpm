@@ -15,7 +15,8 @@ import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayer } from "../context/PlayerContext";
-import { colors, typography, fontWeights, shadows } from "../theme";
+import { colors, typography, fontWeights } from "../theme";
+import PlayerWave from "./PlayerWave";
 
 function format(ms: number) {
     const total = Math.floor(ms / 1000);
@@ -60,26 +61,6 @@ function Cover({
                 backgroundColor: colors.surface2,
             }}
         />
-    );
-}
-
-function MiniWave({ active }: { active: boolean }) {
-    return (
-        <View style={styles.waveWrap}>
-            {[0, 1, 2].map((i) => (
-                <View
-                    key={i}
-                    style={[
-                        styles.waveBar,
-                        {
-                            height: i === 1 ? 16 : i === 0 ? 11 : 8,
-                            backgroundColor: active ? colors.primary : colors.textFaint,
-                            opacity: active ? 0.95 : 0.42,
-                        },
-                    ]}
-                />
-            ))}
-        </View>
     );
 }
 
@@ -264,7 +245,7 @@ export default function PlayerBar() {
                             </Text>
                         </View>
 
-                        <MiniWave active={isPlaying} />
+                        <PlayerWave active={isPlaying} size="sm" style={styles.miniWave} />
 
                         <TouchableOpacity
                             onPress={(e) => {
@@ -379,6 +360,7 @@ export default function PlayerBar() {
                                             color={colors.text}
                                         />
                                     </TouchableOpacity>
+                                    <PlayerWave active={isPlaying} style={styles.fullWave} />
                                 </View>
                             </View>
                         </View>
@@ -398,8 +380,8 @@ const styles = StyleSheet.create({
     },
 
     progressTrack: {
-        height: 3,
-        backgroundColor: colors.surface4,
+        height: 2,
+        backgroundColor: colors.bg,
         overflow: "hidden",
     },
 
@@ -409,9 +391,7 @@ const styles = StyleSheet.create({
     },
 
     bar: {
-        backgroundColor: colors.surface,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
+        backgroundColor: colors.bg,
         paddingTop: 10,
         paddingBottom: 10,
         paddingHorizontal: 12,
@@ -450,18 +430,8 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
 
-    waveWrap: {
-        width: 18,
-        height: 16,
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
+    miniWave: {
         marginRight: 10,
-    },
-
-    waveBar: {
-        width: 3,
-        borderRadius: 999,
     },
 
     iconBtn: {
@@ -577,13 +547,16 @@ const styles = StyleSheet.create({
         marginTop: 24,
     },
 
+    fullWave: {
+        marginTop: 16,
+    },
+
     playCircle: {
         width: 74,
         height: 74,
         borderRadius: 37,
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
         alignItems: "center",
         justifyContent: "center",
-        ...shadows.glowPrimary,
     },
 });

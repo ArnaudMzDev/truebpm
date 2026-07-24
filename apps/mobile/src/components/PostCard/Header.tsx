@@ -6,6 +6,7 @@ import { useNavigation } from "@react-navigation/native";
 import { API_URL } from "../../lib/config";
 import { colors, spacing, typography, fontWeights, radius } from "../../theme";
 import { getStoredToken } from "../../lib/authStorage";
+import { DefaultAvatar } from "../ProfileFallbacks";
 
 type Props = {
     pseudo: string;
@@ -108,10 +109,11 @@ function Header({
                 onPress={() => goToProfile(userId)}
                 activeOpacity={0.88}
             >
-                <Image
-                    source={{ uri: avatarUrl || "https://picsum.photos/200" }}
-                    style={styles.avatar}
-                />
+                {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                ) : (
+                    <DefaultAvatar label={pseudo} seed={userId} size={44} style={styles.avatar} />
+                )}
 
                 <View style={styles.textWrap}>
                     <View style={styles.nameRow}>

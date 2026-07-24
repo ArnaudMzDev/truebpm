@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import Note from "@/models/Note";
 import User from "@/models/User";
+import { notifyFollowers } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,13 @@ export async function POST(req: Request) {
         )
             .populate("userId", "_id pseudo avatarUrl")
             .lean();
+
+        notifyFollowers({
+            actorId: String(meId),
+            type: "new_note",
+        }).catch((e: any) => {
+            console.log("new_note followers notification error:", e?.message || e);
+        });
 
         return NextResponse.json(
             {

@@ -17,6 +17,7 @@ import AppScreen from "../components/ui/AppScreen";
 import AppHeader from "../components/ui/AppHeader";
 import AppCard from "../components/ui/AppCard";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { DefaultAvatar } from "../components/ProfileFallbacks";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
 
@@ -123,10 +124,11 @@ function ConversationRow({
             <AppCard style={[styles.rowCard, unread && styles.rowCardUnread]}>
                 <View style={styles.row}>
                     <View style={styles.avatarWrap}>
-                        <Image
-                            source={{ uri: other?.avatarUrl || "https://picsum.photos/200" }}
-                            style={styles.avatar}
-                        />
+                        {other?.avatarUrl ? (
+                            <Image source={{ uri: other.avatarUrl }} style={styles.avatar} />
+                        ) : (
+                            <DefaultAvatar label={other?.pseudo} seed={other?._id} size={54} style={styles.avatar} />
+                        )}
                         {unread ? <View style={styles.unreadDot} /> : null}
                     </View>
 

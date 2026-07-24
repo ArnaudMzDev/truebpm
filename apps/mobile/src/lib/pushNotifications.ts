@@ -21,12 +21,12 @@ type EngagementReminder = {
 
 const ENGAGEMENT_REMINDERS: EngagementReminder[] = [
     {
-        id: "week-vibe",
-        title: "Un son t’a suivi toute la journée ?",
-        body: "Note-le avant qu’il sorte de ta tête.",
-        weekday: 3,
-        hour: 20,
-        minute: 15,
+        id: "wednesday-note",
+        title: "Le son du moment mérite une note.",
+        body: "Même une phrase courte suffit.",
+        weekday: 4,
+        hour: 19,
+        minute: 45,
     },
     {
         id: "feed-check",
@@ -35,6 +35,14 @@ const ENGAGEMENT_REMINDERS: EngagementReminder[] = [
         weekday: 5,
         hour: 19,
         minute: 45,
+    },
+    {
+        id: "friday-release",
+        title: "Les sorties du vendredi sont là.",
+        body: "Va voir les nouveautés et note le son qui tourne déjà.",
+        weekday: 6,
+        hour: 10,
+        minute: 15,
     },
     {
         id: "sunday-note",

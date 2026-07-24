@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayer } from "../context/PlayerContext";
 import AppButton from "../components/ui/AppButton";
 import AppScreen from "../components/ui/AppScreen";
+import PlayerWave from "../components/PlayerWave";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
 
@@ -33,7 +34,7 @@ const CRITERIA_BY_TYPE: Record<
         { key: "emotion", label: "Émotion" },
     ],
     album: [
-        { key: "cohesion", label: "Cohésion" },
+        { key: "cohesion", label: "Cover" },
         { key: "production", label: "Production" },
         { key: "originality", label: "Originalité" },
     ],
@@ -345,6 +346,11 @@ export default function CreatePostScreen({ route, navigation }: Props) {
                                 <Text style={styles.previewText}>
                                     {isCurrentTrack && isPlaying ? "Lecture en cours" : "Écouter l'extrait"}
                                 </Text>
+                                <PlayerWave
+                                    active={isCurrentTrack && isPlaying}
+                                    size="sm"
+                                    style={styles.previewWave}
+                                />
                             </TouchableOpacity>
                         ) : null}
                     </View>
@@ -509,7 +515,7 @@ const styles = StyleSheet.create({
         width: "100%",
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         padding: spacing.md,
         borderRadius: radius.xxl,
         marginBottom: spacing.md,
@@ -585,10 +591,14 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.extraBold,
     },
 
+    previewWave: {
+        marginLeft: 2,
+    },
+
     modeCard: {
         width: "100%",
         flexDirection: "row",
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceInset,
         borderRadius: radius.xxl,
         marginBottom: spacing.md,
         padding: 4,
@@ -606,7 +616,7 @@ const styles = StyleSheet.create({
     },
 
     modeButtonActive: {
-        backgroundColor: colors.primary,
+        backgroundColor: colors.controlActive,
     },
 
     modeText: {
@@ -622,7 +632,7 @@ const styles = StyleSheet.create({
 
     ratingCard: {
         width: "100%",
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.md,
@@ -677,13 +687,13 @@ const styles = StyleSheet.create({
 
     ratingControl: {
         width: "100%",
-        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: spacing.md,
     },
 
     ratingControlFeatured: {
-        backgroundColor: "rgba(20, 24, 33, 0.86)",
+        backgroundColor: colors.surfaceRaised,
     },
 
     ratingControlHeader: {
@@ -793,7 +803,7 @@ const styles = StyleSheet.create({
 
     commentCard: {
         width: "100%",
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.md,

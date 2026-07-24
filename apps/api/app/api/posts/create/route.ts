@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import { requireUserId } from "@/lib/requestAuth";
 import { cleanHttpUrl, cleanMultilineText, cleanText } from "@/lib/sanitize";
+import { createNotification, notifyFollowers } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,58 @@ export async function POST(req: Request) {
 
             comment,
         });
+
+        notifyFollowers({
+            actorId: String(userId),
+            type: "new_post",
+            postId: String(post._id),
+        }).catch((e: any) => {
+            console.log("new_post followers notification error:", e?.message || e);
+        });
+
+        const sameEntityQuery: any = {
+            _id: { $ne: post._id },
+            type: "post",
+            userId: { $ne: userId },
+            createdAt: { $gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90) },
+        };
+
+        if (entityId) {
+            sameEntityQuery.entityType = entityType;
+            sameEntityQuery.entityId = entityId;
+        } else {
+            sameEntityQuery.trackTitle = trackTitle;
+            sameEntityQuery.artist = artist;
+        }
+
+        Post.find(sameEntityQuery)
+            .sort({ _id: -1 })
+            .limit(30)
+            .select("userId")
+            .lean()
+            .then(async (sameEntityPosts: any[]) => {
+                const recipientIds = Array.from(
+                    new Set(
+                        sameEntityPosts
+                            .map((item) => item?.userId?.toString?.() || String(item?.userId || ""))
+                            .filter((id) => id && id !== String(userId))
+                    )
+                ).slice(0, 12);
+
+                await Promise.allSettled(
+                    recipientIds.map((recipientId) =>
+                        createNotification({
+                            recipientId,
+                            actorId: String(userId),
+                            type: "same_entity_post",
+                            postId: String(post._id),
+                        })
+                    )
+                );
+            })
+            .catch((e: any) => {
+                console.log("same_entity_post notification error:", e?.message || e);
+            });
 
         return NextResponse.json(
             { success: true, post },

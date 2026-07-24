@@ -16,6 +16,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "../components/Logo";
+import { DefaultAvatar, DefaultBanner } from "../components/ProfileFallbacks";
+import ProfileImageCropper from "../components/ProfileImageCropper";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { API_URL } from "../lib/config";
 import { getStoredToken } from "../lib/authStorage";
 
@@ -37,7 +40,9 @@ type PickKind =
     | "pinnedTrack"
     | "favoriteArtists"
     | "favoriteAlbums"
-    | "favoriteTracks";
+    | "favoriteTracks"
+    | "listenLater"
+    | "alreadyListened";
 
 type User = {
     _id: string;
@@ -50,6 +55,25 @@ type User = {
     favoriteArtists?: MusicRef[];
     favoriteAlbums?: MusicRef[];
     favoriteTracks?: MusicRef[];
+};
+
+type ArtistReleaseItem = {
+    _id: string;
+    artistName: string;
+    itemId: string;
+    itemType: "song" | "album";
+    title: string;
+    coverUrl: string;
+    previewUrl: string;
+    releaseDate: string;
+    listenedAt: string | null;
+};
+
+type CropRequest = {
+    type: "avatar" | "banner";
+    uri: string;
+    width?: number | null;
+    height?: number | null;
 };
 
 async function safeJson(res: Response): Promise<any | null> {
@@ -100,12 +124,54 @@ function MusicChip({
     );
 }
 
+function ReleaseChip({
+                         item,
+                         onRemove,
+                         disabled,
+                     }: {
+    item: ArtistReleaseItem;
+    onRemove: () => void;
+    disabled?: boolean;
+}) {
+    return (
+        <View style={styles.musicChip}>
+            {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.musicChipCover} />
+            ) : (
+                <View style={styles.musicChipCoverFallback}>
+                    <Text style={styles.musicChipCoverFallbackText}>
+                        {item.itemType === "album" ? "AL" : "S"}
+                    </Text>
+                </View>
+            )}
+
+            <View style={{ flex: 1 }}>
+                <Text style={styles.musicChipTitle} numberOfLines={1}>
+                    {item.title}
+                </Text>
+                <Text style={styles.musicChipArtist} numberOfLines={1}>
+                    {item.artistName}
+                </Text>
+            </View>
+
+            <TouchableOpacity
+                onPress={onRemove}
+                disabled={disabled}
+                style={[styles.musicChipRemove, disabled && styles.musicChipRemoveDisabled]}
+            >
+                <Text style={styles.musicChipRemoveText}>✕</Text>
+            </TouchableOpacity>
+        </View>
+    );
+}
+
 export default function EditProfileScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
     const [user, setUser] = useState<User | null>(null);
 
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [bannerUri, setBannerUri] = useState<string | null>(null);
+    const [cropRequest, setCropRequest] = useState<CropRequest | null>(null);
     const [bio, setBio] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -117,6 +183,9 @@ export default function EditProfileScreen({ navigation }: any) {
     const [favoriteArtists, setFavoriteArtists] = useState<MusicRef[]>([]);
     const [favoriteAlbums, setFavoriteAlbums] = useState<MusicRef[]>([]);
     const [favoriteTracks, setFavoriteTracks] = useState<MusicRef[]>([]);
+    const [listenLater, setListenLater] = useState<ArtistReleaseItem[]>([]);
+    const [alreadyListened, setAlreadyListened] = useState<ArtistReleaseItem[]>([]);
+    const [releaseActionLoading, setReleaseActionLoading] = useState(false);
 
     const [initialPinnedTrack, setInitialPinnedTrack] = useState<MusicRef | null>(null);
     const [initialFavoriteArtists, setInitialFavoriteArtists] = useState<MusicRef[]>([]);
@@ -152,6 +221,111 @@ export default function EditProfileScreen({ navigation }: any) {
             });
         }
     }, []);
+
+    const fetchReleaseLists = useCallback(async () => {
+        try {
+            const token = await getStoredToken();
+            if (!token) return;
+
+            const res = await fetch(`${API_URL}/api/artist-releases/me?limit=100`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await safeJson(res);
+
+            if (!res.ok) {
+                console.log("EditProfile artist releases error:", data);
+                return;
+            }
+
+            setListenLater(Array.isArray(data?.toListen) ? data.toListen : []);
+            setAlreadyListened(Array.isArray(data?.listened) ? data.listened : []);
+        } catch (err) {
+            console.log("EditProfile artist releases fetch error:", err);
+        }
+    }, []);
+
+    const addReleaseFromPick = useCallback(
+        async (kind: PickKind, item: MusicRef) => {
+            if (kind !== "listenLater" && kind !== "alreadyListened") return;
+            if (item.entityType !== "song" && item.entityType !== "album") return;
+
+            try {
+                setReleaseActionLoading(true);
+                const token = await getStoredToken();
+                if (!token) {
+                    Alert.alert("Erreur", "Tu n'es pas connecté.");
+                    return;
+                }
+
+                const res = await fetch(`${API_URL}/api/artist-releases/me`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        listened: kind === "alreadyListened",
+                        item,
+                    }),
+                });
+                const data = await safeJson(res);
+
+                if (!res.ok) {
+                    console.log("EditProfile add release error:", data);
+                    Alert.alert("Erreur", data?.error || "Impossible d'ajouter ce son.");
+                    return;
+                }
+
+                await fetchReleaseLists();
+            } catch (err) {
+                console.log("EditProfile add release error:", err);
+                Alert.alert("Erreur", "Impossible d'ajouter ce son.");
+            } finally {
+                setReleaseActionLoading(false);
+            }
+        },
+        [fetchReleaseLists]
+    );
+
+    const removeRelease = useCallback(
+        async (releaseId: string) => {
+            if (releaseActionLoading) return;
+
+            try {
+                setReleaseActionLoading(true);
+                const token = await getStoredToken();
+                if (!token) {
+                    Alert.alert("Erreur", "Tu n'es pas connecté.");
+                    return;
+                }
+
+                const res = await fetch(`${API_URL}/api/artist-releases/me`, {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ releaseId }),
+                });
+                const data = await safeJson(res);
+
+                if (!res.ok) {
+                    console.log("EditProfile remove release error:", data);
+                    Alert.alert("Erreur", data?.error || "Impossible de retirer ce son.");
+                    return;
+                }
+
+                setListenLater((prev) => prev.filter((item) => item._id !== releaseId));
+                setAlreadyListened((prev) => prev.filter((item) => item._id !== releaseId));
+            } catch (err) {
+                console.log("EditProfile remove release error:", err);
+                Alert.alert("Erreur", "Impossible de retirer ce son.");
+            } finally {
+                setReleaseActionLoading(false);
+            }
+        },
+        [releaseActionLoading]
+    );
 
     useEffect(() => {
         const loadUser = async () => {
@@ -196,6 +370,10 @@ export default function EditProfileScreen({ navigation }: any) {
         loadUser();
     }, []);
 
+    useEffect(() => {
+        fetchReleaseLists().catch(() => {});
+    }, [fetchReleaseLists]);
+
     useFocusEffect(
         useCallback(() => {
             let active = true;
@@ -207,7 +385,11 @@ export default function EditProfileScreen({ navigation }: any) {
 
                     const parsed = JSON.parse(raw);
                     if (parsed?.kind && parsed?.item) {
-                        applyPickedMusic(parsed.kind, parsed.item);
+                        if (parsed.kind === "listenLater" || parsed.kind === "alreadyListened") {
+                            await addReleaseFromPick(parsed.kind, parsed.item);
+                        } else {
+                            applyPickedMusic(parsed.kind, parsed.item);
+                        }
                     }
 
                     await AsyncStorage.removeItem(PROFILE_MUSIC_PICK_KEY);
@@ -219,7 +401,7 @@ export default function EditProfileScreen({ navigation }: any) {
             return () => {
                 active = false;
             };
-        }, [applyPickedMusic])
+        }, [addReleaseFromPick, applyPickedMusic])
     );
 
     const pickImage = async (type: "avatar" | "banner") => {
@@ -231,16 +413,26 @@ export default function EditProfileScreen({ navigation }: any) {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: type === "avatar" ? [1, 1] : [16, 9],
-            quality: 0.8,
+            allowsEditing: false,
+            quality: type === "avatar" ? 0.82 : 0.9,
+            selectionLimit: 1,
         });
 
         if (!result.canceled && result.assets?.length > 0) {
-            const uri = result.assets[0].uri;
-            if (type === "avatar") setAvatarUri(uri);
-            if (type === "banner") setBannerUri(uri);
+            const asset = result.assets[0];
+            setCropRequest({
+                type,
+                uri: asset.uri,
+                width: asset.width,
+                height: asset.height,
+            });
         }
+    };
+
+    const handleCroppedImage = (uri: string) => {
+        if (cropRequest?.type === "avatar") setAvatarUri(uri);
+        if (cropRequest?.type === "banner") setBannerUri(uri);
+        setCropRequest(null);
     };
 
     const uploadToCloudinary = async (uri: string, folder: string) => {
@@ -426,28 +618,25 @@ export default function EditProfileScreen({ navigation }: any) {
     };
 
     if (!user) {
-        return (
-            <View style={styles.loadingContainer}>
-                <Text style={{ color: "#fff" }}>Chargement...</Text>
-            </View>
-        );
+        return <AppScreenLoader label="Chargement du profil..." />;
     }
 
     return (
-        <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: "#000" }}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-            <ScrollView
-                contentContainerStyle={[
-                    styles.container,
-                    {
-                        paddingTop: insets.top + 10,
-                        paddingBottom: Math.max(insets.bottom, 12) + 32,
-                    },
-                ]}
-                keyboardShouldPersistTaps="handled"
+        <>
+            <KeyboardAvoidingView
+                style={{ flex: 1, backgroundColor: "#000" }}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
+                <ScrollView
+                    contentContainerStyle={[
+                        styles.container,
+                        {
+                            paddingTop: insets.top + 10,
+                            paddingBottom: Math.max(insets.bottom, 12) + 32,
+                        },
+                    ]}
+                    keyboardShouldPersistTaps="handled"
+                >
                 <View style={styles.header}>
                     <Logo size={22} />
                     <Text style={styles.title}>Modifier mon profil</Text>
@@ -467,9 +656,7 @@ export default function EditProfileScreen({ navigation }: any) {
                                 resizeMode="cover"
                             />
                         ) : (
-                            <View style={styles.previewBannerEmpty}>
-                                <Text style={styles.previewBannerEmptyText}>Choisir une bannière</Text>
-                            </View>
+                            <DefaultBanner style={styles.previewBannerImage} />
                         )}
                         <View style={styles.previewBannerOverlay} />
                         <View style={styles.previewBannerAction}>
@@ -489,9 +676,7 @@ export default function EditProfileScreen({ navigation }: any) {
                                 resizeMode="cover"
                             />
                         ) : (
-                            <View style={styles.previewAvatarEmpty}>
-                                <Text style={styles.previewAvatarEmptyText}>Photo</Text>
-                            </View>
+                            <DefaultAvatar label={user?.pseudo} seed={user?._id} size={104} style={styles.previewAvatarImage} />
                         )}
                     </TouchableOpacity>
 
@@ -593,6 +778,78 @@ export default function EditProfileScreen({ navigation }: any) {
                     </TouchableOpacity>
                 ) : null}
 
+                <View style={styles.releaseSectionHeader}>
+                    <Text style={styles.sectionTitle}>Sons à écouter</Text>
+                    <Text style={styles.releaseCounter}>{listenLater.length}/100</Text>
+                </View>
+                {listenLater.length > 0 ? (
+                    listenLater.slice(0, 5).map((item) => (
+                        <ReleaseChip
+                            key={item._id}
+                            item={item}
+                            disabled={releaseActionLoading}
+                            onRemove={() => removeRelease(item._id)}
+                        />
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>Ajoute les sons que tu veux garder sous la main.</Text>
+                )}
+                {listenLater.length > 5 ? (
+                    <TouchableOpacity
+                        style={styles.inlineListBtn}
+                        onPress={() => navigation.navigate("ArtistReleases", { initialTab: "toListen" })}
+                        activeOpacity={0.86}
+                    >
+                        <Text style={styles.inlineListText}>Voir les {listenLater.length} sons</Text>
+                    </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                    style={[
+                        styles.selectBtn,
+                        (listenLater.length >= 100 || releaseActionLoading) && styles.selectBtnDisabled,
+                    ]}
+                    disabled={listenLater.length >= 100 || releaseActionLoading}
+                    onPress={() => openPicker("listenLater")}
+                >
+                    <Text style={styles.selectBtnText}>Ajouter via recherche</Text>
+                </TouchableOpacity>
+
+                <View style={styles.releaseSectionHeader}>
+                    <Text style={styles.sectionTitle}>Déjà écoutés</Text>
+                    <Text style={styles.releaseCounter}>{alreadyListened.length}/100</Text>
+                </View>
+                {alreadyListened.length > 0 ? (
+                    alreadyListened.slice(0, 5).map((item) => (
+                        <ReleaseChip
+                            key={item._id}
+                            item={item}
+                            disabled={releaseActionLoading}
+                            onRemove={() => removeRelease(item._id)}
+                        />
+                    ))
+                ) : (
+                    <Text style={styles.emptyText}>Garde une trace des sons déjà passés dans tes oreilles.</Text>
+                )}
+                {alreadyListened.length > 5 ? (
+                    <TouchableOpacity
+                        style={styles.inlineListBtn}
+                        onPress={() => navigation.navigate("ArtistReleases", { initialTab: "listened" })}
+                        activeOpacity={0.86}
+                    >
+                        <Text style={styles.inlineListText}>Voir les {alreadyListened.length} sons</Text>
+                    </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                    style={[
+                        styles.selectBtn,
+                        (alreadyListened.length >= 100 || releaseActionLoading) && styles.selectBtnDisabled,
+                    ]}
+                    disabled={alreadyListened.length >= 100 || releaseActionLoading}
+                    onPress={() => openPicker("alreadyListened")}
+                >
+                    <Text style={styles.selectBtnText}>Ajouter via recherche</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                     style={[styles.button, loading && styles.buttonDisabled]}
                     disabled={loading}
@@ -602,18 +859,21 @@ export default function EditProfileScreen({ navigation }: any) {
                         {loading ? "Enregistrement..." : "Enregistrer"}
                     </Text>
                 </TouchableOpacity>
-            </ScrollView>
-        </KeyboardAvoidingView>
+                </ScrollView>
+            </KeyboardAvoidingView>
+
+            <ProfileImageCropper
+                visible={!!cropRequest}
+                mode={cropRequest?.type || "avatar"}
+                source={cropRequest}
+                onCancel={() => setCropRequest(null)}
+                onCropped={handleCroppedImage}
+            />
+        </>
     );
 }
 
 const styles = StyleSheet.create({
-    loadingContainer: {
-        flex: 1,
-        backgroundColor: "#000",
-        justifyContent: "center",
-        alignItems: "center",
-    },
     container: {
         paddingHorizontal: 24,
         backgroundColor: "#000",
@@ -636,16 +896,28 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         marginTop: 18,
     },
+    releaseSectionHeader: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+    },
+    releaseCounter: {
+        color: "#8E59FF",
+        fontSize: 12,
+        fontWeight: "900",
+        marginBottom: 9,
+        marginTop: 18,
+    },
     profilePreview: {
         position: "relative",
         width: "100%",
-        height: 276,
+        height: 258,
         marginTop: 4,
         marginBottom: 6,
     },
     previewBannerWrap: {
         width: "100%",
-        height: 218,
+        aspectRatio: 16 / 9,
         borderRadius: 24,
         backgroundColor: "rgba(15, 18, 24, 0.76)",
         overflow: "hidden",
@@ -653,17 +925,6 @@ const styles = StyleSheet.create({
     previewBannerImage: {
         width: "100%",
         height: "100%",
-    },
-    previewBannerEmpty: {
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#141414",
-    },
-    previewBannerEmptyText: {
-        color: "#777",
-        fontSize: 14,
-        fontWeight: "700",
     },
     previewBannerOverlay: {
         ...StyleSheet.absoluteFillObject,
@@ -698,20 +959,6 @@ const styles = StyleSheet.create({
         borderWidth: 3,
         borderColor: "#1B202B",
         backgroundColor: "#141414",
-    },
-    previewAvatarEmpty: {
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 52,
-        backgroundColor: "#141414",
-        borderWidth: 3,
-        borderColor: "#1B202B",
-    },
-    previewAvatarEmptyText: {
-        color: "#777",
-        fontSize: 12,
-        fontWeight: "800",
     },
     previewAvatarAction: {
         position: "absolute",
@@ -757,10 +1004,26 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginTop: 8,
     },
+    selectBtnDisabled: {
+        opacity: 0.45,
+    },
     selectBtnText: {
         color: "#fff",
         fontSize: 14,
         fontWeight: "700",
+    },
+    inlineListBtn: {
+        alignSelf: "flex-start",
+        marginTop: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 999,
+        backgroundColor: "rgba(94, 23, 235, 0.16)",
+    },
+    inlineListText: {
+        color: "#A66BFF",
+        fontSize: 12,
+        fontWeight: "900",
     },
     musicChip: {
         flexDirection: "row",
@@ -775,6 +1038,20 @@ const styles = StyleSheet.create({
         height: 42,
         borderRadius: 8,
         marginRight: 10,
+    },
+    musicChipCoverFallback: {
+        width: 42,
+        height: 42,
+        borderRadius: 8,
+        marginRight: 10,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(94, 23, 235, 0.2)",
+    },
+    musicChipCoverFallbackText: {
+        color: "#A66BFF",
+        fontSize: 11,
+        fontWeight: "900",
     },
     musicChipTitle: {
         color: "#fff",
@@ -794,6 +1071,9 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         backgroundColor: "#1b1b1b",
         marginLeft: 10,
+    },
+    musicChipRemoveDisabled: {
+        opacity: 0.45,
     },
     musicChipRemoveText: {
         color: "#fff",

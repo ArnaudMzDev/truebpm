@@ -17,6 +17,7 @@ import AppScreen from "../components/ui/AppScreen";
 import AppHeader from "../components/ui/AppHeader";
 import AppCard from "../components/ui/AppCard";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { DefaultAvatar } from "../components/ProfileFallbacks";
 import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
 
@@ -62,8 +63,13 @@ function formatDate(dateString: string) {
 
 function getNotificationText(item: any) {
     const actor = item?.actorId?.pseudo || "Quelqu’un";
+    const release = item?.metadata || {};
 
     switch (item.type) {
+        case "artist_release":
+            return release?.itemType === "album"
+                ? `${release.artistName || "Un artiste favori"} vient de sortir ${release.title || "un album"}`
+                : `${release.artistName || "Un artiste favori"} a sorti un nouveau son : ${release.title || "à écouter"}`;
         case "follow":
             return `${actor} a commencé à te suivre`;
         case "follow_request":
@@ -80,6 +86,14 @@ function getNotificationText(item: any) {
             return `${actor} a aimé ton commentaire`;
         case "repost_post":
             return `${actor} a reposté ton post`;
+        case "like_note":
+            return `${actor} a aimé ta note`;
+        case "new_post":
+            return `${actor} a publié un nouvel avis`;
+        case "new_note":
+            return `${actor} a changé sa note du moment`;
+        case "same_entity_post":
+            return `${actor} a aussi donné son avis sur un son que tu as noté`;
         default:
             return `${actor} a interagi avec toi`;
     }
@@ -116,9 +130,10 @@ function getTypeMeta(type: string) {
             };
         case "like_post":
         case "like_comment":
+        case "like_note":
             return {
                 icon: "heart" as keyof typeof Ionicons.glyphMap,
-                pill: "Like",
+                pill: type === "like_note" ? "Note aimée" : "Like",
                 accent: colors.danger,
                 bg: "#1A1013",
                 border: "#352027",
@@ -151,6 +166,42 @@ function getTypeMeta(type: string) {
                 border: "#2E2742",
                 soft: "rgba(167, 139, 250, 0.12)",
             };
+        case "new_post":
+            return {
+                icon: "musical-notes" as keyof typeof Ionicons.glyphMap,
+                pill: "Nouvel avis",
+                accent: colors.primary,
+                bg: "#151022",
+                border: colors.borderAccent,
+                soft: "rgba(155, 92, 255, 0.12)",
+            };
+        case "new_note":
+            return {
+                icon: "radio-outline" as keyof typeof Ionicons.glyphMap,
+                pill: "Note du moment",
+                accent: "#A78BFA",
+                bg: "#14111E",
+                border: "#2E2742",
+                soft: "rgba(167, 139, 250, 0.12)",
+            };
+        case "same_entity_post":
+            return {
+                icon: "git-compare-outline" as keyof typeof Ionicons.glyphMap,
+                pill: "Même son",
+                accent: colors.primary,
+                bg: "#151022",
+                border: colors.borderAccent,
+                soft: "rgba(155, 92, 255, 0.12)",
+            };
+        case "artist_release":
+            return {
+                icon: "radio-outline" as keyof typeof Ionicons.glyphMap,
+                pill: "Nouvelle sortie",
+                accent: colors.primary,
+                bg: "#151022",
+                border: colors.borderAccent,
+                soft: "rgba(155, 92, 255, 0.12)",
+            };
         default:
             return {
                 icon: "notifications-outline" as keyof typeof Ionicons.glyphMap,
@@ -176,17 +227,21 @@ function uniqById(list: any[]) {
 }
 
 function NotificationCard({
-                              item,
-                              onPress,
+    item,
+    onPress,
                           }: {
     item: any;
     onPress: () => void;
 }) {
     const meta = getTypeMeta(item?.type);
-    const actorAvatar = item?.actorId?.avatarUrl || "https://picsum.photos/200";
-    const postCover = item?.postId?.coverUrl || null;
-    const postTitle = item?.postId?.trackTitle || "";
-    const postArtist = item?.postId?.artist || "";
+    const releaseMeta = item?.metadata || {};
+    const isArtistRelease = item?.type === "artist_release";
+    const actorAvatar = isArtistRelease ? "" : item?.actorId?.avatarUrl || "";
+    const actorPseudo = isArtistRelease ? releaseMeta?.artistName || "Nouvelle sortie" : item?.actorId?.pseudo || "Utilisateur";
+    const actorId = item?.actorId?._id || actorPseudo;
+    const postCover = item?.postId?.coverUrl || releaseMeta?.coverUrl || null;
+    const postTitle = item?.postId?.trackTitle || releaseMeta?.title || "";
+    const postArtist = item?.postId?.artist || releaseMeta?.artistName || "";
 
     return (
         <TouchableOpacity activeOpacity={0.92} onPress={onPress}>
@@ -202,7 +257,11 @@ function NotificationCard({
                 <View style={styles.cardTop}>
                     <View style={styles.leftBlock}>
                         <View style={styles.avatarWrap}>
-                            <Image source={{ uri: actorAvatar }} style={styles.avatar} />
+                            {actorAvatar ? (
+                                <Image source={{ uri: actorAvatar }} style={styles.avatar} />
+                            ) : (
+                                <DefaultAvatar label={actorPseudo} seed={actorId} size={50} style={styles.avatar} />
+                            )}
                             <View style={[styles.iconBadge, { backgroundColor: meta.accent }]}>
                                 <Ionicons name={meta.icon} size={12} color="#fff" />
                             </View>
@@ -253,7 +312,7 @@ function NotificationCard({
                     </View>
                 ) : null}
 
-                {item?.postId?._id ? (
+                {item?.postId?._id || isArtistRelease ? (
                     <View style={styles.postPreview}>
                         {postCover ? (
                             <Image source={{ uri: postCover }} style={styles.postCover} />
@@ -274,14 +333,16 @@ function NotificationCard({
                                     size={13}
                                     color={colors.primary}
                                 />
-                                <Text style={styles.postPreviewLabel}>Post concerné</Text>
+                                <Text style={styles.postPreviewLabel}>
+                                    {isArtistRelease ? "À écouter" : "Post concerné"}
+                                </Text>
                             </View>
 
                             <Text style={styles.postTitle} numberOfLines={1}>
                                 {postTitle || "Post musical"}
                             </Text>
                             <Text style={styles.postArtist} numberOfLines={1}>
-                                {postArtist || "Voir le post"}
+                                {postArtist || (isArtistRelease ? "Voir la sortie" : "Voir le post")}
                             </Text>
                         </View>
                     </View>
@@ -378,6 +439,21 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const openItem = useCallback(
         (item: any) => {
+            if (item?.type === "artist_release" && item?.metadata?.itemId) {
+                const metadata = item.metadata;
+                navigation.navigate("CreatePost", {
+                    entityType: metadata.itemType === "album" ? "album" : "song",
+                    entityId: metadata.itemId,
+                    track: {
+                        title: metadata.title || "Nouvelle sortie",
+                        artist: metadata.artistName || "Artiste",
+                        cover: metadata.coverUrl || null,
+                        previewUrl: metadata.previewUrl || null,
+                    },
+                });
+                return;
+            }
+
             if (item?.postId?._id) {
                 navigation.navigate("PostDetail", { postId: item.postId._id });
                 return;
@@ -439,8 +515,6 @@ const styles = StyleSheet.create({
 
     card: {
         marginBottom: spacing.md,
-        ...shadows.glowPrimary,
-        shadowOpacity: 0.08,
     },
 
     cardTop: {
@@ -531,7 +605,7 @@ const styles = StyleSheet.create({
 
     commentPreview: {
         marginTop: spacing.md,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: spacing.md,
     },
@@ -561,7 +635,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.sm,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: 10,
     },

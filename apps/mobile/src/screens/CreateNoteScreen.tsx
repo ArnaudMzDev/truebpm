@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { usePlayer } from "../context/PlayerContext";
 import { getStoredToken } from "../lib/authStorage";
+import PlayerWave from "../components/PlayerWave";
+import { colors, fontWeights, radius } from "../theme";
 
 const NOTE_TRACK_PICK_KEY = "create_note_pending_track_pick";
 
@@ -244,11 +246,11 @@ export default function CreateNoteScreen({ navigation, route }: any) {
                                     }
                                 }}
                             >
-                                <Ionicons
-                                    name={isCurrentTrack && isPlaying ? "pause" : "play"}
-                                    size={16}
-                                    color="#fff"
-                                />
+                                {isCurrentTrack && isPlaying ? (
+                                    <PlayerWave active size="sm" color="#fff" inactiveColor="#fff" />
+                                ) : (
+                                    <Ionicons name="play" size={16} color="#fff" />
+                                )}
                             </TouchableOpacity>
                         ) : null}
 
@@ -292,7 +294,7 @@ export default function CreateNoteScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         paddingHorizontal: 16,
     },
     topBar: {
@@ -302,32 +304,30 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     title: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 18,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
     card: {
-        backgroundColor: "#0f0f0f",
-        borderWidth: 1,
-        borderColor: "#1d1d1d",
-        borderRadius: 16,
+        backgroundColor: colors.surfaceFeed,
+        borderRadius: radius.xxl,
         padding: 14,
         marginBottom: 14,
     },
     label: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 14,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
         marginBottom: 10,
     },
     input: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
         minHeight: 90,
         textAlignVertical: "top",
     },
     counter: {
-        color: "#777",
+        color: colors.textFaint,
         fontSize: 12,
         textAlign: "right",
         marginTop: 8,
@@ -338,11 +338,11 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
     },
     pickText: {
-        color: "#9B5CFF",
-        fontWeight: "800",
+        color: colors.primary,
+        fontWeight: fontWeights.black,
     },
     helper: {
-        color: "#777",
+        color: colors.textFaint,
         fontSize: 13,
     },
     trackCard: {
@@ -354,20 +354,20 @@ const styles = StyleSheet.create({
     cover: {
         width: 54,
         height: 54,
-        borderRadius: 10,
-        backgroundColor: "#1b1b1b",
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface4,
     },
     coverPlaceholder: {
         alignItems: "center",
         justifyContent: "center",
     },
     trackTitle: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 14,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
     trackArtist: {
-        color: "#aaa",
+        color: colors.textMuted,
         fontSize: 12,
         marginTop: 4,
     },
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
         borderRadius: 17,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#5E17EB",
+        backgroundColor: colors.controlActive,
     },
     removeBtn: {
         width: 34,
@@ -385,27 +385,27 @@ const styles = StyleSheet.create({
         borderRadius: 17,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#222",
+        backgroundColor: colors.control,
     },
     saveBtn: {
-        backgroundColor: "#5E17EB",
-        borderRadius: 14,
+        backgroundColor: colors.controlActive,
+        borderRadius: radius.xl,
         paddingVertical: 15,
         alignItems: "center",
         justifyContent: "center",
         marginTop: 10,
     },
     saveText: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
     deleteBtn: {
         marginTop: 16,
         alignItems: "center",
     },
     deleteText: {
-        color: "#FF6B6B",
-        fontWeight: "700",
+        color: colors.danger,
+        fontWeight: fontWeights.extraBold,
     },
 });

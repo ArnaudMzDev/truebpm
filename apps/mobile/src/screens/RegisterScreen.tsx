@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { API_URL } from "../lib/config";
-import { colors, radius, spacing, typography, fontWeights, shadows } from "../theme";
+import { colors, radius, spacing, typography, fontWeights } from "../theme";
 import { setStoredToken } from "../lib/authStorage";
 
 const LEGAL_VERSION = "2026-05-26";
@@ -281,11 +281,10 @@ const styles = StyleSheet.create({
     input: {
         width: "100%", height: 52, borderRadius: radius.lg,
         paddingHorizontal: 16, fontSize: 16, color: colors.text,
-        backgroundColor: "rgba(15, 18, 24, 0.76)",
+        backgroundColor: colors.surfaceRaised,
     },
     inputFocused: {
-        borderColor: colors.primary,
-        ...shadows.glowPrimary,
+        backgroundColor: colors.control,
     },
     errorText: { color: colors.danger, fontSize: 14, fontWeight: fontWeights.medium },
     legalRow: {
@@ -319,9 +318,8 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.black,
     },
     button: {
-        backgroundColor: colors.primaryDark, paddingVertical: 14,
+        backgroundColor: colors.controlActive, paddingVertical: 14,
         borderRadius: radius.lg, alignItems: "center", marginTop: 28,
-        ...shadows.glowPrimary,
     },
     buttonDisabled: { opacity: 0.5 },
     buttonText: { color: colors.text, fontSize: 16, fontWeight: fontWeights.extraBold },

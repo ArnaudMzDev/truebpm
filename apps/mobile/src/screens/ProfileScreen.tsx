@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
     View,
     Text,
@@ -18,6 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
+import PlayerWave from "../components/PlayerWave";
+import { DefaultAvatar, DefaultBanner } from "../components/ProfileFallbacks";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { usePlayer } from "../context/PlayerContext";
 import { getStoredToken, clearStoredSession } from "../lib/authStorage";
 import {
@@ -41,6 +44,19 @@ type MusicRef = {
 
 type ProfileTab = "posts" | "reposts" | "likes";
 
+type ArtistReleaseItem = {
+    _id: string;
+    artistId: string;
+    artistName: string;
+    itemId: string;
+    itemType: "song" | "album";
+    title: string;
+    coverUrl: string;
+    previewUrl: string;
+    releaseDate: string;
+    listenedAt: string | null;
+};
+
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
@@ -60,12 +76,16 @@ function toBearer(rawToken: string | null) {
 function MusicHorizontalCard({
                                  item,
                                  compact = false,
+                                 onPress,
                              }: {
     item: MusicRef;
     compact?: boolean;
+    onPress?: () => void;
 }) {
+    const Wrapper = onPress ? TouchableOpacity : View;
+
     return (
-        <View style={[styles.musicCard, compact && styles.musicCardCompact]}>
+        <Wrapper style={[styles.musicCard, compact && styles.musicCardCompact]} onPress={onPress} activeOpacity={0.86}>
             {item.coverUrl ? (
                 <Image source={{ uri: item.coverUrl }} style={styles.musicCardCover} />
             ) : (
@@ -90,7 +110,7 @@ function MusicHorizontalCard({
             <Text style={styles.musicCardArtist} numberOfLines={1}>
                 {item.artist}
             </Text>
-        </View>
+        </Wrapper>
     );
 }
 
@@ -154,23 +174,107 @@ function EmptyPostsState({ tab }: { tab: ProfileTab }) {
     );
 }
 
-function MiniWave({ active }: { active: boolean }) {
+function formatReleaseDate(value?: string) {
+    if (!value) return "Sortie récente";
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return "Sortie récente";
+
+    return date.toLocaleDateString("fr-FR", {
+        day: "numeric",
+        month: "short",
+    });
+}
+
+function ReleaseCard({
+                         item,
+                         listened = false,
+                         loading = false,
+                         active = false,
+                         playing = false,
+                         onOpen,
+                         onPlay,
+                         onToggleListened,
+                     }: {
+    item: ArtistReleaseItem;
+    listened?: boolean;
+    loading?: boolean;
+    active?: boolean;
+    playing?: boolean;
+    onOpen: () => void;
+    onPlay: () => void;
+    onToggleListened: () => void;
+}) {
+    const canPlay = item.itemType === "song" && !!item.previewUrl;
+
     return (
-        <View style={styles.waveWrap}>
-            {[0, 1, 2].map((i) => (
-                <View
-                    key={i}
+        <TouchableOpacity
+            style={styles.releaseCard}
+            onPress={onOpen}
+            activeOpacity={0.88}
+        >
+            {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.releaseCover} />
+            ) : (
+                <View style={[styles.releaseCover, styles.musicPlaceholder]}>
+                    <Ionicons
+                        name={item.itemType === "album" ? "disc" : "musical-notes"}
+                        size={20}
+                        color={colors.textMuted}
+                    />
+                </View>
+            )}
+
+            <View style={styles.releaseBody}>
+                <View style={styles.releaseMetaRow}>
+                    <Text style={styles.releaseKind}>
+                        {item.itemType === "album" ? "Album" : "Son"} · {formatReleaseDate(item.releaseDate)}
+                    </Text>
+                </View>
+                <Text style={styles.releaseTitle} numberOfLines={1}>
+                    {item.title}
+                </Text>
+                <Text style={styles.releaseArtist} numberOfLines={1}>
+                    {item.artistName}
+                </Text>
+            </View>
+
+            <View style={styles.releaseActions}>
+                {canPlay ? (
+                    <TouchableOpacity
+                        style={[styles.releaseIconButton, active && styles.releaseIconButtonActive]}
+                        onPress={onPlay}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons
+                            name={active && playing ? "pause" : "play"}
+                            size={14}
+                            color={colors.text}
+                        />
+                        <PlayerWave active={active && playing} size="sm" />
+                    </TouchableOpacity>
+                ) : null}
+
+                <TouchableOpacity
                     style={[
-                        styles.waveBar,
-                        {
-                            height: i === 1 ? 16 : i === 0 ? 11 : 8,
-                            backgroundColor: active ? colors.primary : colors.textFaint,
-                            opacity: active ? 0.95 : 0.45,
-                        },
+                        styles.releaseListenButton,
+                        listened && styles.releaseListenButtonDone,
+                        loading && styles.releaseListenButtonLoading,
                     ]}
-                />
-            ))}
-        </View>
+                    onPress={onToggleListened}
+                    disabled={loading}
+                    activeOpacity={0.85}
+                >
+                    <Ionicons
+                        name={listened ? "return-up-back-outline" : "checkmark"}
+                        size={14}
+                        color={listened ? colors.textMuted : colors.bg}
+                    />
+                    <Text style={[styles.releaseListenText, listened && styles.releaseListenTextDone]}>
+                        {listened ? "Remettre" : "Écouté"}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        </TouchableOpacity>
     );
 }
 
@@ -189,10 +293,50 @@ export default function ProfileScreen({ navigation }: any) {
 
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
+    const [releasesToListen, setReleasesToListen] = useState<ArtistReleaseItem[]>([]);
+    const [releasesListened, setReleasesListened] = useState<ArtistReleaseItem[]>([]);
+    const [releaseUpdatingId, setReleaseUpdatingId] = useState<string | null>(null);
+    const releaseSyncStartedRef = useRef(false);
 
     const LIMIT = 15;
 
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
+
+    const fetchArtistReleases = useCallback(async () => {
+        const bearer = toBearer(await getStoredToken());
+        if (!bearer) return;
+
+        const res = await fetch(`${API_URL}/api/artist-releases/me`, {
+            headers: { Authorization: bearer },
+        });
+        const json = await safeJson(res);
+        if (!res.ok) return;
+
+        setReleasesToListen(Array.isArray(json?.toListen) ? json.toListen : []);
+        setReleasesListened(Array.isArray(json?.listened) ? json.listened : []);
+    }, []);
+
+    const syncArtistReleases = useCallback(async () => {
+        const bearer = toBearer(await getStoredToken());
+        if (!bearer) return;
+
+        await fetch(`${API_URL}/api/artist-releases/sync`, {
+            method: "POST",
+            headers: { Authorization: bearer },
+        }).catch(() => null);
+
+        await fetchArtistReleases();
+    }, [fetchArtistReleases]);
+
+    const ensureArtistReleasesSynced = useCallback(() => {
+        if (releaseSyncStartedRef.current) {
+            fetchArtistReleases().catch(() => {});
+            return;
+        }
+
+        releaseSyncStartedRef.current = true;
+        syncArtistReleases().catch(() => {});
+    }, [fetchArtistReleases, syncArtistReleases]);
 
     const handleLogout = useCallback(async () => {
         const stored = await getStoredToken();
@@ -296,9 +440,14 @@ export default function ProfileScreen({ navigation }: any) {
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         const me = await fetchMe();
-        if (me?._id) await fetchTabPosts(me._id, activeTab);
+        if (me?._id) {
+            await Promise.all([
+                fetchTabPosts(me._id, activeTab),
+                syncArtistReleases(),
+            ]);
+        }
         setRefreshing(false);
-    }, [fetchMe, fetchTabPosts, activeTab]);
+    }, [fetchMe, fetchTabPosts, activeTab, syncArtistReleases]);
 
     useEffect(() => {
         (async () => {
@@ -315,18 +464,24 @@ export default function ProfileScreen({ navigation }: any) {
             const me = await fetchMe();
             setLoadingUser(false);
 
-            if (me?._id) await fetchTabPosts(me._id, activeTab);
+            if (me?._id) {
+                ensureArtistReleasesSynced();
+                await fetchTabPosts(me._id, activeTab);
+            }
             else setInitialLoadingPosts(false);
         })();
-    }, [fetchMe, fetchTabPosts, activeTab]);
+    }, [fetchMe, fetchTabPosts, activeTab, ensureArtistReleasesSynced]);
 
     useFocusEffect(
         useCallback(() => {
             (async () => {
                 const me = await fetchMe();
-                if (me?._id) await fetchTabPosts(me._id, activeTab);
+                if (me?._id) {
+                    ensureArtistReleasesSynced();
+                    await fetchTabPosts(me._id, activeTab);
+                }
             })();
-        }, [fetchMe, fetchTabPosts, activeTab])
+        }, [fetchMe, fetchTabPosts, activeTab, ensureArtistReleasesSynced])
     );
 
     useEffect(() => {
@@ -378,12 +533,70 @@ export default function ProfileScreen({ navigation }: any) {
         });
     }, [pinnedTrack, canPlayPinned, isPinnedCurrent, togglePlay, playPreview]);
 
+    const openReleasePost = useCallback(
+        (item: ArtistReleaseItem) => {
+            navigation.navigate("CreatePost", {
+                entityType: item.itemType,
+                entityId: item.itemId,
+                track: {
+                    title: item.title,
+                    artist: item.artistName,
+                    cover: item.coverUrl || null,
+                    previewUrl: item.previewUrl || null,
+                },
+            });
+        },
+        [navigation]
+    );
+
+    const toggleReleaseListened = useCallback(
+        async (item: ArtistReleaseItem, listened: boolean) => {
+            if (releaseUpdatingId) return;
+            setReleaseUpdatingId(item._id);
+
+            try {
+                const bearer = toBearer(await getStoredToken());
+                if (!bearer) return;
+
+                const res = await fetch(`${API_URL}/api/artist-releases/me`, {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: bearer,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ releaseId: item._id, listened }),
+                });
+                if (!res.ok) return;
+
+                await fetchArtistReleases();
+            } finally {
+                setReleaseUpdatingId(null);
+            }
+        },
+        [fetchArtistReleases, releaseUpdatingId]
+    );
+
+    const playRelease = useCallback(
+        async (item: ArtistReleaseItem) => {
+            if (!item.previewUrl) return;
+
+            if (currentTrack?.url === item.previewUrl) {
+                await togglePlay();
+                return;
+            }
+
+            await playPreview({
+                title: item.title,
+                artist: item.artistName,
+                url: item.previewUrl,
+                coverUrl: item.coverUrl || "",
+            });
+        },
+        [currentTrack?.url, playPreview, togglePlay]
+    );
+
     if (loadingUser || !user || (initialLoadingPosts && posts.length === 0)) {
-        return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement du profil..." />;
     }
 
     const TabButton = ({ tab, label }: { tab: ProfileTab; label: string }) => {
@@ -401,13 +614,17 @@ export default function ProfileScreen({ navigation }: any) {
 
     const HeaderBlock = () => (
         <View style={{ width: "100%" }}>
-            <View style={styles.heroWrap}>
-                <View style={styles.bannerBox}>
-                    <Image
-                        source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
-                        style={styles.banner}
-                        resizeMode="cover"
-                    />
+                <View style={styles.heroWrap}>
+                    <View style={styles.bannerBox}>
+                    {user.bannerUrl ? (
+                        <Image
+                            source={{ uri: user.bannerUrl }}
+                            style={styles.banner}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <DefaultBanner style={styles.banner} />
+                    )}
                     <View style={styles.bannerOverlay} />
                 </View>
 
@@ -422,14 +639,18 @@ export default function ProfileScreen({ navigation }: any) {
                 </View>
             </View>
 
-            <View style={styles.identityBlock}>
+                <View style={styles.identityBlock}>
                 <View style={styles.identityTopRow}>
                     <View style={styles.avatarWrap}>
-                        <Image
-                            source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                            style={[styles.avatar, styles.avatarGlow]}
-                            resizeMode="cover"
-                        />
+                        {user.avatarUrl ? (
+                            <Image
+                                source={{ uri: user.avatarUrl }}
+                                style={[styles.avatar, styles.avatarGlow]}
+                                resizeMode="cover"
+                            />
+                        ) : (
+                            <DefaultAvatar label={user.pseudo} seed={user._id} size={112} style={[styles.avatar, styles.avatarGlow]} />
+                        )}
                     </View>
 
                     <TouchableOpacity
@@ -516,7 +737,9 @@ export default function ProfileScreen({ navigation }: any) {
                             </View>
                         ) : null}
 
-                        {canPlayPinned ? <MiniWave active={!!(isPinnedCurrent && isPlaying)} /> : null}
+                        {canPlayPinned ? (
+                            <PlayerWave active={!!(isPinnedCurrent && isPlaying)} size="sm" />
+                        ) : null}
                     </TouchableOpacity>
                 ) : (
                     <EmptyMusicState
@@ -535,7 +758,18 @@ export default function ProfileScreen({ navigation }: any) {
                         contentContainerStyle={styles.horizontalList}
                     >
                         {favoriteArtists.map((item) => (
-                            <MusicHorizontalCard key={`artist:${item.entityId}`} item={item} compact />
+                            <MusicHorizontalCard
+                                key={`artist:${item.entityId}`}
+                                item={item}
+                                compact
+                                onPress={() =>
+                                    navigation.navigate("ArtistDetail", {
+                                        artistId: item.entityId,
+                                        name: item.title,
+                                        cover: item.coverUrl || null,
+                                    })
+                                }
+                            />
                         ))}
                     </ScrollView>
                 ) : (
@@ -544,6 +778,79 @@ export default function ProfileScreen({ navigation }: any) {
                         cta="Compléter"
                         onPress={() => navigation.navigate("EditProfile")}
                     />
+                )}
+            </SectionBlock>
+
+            <SectionBlock title="À écouter" icon="radio-outline">
+                {releasesToListen.length > 0 ? (
+                    <View style={styles.releaseList}>
+                        {releasesToListen.slice(0, 6).map((item) => {
+                            const active = currentTrack?.url === item.previewUrl;
+                            return (
+                                <ReleaseCard
+                                    key={`release:${item._id}`}
+                                    item={item}
+                                    active={active}
+                                    playing={isPlaying}
+                                    loading={releaseUpdatingId === item._id}
+                                    onOpen={() => openReleasePost(item)}
+                                    onPlay={() => playRelease(item)}
+                                    onToggleListened={() => toggleReleaseListened(item, true)}
+                                />
+                            );
+                        })}
+                        <TouchableOpacity
+                            style={styles.sectionMoreButton}
+                            onPress={() => navigation.navigate("ArtistReleases", { initialTab: "toListen" })}
+                            activeOpacity={0.86}
+                        >
+                            <Text style={styles.sectionMoreText}>
+                                Voir les {Math.min(releasesToListen.length, 100)} sorties à écouter
+                            </Text>
+                            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <EmptyMusicState
+                        text="Les sorties de tes artistes favoris apparaîtront ici."
+                        cta="Actualiser"
+                        onPress={() => syncArtistReleases()}
+                    />
+                )}
+            </SectionBlock>
+
+            <SectionBlock title="Déjà écoutés" icon="checkmark-circle-outline">
+                {releasesListened.length > 0 ? (
+                    <View style={styles.releaseList}>
+                        {releasesListened.slice(0, 5).map((item) => {
+                            const active = currentTrack?.url === item.previewUrl;
+                            return (
+                                <ReleaseCard
+                                    key={`listened:${item._id}`}
+                                    item={item}
+                                    listened
+                                    active={active}
+                                    playing={isPlaying}
+                                    loading={releaseUpdatingId === item._id}
+                                    onOpen={() => openReleasePost(item)}
+                                    onPlay={() => playRelease(item)}
+                                    onToggleListened={() => toggleReleaseListened(item, false)}
+                                />
+                            );
+                        })}
+                        <TouchableOpacity
+                            style={styles.sectionMoreButton}
+                            onPress={() => navigation.navigate("ArtistReleases", { initialTab: "listened" })}
+                            activeOpacity={0.86}
+                        >
+                            <Text style={styles.sectionMoreText}>
+                                Voir les {Math.min(releasesListened.length, 100)} sons déjà écoutés
+                            </Text>
+                            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <EmptyMusicState text="Marque une sortie comme écoutée pour la garder ici." />
                 )}
             </SectionBlock>
 
@@ -641,13 +948,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
 
-    loading: {
-        flex: 1,
-        backgroundColor: colors.bg,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-
     heroWrap: {
         position: "relative",
         marginTop: 0,
@@ -656,7 +956,7 @@ const styles = StyleSheet.create({
 
     bannerBox: {
         width: "100%",
-        height: 228,
+        aspectRatio: 16 / 9,
         backgroundColor: colors.surface2,
         position: "relative",
         overflow: "hidden",
@@ -685,9 +985,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: radius.lg,
-        backgroundColor: "rgba(18, 22, 31, 0.88)",
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.control,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -747,14 +1045,11 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.xs,
-        backgroundColor: "rgba(94, 23, 235, 0.9)",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.controlActive,
         paddingHorizontal: spacing.md,
         paddingVertical: 10,
         borderRadius: radius.pill,
         marginBottom: spacing.sm,
-        ...shadows.glowPrimary,
     },
 
     profileEditText: {
@@ -796,7 +1091,7 @@ const styles = StyleSheet.create({
     sectionBlock: {
         marginTop: spacing.md,
         marginHorizontal: 16,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.md,
     },
@@ -826,15 +1121,14 @@ const styles = StyleSheet.create({
     pinnedCard: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "rgba(20, 24, 33, 0.76)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: spacing.md,
         gap: spacing.md,
     },
 
     pinnedCardPlaying: {
-        backgroundColor: colors.primaryFaint,
-        ...shadows.glowPrimary,
+        backgroundColor: colors.control,
     },
 
     pinnedCover: {
@@ -870,24 +1164,11 @@ const styles = StyleSheet.create({
         borderRadius: 21,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
     },
 
     pinnedPlayBtnActive: {
         backgroundColor: colors.primary,
-    },
-
-    waveWrap: {
-        width: 18,
-        height: 16,
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
-    },
-
-    waveBar: {
-        width: 3,
-        borderRadius: 999,
     },
 
     horizontalList: {
@@ -897,7 +1178,7 @@ const styles = StyleSheet.create({
     musicCard: {
         width: 148,
         marginRight: spacing.sm,
-        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: spacing.sm,
     },
@@ -936,7 +1217,7 @@ const styles = StyleSheet.create({
     emptyBox: {
         alignItems: "flex-start",
         gap: 8,
-        backgroundColor: "rgba(20, 24, 33, 0.62)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: 14,
     },
@@ -953,13 +1234,134 @@ const styles = StyleSheet.create({
         fontSize: typography.bodySm,
     },
 
+    releaseList: {
+        gap: spacing.sm,
+    },
+
+    releaseCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        backgroundColor: colors.surfaceRaised,
+        borderRadius: radius.xl,
+        padding: spacing.sm,
+    },
+
+    releaseCover: {
+        width: 58,
+        height: 58,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface4,
+    },
+
+    releaseBody: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    releaseMetaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 3,
+    },
+
+    releaseKind: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        letterSpacing: 0.7,
+    },
+
+    releaseTitle: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.black,
+        lineHeight: 18,
+    },
+
+    releaseArtist: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.bold,
+        marginTop: 3,
+    },
+
+    releaseActions: {
+        alignItems: "flex-end",
+        gap: 8,
+    },
+
+    releaseIconButton: {
+        minWidth: 54,
+        height: 34,
+        borderRadius: 17,
+        paddingHorizontal: 10,
+        backgroundColor: colors.control,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+    },
+
+    releaseIconButtonActive: {
+        backgroundColor: colors.controlActive,
+    },
+
+    releaseListenButton: {
+        minWidth: 82,
+        height: 32,
+        borderRadius: 16,
+        paddingHorizontal: 10,
+        backgroundColor: colors.primary,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+    },
+
+    releaseListenButtonDone: {
+        backgroundColor: colors.control,
+    },
+
+    releaseListenButtonLoading: {
+        opacity: 0.55,
+    },
+
+    releaseListenText: {
+        color: colors.bg,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+    },
+
+    releaseListenTextDone: {
+        color: colors.textMuted,
+    },
+
+    sectionMoreButton: {
+        minHeight: 42,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surfaceRaised,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: spacing.md,
+        marginTop: 2,
+    },
+
+    sectionMoreText: {
+        color: colors.primary,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.black,
+    },
+
     tabsRow: {
         flexDirection: "row",
         gap: spacing.sm,
         marginHorizontal: 16,
         marginTop: spacing.lg,
         marginBottom: spacing.md,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.surfaceInset,
         borderRadius: radius.xxl,
         padding: 4,
     },
@@ -972,8 +1374,7 @@ const styles = StyleSheet.create({
     },
 
     tabBtnActive: {
-        backgroundColor: colors.primaryDark,
-        borderColor: colors.primaryDark,
+        backgroundColor: colors.control,
     },
 
     tabBtnText: {
@@ -991,7 +1392,7 @@ const styles = StyleSheet.create({
         marginTop: 6,
         padding: 16,
         borderRadius: radius.xl,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         flexDirection: "row",
         alignItems: "center",
         gap: 10,

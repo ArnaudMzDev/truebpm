@@ -24,6 +24,8 @@ import { io, Socket } from "socket.io-client";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { DefaultAvatar } from "../components/ProfileFallbacks";
 
 type OtherUser = {
     _id: string;
@@ -760,7 +762,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
             const author = p?.userId || raw?.userId;
             const authorName = author?.pseudo || "Utilisateur";
-            const authorAvatar = author?.avatarUrl || "https://picsum.photos/200";
+            const authorAvatar = author?.avatarUrl || "";
+            const authorId = author?._id || authorName;
 
             const trackTitle = p?.trackTitle || "Post partagé";
             const artist = p?.artist || "";
@@ -790,7 +793,11 @@ export default function ChatScreen({ route, navigation }: any) {
                         style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}
                     >
                         <View style={styles.postHeaderRow}>
-                            <Image source={{ uri: authorAvatar }} style={styles.postAuthorAvatar} />
+                            {authorAvatar ? (
+                                <Image source={{ uri: authorAvatar }} style={styles.postAuthorAvatar} />
+                            ) : (
+                                <DefaultAvatar label={authorName} seed={authorId} size={22} style={styles.postAuthorAvatar} />
+                            )}
                             <Text style={styles.postAuthorName} numberOfLines={1}>
                                 {authorName}
                             </Text>
@@ -804,10 +811,13 @@ export default function ChatScreen({ route, navigation }: any) {
                         </View>
 
                         <View style={styles.postCard}>
-                            <Image
-                                source={{ uri: p?.coverUrl || "https://picsum.photos/200" }}
-                                style={styles.postCover}
-                            />
+                            {p?.coverUrl ? (
+                                <Image source={{ uri: p.coverUrl }} style={styles.postCover} />
+                            ) : (
+                                <View style={[styles.postCover, styles.postCoverFallback]}>
+                                    <Ionicons name="musical-notes" size={18} color={colors.textMuted} />
+                                </View>
+                            )}
                             <View style={{ flex: 1 }}>
                                 <Text style={[styles.msgText, mine ? styles.textMine : styles.textOther]} numberOfLines={1}>
                                     {trackTitle}
@@ -850,11 +860,7 @@ export default function ChatScreen({ route, navigation }: any) {
     };
 
     if (loading) {
-        return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement de la conversation..." />;
     }
 
     const composerBottom = keyboardVisible ? 8 : Math.max(insets.bottom, 12) + 10;
@@ -874,11 +880,15 @@ export default function ChatScreen({ route, navigation }: any) {
                             </TouchableOpacity>
 
                             <View style={styles.headerCenter}>
-                                <View style={styles.headerAvatarWrap}>
-                                    <Image
-                                        source={{ uri: otherUser?.avatarUrl || "https://picsum.photos/200" }}
-                                        style={styles.headerAvatar}
-                                    />
+                            <View style={styles.headerAvatarWrap}>
+                                    {otherUser?.avatarUrl ? (
+                                        <Image
+                                            source={{ uri: otherUser.avatarUrl }}
+                                            style={styles.headerAvatar}
+                                        />
+                                    ) : (
+                                        <DefaultAvatar label={otherUser?.pseudo} seed={otherUser?._id} size={40} style={styles.headerAvatar} />
+                                    )}
                                     <View
                                         style={[
                                             styles.presenceDot,
@@ -1013,13 +1023,6 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bg,
     },
 
-    loading: {
-        flex: 1,
-        backgroundColor: colors.bg,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-
     header: {
         paddingHorizontal: spacing.md,
         paddingBottom: spacing.md,
@@ -1139,9 +1142,8 @@ const styles = StyleSheet.create({
     },
 
     bubbleMine: {
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
         borderTopRightRadius: 7,
-        ...shadows.glowPrimary,
     },
 
     bubbleOther: {
@@ -1255,6 +1257,11 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface4,
     },
 
+    postCoverFallback: {
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
     postArtist: {
         marginTop: 2,
         fontSize: 12,
@@ -1303,10 +1310,9 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: radius.lg,
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
         alignItems: "center",
         justifyContent: "center",
-        ...shadows.glowPrimary,
     },
 
     viewerOverlay: {

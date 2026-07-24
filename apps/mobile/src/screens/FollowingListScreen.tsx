@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import UserListItem from "../components/UserListItem";
+import AppSectionLoader from "../components/ui/AppSectionLoader";
 
 import { API_URL } from "../lib/config";
 
@@ -146,7 +147,7 @@ export default function FollowingListScreen({ route, navigation }: any) {
             />
 
             {loading ? (
-                <ActivityIndicator color="#9B5CFF" style={{ marginTop: 20 }} />
+                <AppSectionLoader />
             ) : (
                 <FlatList
                     data={users}

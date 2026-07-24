@@ -19,6 +19,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
+import PlayerWave from "../components/PlayerWave";
+import { DefaultAvatar, DefaultBanner } from "../components/ProfileFallbacks";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
 import { useUser } from "../context/UserContext";
 import { usePlayer } from "../context/PlayerContext";
 import { getStoredToken } from "../lib/authStorage";
@@ -29,7 +32,6 @@ import {
     radius,
     typography,
     fontWeights,
-    shadows,
 } from "../theme";
 
 type MusicRef = {
@@ -43,6 +45,31 @@ type MusicRef = {
 
 type ProfileTab = "posts" | "reposts" | "likes";
 type FollowStatus = "self" | "none" | "requested" | "following";
+
+type Compatibility = {
+    locked?: boolean;
+    score?: number;
+    sharedEntities?: Array<{
+        key: string;
+        title: string;
+        artist: string;
+        coverUrl?: string | null;
+        myRating: number;
+        theirRating: number;
+        diff: number;
+    }>;
+    sharedArtists?: string[];
+    sharedFavorites?: number;
+    agreements?: number;
+    disagreements?: Array<{
+        key: string;
+        title: string;
+        artist: string;
+        myRating: number;
+        theirRating: number;
+        diff: number;
+    }>;
+};
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -58,12 +85,16 @@ async function safeJson(res: Response): Promise<any | null> {
 function MusicHorizontalCard({
                                  item,
                                  compact = false,
+                                 onPress,
                              }: {
     item: MusicRef;
     compact?: boolean;
+    onPress?: () => void;
 }) {
+    const Wrapper = onPress ? TouchableOpacity : View;
+
     return (
-        <View style={[styles.musicCard, compact && styles.musicCardCompact]}>
+        <Wrapper style={[styles.musicCard, compact && styles.musicCardCompact]} onPress={onPress} activeOpacity={0.86}>
             {item.coverUrl ? (
                 <Image source={{ uri: item.coverUrl }} style={styles.musicCardCover} />
             ) : (
@@ -88,7 +119,7 @@ function MusicHorizontalCard({
             <Text style={styles.musicCardArtist} numberOfLines={1}>
                 {item.artist}
             </Text>
-        </View>
+        </Wrapper>
     );
 }
 
@@ -178,26 +209,6 @@ function PrivateLockedState({
     );
 }
 
-function MiniWave({ active }: { active: boolean }) {
-    return (
-        <View style={styles.waveWrap}>
-            {[0, 1, 2].map((i) => (
-                <View
-                    key={i}
-                    style={[
-                        styles.waveBar,
-                        {
-                            height: i === 1 ? 16 : i === 0 ? 11 : 8,
-                            backgroundColor: active ? colors.primary : colors.textFaint,
-                            opacity: active ? 0.95 : 0.45,
-                        },
-                    ]}
-                />
-            ))}
-        </View>
-    );
-}
-
 export default function UserProfileScreen({ route, navigation }: any) {
     const { userId } = route.params;
     const insets = useSafeAreaInsets();
@@ -223,6 +234,8 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
     const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
     const [requestActionLoading, setRequestActionLoading] = useState(false);
+    const [muteNotificationsLoading, setMuteNotificationsLoading] = useState(false);
+    const [compatibility, setCompatibility] = useState<Compatibility | null>(null);
 
     const LIMIT = 15;
 
@@ -287,6 +300,32 @@ export default function UserProfileScreen({ route, navigation }: any) {
         setPendingRequestId(match?._id ? String(match._id) : null);
     }, [isSelf, userId]);
 
+    const fetchCompatibility = useCallback(async () => {
+        if (isSelf) {
+            setCompatibility(null);
+            return;
+        }
+
+        const token = await getStoredToken();
+        if (!token) {
+            setCompatibility(null);
+            return;
+        }
+
+        const res = await fetch(`${API_URL}/api/user/${userId}/compatibility`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await safeJson(res);
+
+        if (!res.ok) {
+            console.log("fetchCompatibility error:", res.status, json);
+            setCompatibility(null);
+            return;
+        }
+
+        setCompatibility(json?.compatibility || null);
+    }, [isSelf, userId]);
+
     const fetchTabPosts = useCallback(async (uid: string, tab: ProfileTab) => {
         const token = await getStoredToken();
 
@@ -315,10 +354,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 fetchUser(),
                 fetchTabPosts(userId, activeTab),
                 fetchPendingRequestForProfile(),
+                fetchCompatibility(),
             ]);
             setLoadingInitial(false);
         })();
-    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, userId, activeTab]);
+    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, fetchCompatibility, userId, activeTab]);
 
     useEffect(() => {
         if (!userId) return;
@@ -332,10 +372,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     fetchUser(),
                     fetchTabPosts(userId, activeTab),
                     fetchPendingRequestForProfile(),
+                    fetchCompatibility(),
                     refreshMe(),
                 ]);
             })();
-        }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, refreshMe, userId, activeTab])
+        }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, fetchCompatibility, refreshMe, userId, activeTab])
     );
 
     useEffect(() => {
@@ -395,10 +436,11 @@ export default function UserProfileScreen({ route, navigation }: any) {
             fetchUser(),
             fetchTabPosts(userId, activeTab),
             fetchPendingRequestForProfile(),
+            fetchCompatibility(),
             refreshMe(),
         ]);
         setRefreshing(false);
-    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, refreshMe, userId, activeTab]);
+    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, fetchCompatibility, refreshMe, userId, activeTab]);
 
     const handleFollowToggle = useCallback(async () => {
         if (isSelf || followLoading) return;
@@ -444,6 +486,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
             await Promise.all([
                 fetchTabPosts(userId, activeTab),
                 fetchPendingRequestForProfile(),
+                fetchCompatibility(),
                 refreshMe(),
             ]);
         } finally {
@@ -457,6 +500,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
         fetchTabPosts,
         activeTab,
         fetchPendingRequestForProfile,
+        fetchCompatibility,
         refreshMe,
     ]);
 
@@ -496,6 +540,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     fetchUser(),
                     fetchTabPosts(userId, activeTab),
                     fetchPendingRequestForProfile(),
+                    fetchCompatibility(),
                     refreshMe(),
                 ]);
 
@@ -512,6 +557,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
             fetchUser,
             fetchTabPosts,
             fetchPendingRequestForProfile,
+            fetchCompatibility,
             refreshMe,
             userId,
             activeTab,
@@ -524,6 +570,51 @@ export default function UserProfileScreen({ route, navigation }: any) {
         if ((user.messagePrivacy || "everyone") === "everyone") return true;
         return isFollowing;
     }, [isSelf, user, isFollowing]);
+
+    const notificationsMutedByMe = !!user?.notificationsMutedByMe;
+
+    const handleToggleProfileNotifications = useCallback(async () => {
+        if (isSelf || muteNotificationsLoading) return;
+
+        const token = await getStoredToken();
+        if (!token) {
+            Alert.alert("Erreur", "Tu n'es pas connecté.");
+            return;
+        }
+
+        const nextMuted = !notificationsMutedByMe;
+        setMuteNotificationsLoading(true);
+        setUser((prev: any) =>
+            prev ? { ...prev, notificationsMutedByMe: nextMuted } : prev
+        );
+
+        try {
+            const res = await fetch(`${API_URL}/api/user/notification-mutes/${userId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
+                },
+                body: JSON.stringify({ muted: nextMuted }),
+            });
+            const json = await safeJson(res);
+
+            if (!res.ok) {
+                throw new Error(json?.error || "Impossible de modifier les notifications.");
+            }
+
+            setUser((prev: any) =>
+                prev ? { ...prev, notificationsMutedByMe: !!json?.muted } : prev
+            );
+        } catch (e) {
+            setUser((prev: any) =>
+                prev ? { ...prev, notificationsMutedByMe } : prev
+            );
+            Alert.alert("Réglage impossible", "Réessaie dans quelques secondes.");
+        } finally {
+            setMuteNotificationsLoading(false);
+        }
+    }, [isSelf, muteNotificationsLoading, notificationsMutedByMe, userId]);
 
     const openChat = useCallback(async () => {
         if (isSelf) return;
@@ -624,11 +715,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
     }, [pinnedTrack, canPlayPinned, isPinnedCurrent, togglePlay, playPreview]);
 
     if (loadingInitial || !user) {
-        return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement du profil..." />;
     }
 
     const TabButton = ({ tab, label }: { tab: ProfileTab; label: string }) => {
@@ -657,11 +744,15 @@ export default function UserProfileScreen({ route, navigation }: any) {
         <View>
             <View style={styles.heroWrap}>
                 <View style={styles.bannerBox}>
-                    <Image
-                        source={{ uri: user.bannerUrl || "https://picsum.photos/600/200" }}
-                        style={styles.banner}
-                        resizeMode="cover"
-                    />
+                    {user.bannerUrl ? (
+                        <Image
+                            source={{ uri: user.bannerUrl }}
+                            style={styles.banner}
+                            resizeMode="cover"
+                        />
+                    ) : (
+                        <DefaultBanner style={styles.banner} />
+                    )}
                     <View style={styles.bannerOverlay} />
                 </View>
 
@@ -679,23 +770,29 @@ export default function UserProfileScreen({ route, navigation }: any) {
             <View style={styles.identityBlock}>
                 <View style={styles.identityTopRow}>
                     <View style={styles.avatarWrap}>
-                        <Image
-                            source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                            style={styles.avatar}
-                            resizeMode="cover"
-                        />
+                        {user.avatarUrl ? (
+                            <Image
+                                source={{ uri: user.avatarUrl }}
+                                style={styles.avatar}
+                                resizeMode="cover"
+                            />
+                        ) : (
+                            <DefaultAvatar label={user.pseudo} seed={user._id} size={112} style={styles.avatar} />
+                        )}
                     </View>
 
-                    <View style={styles.profileStatusPill}>
-                        <Ionicons
-                            name={isFollowing ? "checkmark-circle" : user?.isPrivate ? "lock-closed" : "pulse"}
-                            size={13}
-                            color={colors.primary}
-                        />
-                        <Text style={styles.profileStatusText}>
-                            {isFollowing ? "Suivi" : user?.isPrivate ? "Privé" : "Public"}
-                        </Text>
-                    </View>
+                    {!isFollowing ? (
+                        <View style={styles.profileStatusPill}>
+                            <Ionicons
+                                name={user?.isPrivate ? "lock-closed" : "pulse"}
+                                size={13}
+                                color={colors.primary}
+                            />
+                            <Text style={styles.profileStatusText}>
+                                {user?.isPrivate ? "Privé" : "Public"}
+                            </Text>
+                        </View>
+                    ) : null}
                 </View>
 
                 <Text style={styles.pseudo}>{user.pseudo}</Text>
@@ -747,6 +844,51 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 </View>
             </View>
 
+            {!isSelf && compatibility && !compatibility.locked ? (
+                <View style={styles.compatCard}>
+                    <View style={styles.compatTopRow}>
+                        <View style={styles.compatScoreWrap}>
+                            <Text style={styles.compatScore}>{compatibility.score || 0}</Text>
+                            <Text style={styles.compatScoreMax}>%</Text>
+                        </View>
+
+                        <View style={styles.compatCopy}>
+                            <Text style={styles.compatEyebrow}>Compatibilité musicale</Text>
+                            <Text style={styles.compatTitle}>
+                                {(compatibility.score || 0) >= 70
+                                    ? "Vous êtes sur la même longueur d’onde."
+                                    : (compatibility.score || 0) >= 45
+                                        ? "Il y a de quoi comparer vos goûts."
+                                        : "Vos goûts risquent de débattre."}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {compatibility.sharedArtists?.length ? (
+                        <Text style={styles.compatMeta} numberOfLines={2}>
+                            En commun : {compatibility.sharedArtists.slice(0, 3).join(", ")}
+                        </Text>
+                    ) : compatibility.sharedEntities?.length ? (
+                        <Text style={styles.compatMeta} numberOfLines={2}>
+                            Vous avez déjà noté {compatibility.sharedEntities.length} même son.
+                        </Text>
+                    ) : (
+                        <Text style={styles.compatMeta}>
+                            Note plus de sons pour affiner la comparaison.
+                        </Text>
+                    )}
+
+                    {compatibility.disagreements?.length ? (
+                        <View style={styles.compatDebateRow}>
+                            <Ionicons name="flash-outline" size={13} color={colors.warning} />
+                            <Text style={styles.compatDebateText} numberOfLines={1}>
+                                Désaccord sur {compatibility.disagreements[0].title}
+                            </Text>
+                        </View>
+                    ) : null}
+                </View>
+            ) : null}
+
             {!isSelf && pendingRequestId ? (
                 <View style={styles.requestCard}>
                     <View style={styles.requestHeader}>
@@ -785,40 +927,69 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     </View>
                 </View>
             ) : !isSelf ? (
-                <View style={styles.actionsRow}>
-                    <TouchableOpacity
-                        onPress={openChat}
-                        style={[
-                            styles.msgBtn,
-                            !canMessage && styles.msgBtnDisabled,
-                            openingChat && { opacity: 0.7 },
-                        ]}
-                        activeOpacity={0.85}
-                        disabled={openingChat}
-                    >
-                        <Text style={styles.msgText}>
-                            {openingChat
-                                ? "Ouverture..."
-                                : canMessage
-                                    ? "Message"
-                                    : "Messages limités"}
-                        </Text>
-                    </TouchableOpacity>
+                <>
+                    <View style={styles.actionsRow}>
+                        <TouchableOpacity
+                            onPress={openChat}
+                            style={[
+                                styles.msgBtn,
+                                !canMessage && styles.msgBtnDisabled,
+                                openingChat && { opacity: 0.7 },
+                            ]}
+                            activeOpacity={0.85}
+                            disabled={openingChat}
+                        >
+                            <Text style={styles.msgText}>
+                                {openingChat
+                                    ? "Ouverture..."
+                                    : canMessage
+                                        ? "Message"
+                                        : "Messages limités"}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={handleFollowToggle}
+                            style={[
+                                styles.followBtn,
+                                isFollowing ? styles.following : styles.notFollowing,
+                                followStatus === "requested" && styles.requestedBtn,
+                                followLoading && { opacity: 0.7 },
+                            ]}
+                            activeOpacity={0.85}
+                            disabled={followLoading}
+                        >
+                            <Text style={styles.followText}>{followButtonLabel}</Text>
+                        </TouchableOpacity>
+                    </View>
 
                     <TouchableOpacity
-                        onPress={handleFollowToggle}
                         style={[
-                            styles.followBtn,
-                            isFollowing ? styles.following : styles.notFollowing,
-                            followStatus === "requested" && styles.requestedBtn,
-                            followLoading && { opacity: 0.7 },
+                            styles.profileNotifBtn,
+                            notificationsMutedByMe && styles.profileNotifBtnMuted,
+                            muteNotificationsLoading && { opacity: 0.7 },
                         ]}
                         activeOpacity={0.85}
-                        disabled={followLoading}
+                        disabled={muteNotificationsLoading}
+                        onPress={handleToggleProfileNotifications}
                     >
-                        <Text style={styles.followText}>{followButtonLabel}</Text>
+                        <Ionicons
+                            name={notificationsMutedByMe ? "notifications-off-outline" : "notifications-outline"}
+                            size={17}
+                            color={notificationsMutedByMe ? colors.textMuted : colors.primary}
+                        />
+                        <Text
+                            style={[
+                                styles.profileNotifText,
+                                notificationsMutedByMe && styles.profileNotifTextMuted,
+                            ]}
+                        >
+                            {notificationsMutedByMe
+                                ? "Notifications coupées pour ce profil"
+                                : "Recevoir ses notifications"}
+                        </Text>
                     </TouchableOpacity>
-                </View>
+                </>
             ) : null}
 
             <SectionBlock title="Son épinglé" icon="musical-notes-outline">
@@ -864,7 +1035,9 @@ export default function UserProfileScreen({ route, navigation }: any) {
                             </View>
                         ) : null}
 
-                        {canPlayPinned ? <MiniWave active={!!(isPinnedCurrent && isPlaying)} /> : null}
+                        {canPlayPinned ? (
+                            <PlayerWave active={!!(isPinnedCurrent && isPlaying)} size="sm" />
+                        ) : null}
                     </TouchableOpacity>
                 ) : (
                     <EmptyMusicState text="Aucun son épinglé pour le moment." />
@@ -879,7 +1052,18 @@ export default function UserProfileScreen({ route, navigation }: any) {
                         contentContainerStyle={styles.horizontalList}
                     >
                         {favoriteArtists.map((item) => (
-                            <MusicHorizontalCard key={`artist:${item.entityId}`} item={item} compact />
+                            <MusicHorizontalCard
+                                key={`artist:${item.entityId}`}
+                                item={item}
+                                compact
+                                onPress={() =>
+                                    navigation.navigate("ArtistDetail", {
+                                        artistId: item.entityId,
+                                        name: item.title,
+                                        cover: item.coverUrl || null,
+                                    })
+                                }
+                            />
                         ))}
                     </ScrollView>
                 ) : (
@@ -999,13 +1183,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
 
-    loading: {
-        flex: 1,
-        backgroundColor: colors.bg,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-
     heroWrap: {
         position: "relative",
         marginTop: 0,
@@ -1014,7 +1191,7 @@ const styles = StyleSheet.create({
 
     bannerBox: {
         width: "100%",
-        height: 228,
+        aspectRatio: 16 / 9,
         backgroundColor: colors.surface2,
         position: "relative",
         overflow: "hidden",
@@ -1041,9 +1218,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: radius.lg,
-        backgroundColor: "rgba(18, 22, 31, 0.88)",
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.control,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -1081,9 +1256,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.xs,
-        backgroundColor: "#12101B",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.control,
         paddingHorizontal: spacing.sm,
         paddingVertical: 7,
         borderRadius: radius.pill,
@@ -1122,9 +1295,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        backgroundColor: "#1B1217",
-        borderWidth: 1,
-        borderColor: "#38212D",
+        backgroundColor: colors.dangerSoft,
         borderRadius: radius.pill,
         paddingHorizontal: 10,
         paddingVertical: 6,
@@ -1134,9 +1305,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.control,
         borderRadius: radius.pill,
         paddingHorizontal: 10,
         paddingVertical: 6,
@@ -1178,6 +1347,88 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.medium,
     },
 
+    compatCard: {
+        marginHorizontal: 16,
+        marginTop: spacing.md,
+        borderRadius: radius.xxl,
+        padding: spacing.md,
+        backgroundColor: colors.surfaceFeed,
+    },
+
+    compatTopRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+    },
+
+    compatScoreWrap: {
+        width: 62,
+        height: 62,
+        borderRadius: 31,
+        backgroundColor: colors.primarySoft,
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        paddingBottom: 13,
+    },
+
+    compatScore: {
+        color: colors.text,
+        fontSize: 24,
+        lineHeight: 27,
+        fontWeight: fontWeights.black,
+    },
+
+    compatScoreMax: {
+        color: colors.primary,
+        fontSize: 13,
+        lineHeight: 18,
+        fontWeight: fontWeights.black,
+    },
+
+    compatCopy: {
+        flex: 1,
+        minWidth: 0,
+    },
+
+    compatEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        letterSpacing: 1.2,
+        marginBottom: 4,
+    },
+
+    compatTitle: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        lineHeight: 19,
+        fontWeight: fontWeights.black,
+    },
+
+    compatMeta: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        lineHeight: 18,
+        marginTop: spacing.sm,
+        fontWeight: fontWeights.bold,
+    },
+
+    compatDebateRow: {
+        marginTop: spacing.sm,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+
+    compatDebateText: {
+        flex: 1,
+        color: colors.textSoft,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.extraBold,
+    },
+
     actionsRow: {
         flexDirection: "row",
         gap: spacing.sm,
@@ -1187,9 +1438,7 @@ const styles = StyleSheet.create({
 
     msgBtn: {
         flex: 1,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.control,
         paddingVertical: 12,
         borderRadius: radius.xl,
         alignItems: "center",
@@ -1197,8 +1446,7 @@ const styles = StyleSheet.create({
     },
 
     msgBtnDisabled: {
-        backgroundColor: "#101010",
-        borderColor: "#202020",
+        backgroundColor: colors.controlMuted,
     },
 
     msgText: {
@@ -1216,20 +1464,15 @@ const styles = StyleSheet.create({
     },
 
     following: {
-        backgroundColor: "#251216",
-        borderWidth: 1,
-        borderColor: "#4A1F29",
+        backgroundColor: colors.dangerSoft,
     },
 
     notFollowing: {
-        backgroundColor: colors.primaryDark,
-        ...shadows.glowPrimary,
+        backgroundColor: colors.controlActive,
     },
 
     requestedBtn: {
-        backgroundColor: "#1D1830",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.control,
     },
 
     followText: {
@@ -1238,12 +1481,37 @@ const styles = StyleSheet.create({
         fontSize: typography.bodySm,
     },
 
+    profileNotifBtn: {
+        marginHorizontal: 16,
+        marginTop: spacing.sm,
+        minHeight: 46,
+        borderRadius: radius.xl,
+        backgroundColor: colors.surfaceInset,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: spacing.sm,
+        paddingHorizontal: spacing.md,
+    },
+
+    profileNotifBtnMuted: {
+        backgroundColor: colors.controlMuted,
+    },
+
+    profileNotifText: {
+        color: colors.textSoft,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.extraBold,
+    },
+
+    profileNotifTextMuted: {
+        color: colors.textMuted,
+    },
+
     requestCard: {
         marginHorizontal: 16,
         marginTop: 14,
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
         borderRadius: radius.xl,
         padding: 14,
     },
@@ -1261,9 +1529,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#151122",
-        borderWidth: 1,
-        borderColor: colors.borderAccent,
+        backgroundColor: colors.control,
     },
 
     requestTitle: {
@@ -1286,7 +1552,7 @@ const styles = StyleSheet.create({
 
     requestDeclineBtn: {
         flex: 1,
-        backgroundColor: colors.surface3,
+        backgroundColor: colors.control,
         paddingVertical: 12,
         borderRadius: radius.lg,
         alignItems: "center",
@@ -1295,12 +1561,11 @@ const styles = StyleSheet.create({
 
     requestAcceptBtn: {
         flex: 1,
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
         paddingVertical: 12,
         borderRadius: radius.lg,
         alignItems: "center",
         justifyContent: "center",
-        ...shadows.glowPrimary,
     },
 
     requestDeclineText: {
@@ -1318,7 +1583,7 @@ const styles = StyleSheet.create({
     sectionBlock: {
         marginTop: spacing.md,
         marginHorizontal: 16,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.md,
     },
@@ -1348,15 +1613,14 @@ const styles = StyleSheet.create({
     pinnedCard: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "rgba(20, 24, 33, 0.76)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: spacing.md,
         gap: spacing.md,
     },
 
     pinnedCardPlaying: {
-        backgroundColor: colors.primaryFaint,
-        ...shadows.glowPrimary,
+        backgroundColor: colors.control,
     },
 
     pinnedCover: {
@@ -1392,7 +1656,7 @@ const styles = StyleSheet.create({
         borderRadius: 21,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
     },
 
     pinnedPlayBtnActive: {
@@ -1406,7 +1670,7 @@ const styles = StyleSheet.create({
     musicCard: {
         width: 148,
         marginRight: spacing.sm,
-        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: spacing.sm,
     },
@@ -1445,7 +1709,7 @@ const styles = StyleSheet.create({
     emptyBox: {
         alignItems: "flex-start",
         gap: 8,
-        backgroundColor: "rgba(20, 24, 33, 0.62)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xl,
         padding: 14,
     },
@@ -1461,7 +1725,7 @@ const styles = StyleSheet.create({
         marginTop: 8,
         padding: 20,
         borderRadius: radius.xl,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         alignItems: "center",
     },
 
@@ -1491,11 +1755,10 @@ const styles = StyleSheet.create({
 
     privateBtn: {
         marginTop: 16,
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
         borderRadius: radius.lg,
         paddingVertical: 12,
         paddingHorizontal: 18,
-        ...shadows.glowPrimary,
     },
 
     privateBtnText: {
@@ -1510,7 +1773,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginTop: spacing.lg,
         marginBottom: spacing.md,
-        backgroundColor: colors.surface,
+        backgroundColor: colors.surfaceInset,
         borderRadius: radius.xxl,
         padding: 4,
     },
@@ -1523,8 +1786,7 @@ const styles = StyleSheet.create({
     },
 
     tabBtnActive: {
-        backgroundColor: colors.primaryDark,
-        borderColor: colors.primaryDark,
+        backgroundColor: colors.control,
     },
 
     tabBtnText: {
@@ -1542,7 +1804,7 @@ const styles = StyleSheet.create({
         marginTop: 6,
         padding: 16,
         borderRadius: radius.xl,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
@@ -1554,16 +1816,4 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 
-    waveWrap: {
-        width: 18,
-        height: 16,
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
-    },
-
-    waveBar: {
-        width: 3,
-        borderRadius: 999,
-    },
 });

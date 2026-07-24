@@ -14,6 +14,7 @@ import { API_URL } from "../lib/config";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing, typography, fontWeights } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
+import { DefaultAvatar } from "./ProfileFallbacks";
 
 type Props = {
     user: {
@@ -132,10 +133,11 @@ export default function UserListItem({ user, navigation }: Props) {
         <View style={styles.container}>
             <TouchableOpacity style={styles.userInfo} onPress={goToProfile} activeOpacity={0.8}>
                 <View style={styles.avatarRing}>
-                    <Image
-                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                        style={styles.avatar}
-                    />
+                    {user.avatarUrl ? (
+                        <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+                    ) : (
+                        <DefaultAvatar label={user.pseudo} seed={user._id} size={46} style={styles.avatar} />
+                    )}
                 </View>
                 <View style={{ flex: 1 }}>
                     <Text style={styles.pseudo} numberOfLines={1}>
@@ -197,7 +199,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        backgroundColor: "rgba(12, 15, 21, 0.68)",
+        backgroundColor: colors.surfaceFeed,
     },
     userInfo: {
         flexDirection: "row",
@@ -211,7 +213,7 @@ const styles = StyleSheet.create({
         borderRadius: 25,
         padding: 2,
         marginRight: spacing.md,
-        backgroundColor: "rgba(151, 89, 255, 0.14)",
+        backgroundColor: colors.control,
     },
     avatar: {
         width: "100%",
@@ -240,14 +242,14 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         borderRadius: 19,
-        backgroundColor: "rgba(255,255,255,0.045)",
+        backgroundColor: colors.control,
     },
 
     followBtn: {
         minWidth: 92,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primary,
+        backgroundColor: colors.controlActive,
         paddingVertical: 8,
         paddingHorizontal: 13,
         borderRadius: radius.pill,

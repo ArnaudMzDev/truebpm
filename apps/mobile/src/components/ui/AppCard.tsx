@@ -32,7 +32,7 @@ export default function AppCard({
 const styles = StyleSheet.create({
     card: {
         width: "100%",
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
     },
 

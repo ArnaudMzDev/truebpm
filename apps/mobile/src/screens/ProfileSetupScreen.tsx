@@ -1,5 +1,5 @@
 // apps/mobile/src/screens/ProfileSetupScreen.tsx
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     View,
     Text,
@@ -15,7 +15,10 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Logo from "../components/Logo";
+import { DefaultAvatar, DefaultBanner } from "../components/ProfileFallbacks";
+import ProfileImageCropper from "../components/ProfileImageCropper";
 import { API_URL } from "../lib/config";
 import { getStoredToken } from "../lib/authStorage";
 
@@ -38,6 +41,13 @@ type PickKind =
     | "favoriteArtists"
     | "favoriteAlbums"
     | "favoriteTracks";
+
+type CropRequest = {
+    type: "avatar" | "banner";
+    uri: string;
+    width?: number | null;
+    height?: number | null;
+};
 
 function MusicChip({
                        item,
@@ -69,14 +79,30 @@ function MusicChip({
 }
 
 export default function ProfileSetupScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
     const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [bannerUri, setBannerUri] = useState<string | null>(null);
+    const [cropRequest, setCropRequest] = useState<CropRequest | null>(null);
     const [bio, setBio] = useState("");
     const [loading, setLoading] = useState(false);
     const [pinnedTrack, setPinnedTrack] = useState<MusicRef | null>(null);
     const [favoriteArtists, setFavoriteArtists] = useState<MusicRef[]>([]);
     const [favoriteAlbums, setFavoriteAlbums] = useState<MusicRef[]>([]);
     const [favoriteTracks, setFavoriteTracks] = useState<MusicRef[]>([]);
+    const [profileIdentity, setProfileIdentity] = useState<{ id?: string; pseudo?: string }>({});
+
+    useEffect(() => {
+        AsyncStorage.getItem("user")
+            .then((raw) => {
+                if (!raw) return;
+                const parsed = JSON.parse(raw);
+                setProfileIdentity({
+                    id: parsed?._id,
+                    pseudo: parsed?.pseudo,
+                });
+            })
+            .catch(() => {});
+    }, []);
 
     const applyPickedMusic = useCallback((kind: PickKind, item: MusicRef) => {
         if (kind === "pinnedTrack") {
@@ -158,16 +184,26 @@ export default function ProfileSetupScreen({ navigation }: any) {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: type === "avatar" ? [1, 1] : [16, 9],
-            quality: 0.8,
+            allowsEditing: false,
+            quality: type === "avatar" ? 0.82 : 0.9,
+            selectionLimit: 1,
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
-            const uri = result.assets[0].uri;
-            if (type === "avatar") setAvatarUri(uri);
-            else setBannerUri(uri);
+            const asset = result.assets[0];
+            setCropRequest({
+                type,
+                uri: asset.uri,
+                width: asset.width,
+                height: asset.height,
+            });
         }
+    };
+
+    const handleCroppedImage = (uri: string) => {
+        if (cropRequest?.type === "avatar") setAvatarUri(uri);
+        if (cropRequest?.type === "banner") setBannerUri(uri);
+        setCropRequest(null);
     };
 
     /* -------------------- CLOUDINARY UPLOAD -------------------- */
@@ -278,11 +314,20 @@ export default function ProfileSetupScreen({ navigation }: any) {
     /* -------------------- RENDER -------------------- */
 
     return (
-        <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: "#000" }}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-            <ScrollView contentContainerStyle={styles.container}>
+        <>
+            <KeyboardAvoidingView
+                style={{ flex: 1, backgroundColor: "#000" }}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+            >
+                <ScrollView
+                    contentContainerStyle={[
+                        styles.container,
+                        {
+                            paddingTop: insets.top + 12,
+                            paddingBottom: Math.max(insets.bottom, 16) + 32,
+                        },
+                    ]}
+                >
                 {/* Bouton PASSER */}
                 <TouchableOpacity
                     onPress={() => navigation.replace("AppDiscovery")}
@@ -308,9 +353,7 @@ export default function ProfileSetupScreen({ navigation }: any) {
                     {bannerUri ? (
                         <Image source={{ uri: bannerUri }} style={styles.bannerImage} />
                     ) : (
-                        <Text style={styles.bannerPlaceholderText}>
-                            Choisir une bannière
-                        </Text>
+                        <DefaultBanner style={styles.bannerImage} />
                     )}
                 </TouchableOpacity>
 
@@ -324,9 +367,12 @@ export default function ProfileSetupScreen({ navigation }: any) {
                         {avatarUri ? (
                             <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
                         ) : (
-                            <Text style={styles.avatarPlaceholderText}>
-                                Choisir une photo
-                            </Text>
+                            <DefaultAvatar
+                                label={profileIdentity.pseudo}
+                                seed={profileIdentity.id}
+                                size={72}
+                                style={styles.avatarImage}
+                            />
                         )}
                     </TouchableOpacity>
                     <Text style={styles.avatarHint}>
@@ -435,24 +481,33 @@ export default function ProfileSetupScreen({ navigation }: any) {
                         {loading ? "Enregistrement..." : "Enregistrer mon profil"}
                     </Text>
                 </TouchableOpacity>
-            </ScrollView>
-        </KeyboardAvoidingView>
+                </ScrollView>
+            </KeyboardAvoidingView>
+
+            <ProfileImageCropper
+                visible={!!cropRequest}
+                mode={cropRequest?.type || "avatar"}
+                source={cropRequest}
+                onCancel={() => setCropRequest(null)}
+                onCropped={handleCroppedImage}
+            />
+        </>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         paddingHorizontal: 24,
-        paddingTop: 20,
-        paddingBottom: 40,
         backgroundColor: "#000",
     },
 
     skipButton: {
         alignSelf: "flex-end",
-        marginBottom: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        minHeight: 40,
+        justifyContent: "center",
+        marginBottom: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
     },
     skipText: {
         color: "#999",
@@ -479,7 +534,7 @@ const styles = StyleSheet.create({
     },
     bannerPlaceholder: {
         width: "100%",
-        height: 120,
+        aspectRatio: 16 / 9,
         borderRadius: 18,
         backgroundColor: "rgba(15, 18, 24, 0.76)",
         justifyContent: "center",
@@ -487,7 +542,6 @@ const styles = StyleSheet.create({
         overflow: "hidden",
     },
     bannerImage: { width: "100%", height: "100%" },
-    bannerPlaceholderText: { color: "#777" },
     avatarRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
     avatarPlaceholder: {
         width: 72,
@@ -500,7 +554,6 @@ const styles = StyleSheet.create({
         marginRight: 16,
     },
     avatarImage: { width: "100%", height: "100%" },
-    avatarPlaceholderText: { color: "#777", fontSize: 11, textAlign: "center" },
     avatarHint: { color: "#777", flex: 1, fontSize: 12 },
     bioInput: {
         marginTop: 4,

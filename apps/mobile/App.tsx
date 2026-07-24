@@ -32,7 +32,12 @@ import FeedbackScreen from "./src/screens/FeedbackScreen";
 import CreatePostScreen from "./src/screens/CreatePostScreen";
 import SearchScreen from "./src/screens/SearchScreen";
 import ExploreSearchScreen from "./src/screens/ExploreSearchScreen";
+import ArtistDetailScreen from "./src/screens/ArtistDetailScreen";
+import ArtistReleaseListScreen from "./src/screens/ArtistReleaseListScreen";
 import CreateNoteScreen from "./src/screens/CreateNoteScreen";
+import BlindTestHomeScreen from "./src/screens/BlindTestHomeScreen";
+import BlindTestGameScreen from "./src/screens/BlindTestGameScreen";
+import BlindTestResultScreen from "./src/screens/BlindTestResultScreen";
 
 import UserProfileScreen from "./src/screens/UserProfileScreen";
 import FollowersListScreen from "./src/screens/FollowersListScreen";
@@ -106,8 +111,12 @@ function HomeNavigator() {
             <HomeStack.Screen name="FollowingList" component={FollowingListScreen} />
             <HomeStack.Screen name="SocialNotifications" component={NotificationsScreen} />
             <HomeStack.Screen name="MusicSearch" component={SearchScreen} />
+            <HomeStack.Screen name="ArtistDetail" component={ArtistDetailScreen} />
             <HomeStack.Screen name="CreatePost" component={CreatePostScreen as any} />
             <HomeStack.Screen name="CreateNote" component={CreateNoteScreen} />
+            <HomeStack.Screen name="BlindTestHome" component={BlindTestHomeScreen} />
+            <HomeStack.Screen name="BlindTestGame" component={BlindTestGameScreen} />
+            <HomeStack.Screen name="BlindTestResult" component={BlindTestResultScreen} />
         </HomeStack.Navigator>
     );
 }
@@ -117,6 +126,7 @@ function SearchNavigator() {
         <SearchStack.Navigator screenOptions={{ headerShown: false }}>
             <SearchStack.Screen name="ExploreIndex" component={ExploreSearchScreen} />
             <SearchStack.Screen name="MusicSearch" component={SearchScreen} />
+            <SearchStack.Screen name="ArtistDetail" component={ArtistDetailScreen} />
             <SearchStack.Screen name="CreatePost" component={CreatePostScreen as any} />
             <SearchStack.Screen name="CreateNote" component={CreateNoteScreen} />
             <SearchStack.Screen name="PostDetail" component={PostScreen} />
@@ -133,6 +143,9 @@ function MessagesNavigator() {
             <MessagesStack.Screen name="Conversations" component={ConversationsScreen} />
             <MessagesStack.Screen name="Chat" component={ChatScreen} />
             <MessagesStack.Screen name="UserProfile" component={UserProfileScreen} />
+            <MessagesStack.Screen name="ArtistDetail" component={ArtistDetailScreen} />
+            <MessagesStack.Screen name="CreatePost" component={CreatePostScreen as any} />
+            <MessagesStack.Screen name="CreateNote" component={CreateNoteScreen} />
             <MessagesStack.Screen name="PostDetail" component={PostScreen} />
             <MessagesStack.Screen name="FollowersList" component={FollowersListScreen} />
             <MessagesStack.Screen name="FollowingList" component={FollowingListScreen} />
@@ -157,6 +170,10 @@ function ProfileNavigator() {
             <ProfileStack.Screen name="FollowersList" component={FollowersListScreen} />
             <ProfileStack.Screen name="FollowingList" component={FollowingListScreen} />
             <ProfileStack.Screen name="UserProfile" component={UserProfileScreen} />
+            <ProfileStack.Screen name="ArtistDetail" component={ArtistDetailScreen} />
+            <ProfileStack.Screen name="ArtistReleases" component={ArtistReleaseListScreen} />
+            <ProfileStack.Screen name="CreatePost" component={CreatePostScreen as any} />
+            <ProfileStack.Screen name="CreateNote" component={CreateNoteScreen} />
             <ProfileStack.Screen name="PostDetail" component={PostScreen} />
             <ProfileStack.Screen name="SocialNotifications" component={NotificationsScreen} />
             <ProfileStack.Screen name="MusicSearch" component={SearchScreen} />
@@ -441,6 +458,26 @@ function PushBootstrap() {
                         screen: "Chat",
                         params: {
                             conversationId: data.conversationId,
+                        },
+                    },
+                });
+                return;
+            }
+
+            if (data?.type === "artist_release" && data?.itemId) {
+                navigationRef.navigate("Main", {
+                    screen: "ProfileTab",
+                    params: {
+                        screen: "CreatePost",
+                        params: {
+                            entityType: data.itemType === "album" ? "album" : "song",
+                            entityId: data.itemId,
+                            track: {
+                                title: data.title || "Nouvelle sortie",
+                                artist: data.artistName || "Artiste",
+                                cover: data.coverUrl || null,
+                                previewUrl: data.previewUrl || null,
+                            },
                         },
                     },
                 });

@@ -18,6 +18,39 @@ import {
     setEngagementRemindersEnabled,
 } from "../lib/pushNotifications";
 
+type NotificationSettings = {
+    enabled: boolean;
+    follows: boolean;
+    likes: boolean;
+    comments: boolean;
+    reposts: boolean;
+    postsFromFollowing: boolean;
+    notesFromFollowing: boolean;
+    sameMusic: boolean;
+    artistReleases: boolean;
+};
+
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+    enabled: true,
+    follows: true,
+    likes: true,
+    comments: true,
+    reposts: true,
+    postsFromFollowing: true,
+    notesFromFollowing: true,
+    sameMusic: true,
+    artistReleases: true,
+};
+
+function authHeaders(token: string | null, json = false) {
+    const headers: Record<string, string> = {};
+    if (token) {
+        headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    }
+    if (json) headers["Content-Type"] = "application/json";
+    return headers;
+}
+
 function SettingsRow({
                          icon,
                          title,
@@ -120,6 +153,8 @@ export default function SettingsScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
     const [engagementRemindersEnabled, setEngagementRemindersEnabledState] = useState(true);
     const [savingReminders, setSavingReminders] = useState(false);
+    const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
+    const [savingNotificationKey, setSavingNotificationKey] = useState<keyof NotificationSettings | null>(null);
 
     useEffect(() => {
         let alive = true;
@@ -134,6 +169,68 @@ export default function SettingsScreen({ navigation }: any) {
             alive = false;
         };
     }, []);
+
+    const fetchNotificationSettings = useCallback(async () => {
+        const token = await getStoredToken();
+        if (!token) return;
+
+        const res = await fetch(`${API_URL}/api/user/notification-settings`, {
+            headers: authHeaders(token),
+        });
+        const json = await res.json().catch(() => null);
+
+        if (!res.ok) {
+            console.log("fetch notification settings error:", res.status, json);
+            return;
+        }
+
+        setNotificationSettings({
+            ...DEFAULT_NOTIFICATION_SETTINGS,
+            ...(json?.settings || {}),
+        });
+    }, []);
+
+    useEffect(() => {
+        fetchNotificationSettings().catch(() => {});
+    }, [fetchNotificationSettings]);
+
+    const updateNotificationSetting = useCallback(
+        async (key: keyof NotificationSettings, value: boolean) => {
+            if (savingNotificationKey) return;
+
+            const previous = notificationSettings;
+            const next = { ...notificationSettings, [key]: value };
+            setNotificationSettings(next);
+            setSavingNotificationKey(key);
+
+            try {
+                const token = await getStoredToken();
+                if (!token) throw new Error("missing token");
+
+                const res = await fetch(`${API_URL}/api/user/notification-settings`, {
+                    method: "PATCH",
+                    headers: authHeaders(token, true),
+                    body: JSON.stringify({ [key]: value }),
+                });
+                const json = await res.json().catch(() => null);
+
+                if (!res.ok) {
+                    throw new Error(json?.error || "notification settings failed");
+                }
+
+                setNotificationSettings({
+                    ...DEFAULT_NOTIFICATION_SETTINGS,
+                    ...(json?.settings || next),
+                });
+            } catch (e) {
+                setNotificationSettings(previous);
+                Alert.alert("Réglage impossible", "Réessaie dans quelques secondes.");
+            } finally {
+                setSavingNotificationKey(null);
+            }
+        },
+        [notificationSettings, savingNotificationKey]
+    );
 
     const handleToggleEngagementReminders = useCallback(async (nextValue: boolean) => {
         if (savingReminders) return;
@@ -218,6 +315,15 @@ export default function SettingsScreen({ navigation }: any) {
                         title="Modifier mon profil"
                         onPress={() => navigation.navigate("EditProfile")}
                     />
+
+                    <View style={styles.divider} />
+
+                    <SettingsRow
+                        icon="radio-outline"
+                        title="Sorties à écouter"
+                        subtitle="Voir les sons et albums détectés depuis tes artistes favoris."
+                        onPress={() => navigation.navigate("ArtistReleases")}
+                    />
                 </SettingsSection>
 
                 <SettingsSection title="Compte" hint="Connexion">
@@ -252,11 +358,110 @@ export default function SettingsScreen({ navigation }: any) {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Notifications" hint="Rappels doux">
+                <SettingsSection title="Notifications" hint="Social">
+                    <SettingsToggleRow
+                        icon="notifications-outline"
+                        title="Notifications sociales"
+                        subtitle="Coupe tout ce qui vient des autres comptes d’un seul geste."
+                        value={notificationSettings.enabled}
+                        disabled={savingNotificationKey === "enabled"}
+                        onValueChange={(value) => updateNotificationSetting("enabled", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="albums-outline"
+                        title="Posts des profils suivis"
+                        subtitle="Quand quelqu’un que tu suis publie un nouvel avis."
+                        value={notificationSettings.postsFromFollowing}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "postsFromFollowing"}
+                        onValueChange={(value) => updateNotificationSetting("postsFromFollowing", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="disc-outline"
+                        title="Même musique notée"
+                        subtitle="Quand un autre compte donne son avis sur un son que tu as noté."
+                        value={notificationSettings.sameMusic}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "sameMusic"}
+                        onValueChange={(value) => updateNotificationSetting("sameMusic", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="radio-outline"
+                        title="Sorties d’artistes favoris"
+                        subtitle="Quand un artiste favori sort un son ou un album."
+                        value={notificationSettings.artistReleases}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "artistReleases"}
+                        onValueChange={(value) => updateNotificationSetting("artistReleases", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="heart-outline"
+                        title="Likes"
+                        subtitle="Likes sur tes posts, commentaires ou notes."
+                        value={notificationSettings.likes}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "likes"}
+                        onValueChange={(value) => updateNotificationSetting("likes", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="chatbubble-ellipses-outline"
+                        title="Commentaires"
+                        subtitle="Réponses et discussions sous tes posts."
+                        value={notificationSettings.comments}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "comments"}
+                        onValueChange={(value) => updateNotificationSetting("comments", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="repeat-outline"
+                        title="Reposts"
+                        subtitle="Quand ton avis circule chez les autres."
+                        value={notificationSettings.reposts}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "reposts"}
+                        onValueChange={(value) => updateNotificationSetting("reposts", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="person-add-outline"
+                        title="Abonnements"
+                        subtitle="Nouveaux abonnés, demandes et acceptations."
+                        value={notificationSettings.follows}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "follows"}
+                        onValueChange={(value) => updateNotificationSetting("follows", value)}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <SettingsToggleRow
+                        icon="star-outline"
+                        title="Notes du moment"
+                        subtitle="Quand les profils suivis changent leur note musicale."
+                        value={notificationSettings.notesFromFollowing}
+                        disabled={!notificationSettings.enabled || savingNotificationKey === "notesFromFollowing"}
+                        onValueChange={(value) => updateNotificationSetting("notesFromFollowing", value)}
+                    />
+                </SettingsSection>
+
+                <SettingsSection title="Rappels" hint="TrueBPM">
                     <SettingsToggleRow
                         icon="notifications-outline"
                         title="Rappels TrueBPM"
-                        subtitle="Quelques rappels par semaine pour revenir noter un son ou regarder le feed."
+                        subtitle="Quelques rappels par semaine, dont les sorties musicales du vendredi matin."
                         value={engagementRemindersEnabled}
                         disabled={savingReminders}
                         onValueChange={handleToggleEngagementReminders}
@@ -404,7 +609,7 @@ const styles = StyleSheet.create({
     },
     sectionCard: {
         width: "100%",
-        backgroundColor: "rgba(12, 15, 21, 0.68)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: 24,
         overflow: "hidden",
     },
@@ -422,7 +627,7 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: "rgba(255,255,255,0.045)",
+        backgroundColor: colors.control,
         alignItems: "center",
         justifyContent: "center",
     },

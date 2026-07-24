@@ -23,7 +23,7 @@ function getLabel(entityType: EntityType | undefined, key: string) {
             emotion: "Émotion",
         },
         album: {
-            cohesion: "Cohésion",
+            cohesion: "Cover",
             production: "Production",
             originality: "Originalité",
         },

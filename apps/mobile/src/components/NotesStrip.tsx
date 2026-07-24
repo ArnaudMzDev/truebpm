@@ -17,6 +17,8 @@ import { API_URL } from "../lib/config";
 import { usePlayer } from "../context/PlayerContext";
 import { colors, radius, spacing, typography, fontWeights } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
+import PlayerWave from "./PlayerWave";
+import { DefaultAvatar } from "./ProfileFallbacks";
 
 type NoteUser = {
     _id: string;
@@ -64,6 +66,7 @@ export default function NotesStrip({ navigation }: any) {
     const lastTapRef = useRef<Record<string, number>>({});
     const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const railTouchStartRef = useRef({ x: 0, y: 0 });
+    const autoPlayedNoteRef = useRef<string | null>(null);
     const likePulse = useRef(new Animated.Value(0)).current;
 
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
@@ -125,6 +128,7 @@ export default function NotesStrip({ navigation }: any) {
     }, [navigation, myNote]);
 
     const closeNote = useCallback(() => {
+        autoPlayedNoteRef.current = null;
         setSelectedNote(null);
     }, []);
 
@@ -270,10 +274,11 @@ export default function NotesStrip({ navigation }: any) {
                 onPress={() => handleNotePress(item)}
             >
                 <View style={[styles.bubbleRing, isMine && styles.bubbleRingMine, item.likedByMe && !isMine && styles.bubbleRingLiked]}>
-                    <Image
-                        source={{ uri: item.userId?.avatarUrl || "https://picsum.photos/100" }}
-                        style={styles.avatar}
-                    />
+                    {item.userId?.avatarUrl ? (
+                        <Image source={{ uri: item.userId.avatarUrl }} style={styles.avatar} />
+                    ) : (
+                        <DefaultAvatar label={item.userId?.pseudo} seed={item.userId?._id} size={70} style={styles.avatar} />
+                    )}
 
                     {item.likedByMe && !isMine ? (
                         <View style={styles.likedDot}>
@@ -329,8 +334,21 @@ export default function NotesStrip({ navigation }: any) {
     );
 
     useEffect(() => {
-        if (!selectedNote) return;
+        if (!selectedNote) {
+            autoPlayedNoteRef.current = null;
+            return;
+        }
         if (!canPlay || !selectedTrack?.previewUrl) return;
+
+        const autoPlayKey = `${selectedNote._id}:${selectedTrack.previewUrl}`;
+        if (autoPlayedNoteRef.current === autoPlayKey) return;
+        autoPlayedNoteRef.current = autoPlayKey;
+
+        const isSameTrack =
+            !!currentTrack &&
+            currentTrack.title === selectedTrack.title &&
+            currentTrack.artist === selectedTrack.artist &&
+            currentTrack.url === selectedTrack.previewUrl;
 
         const shouldStart =
             !currentTrack ||
@@ -338,7 +356,7 @@ export default function NotesStrip({ navigation }: any) {
             currentTrack.artist !== selectedTrack.artist ||
             currentTrack.url !== selectedTrack.previewUrl;
 
-        if (!shouldStart) {
+        if (isSameTrack || !shouldStart) {
             if (!isPlaying) {
                 togglePlay().catch(() => {});
             }
@@ -353,10 +371,12 @@ export default function NotesStrip({ navigation }: any) {
         }).catch(() => {});
     }, [
         canPlay,
-        currentTrack,
+        currentTrack?.artist,
+        currentTrack?.title,
+        currentTrack?.url,
         isPlaying,
         playPreview,
-        selectedNote,
+        selectedNote?._id,
         selectedTrack?.artist,
         selectedTrack?.coverUrl,
         selectedTrack?.previewUrl,
@@ -431,10 +451,14 @@ export default function NotesStrip({ navigation }: any) {
                                 <View style={styles.sheetHandle} />
 
                                 <View style={styles.modalHeader}>
-                                    <Image
-                                        source={{ uri: selectedNote.userId?.avatarUrl || "https://picsum.photos/100" }}
-                                        style={styles.modalAvatar}
-                                    />
+                                    {selectedNote.userId?.avatarUrl ? (
+                                        <Image
+                                            source={{ uri: selectedNote.userId.avatarUrl }}
+                                            style={styles.modalAvatar}
+                                        />
+                                    ) : (
+                                        <DefaultAvatar label={selectedNote.userId?.pseudo} seed={selectedNote.userId?._id} size={48} style={styles.modalAvatar} />
+                                    )}
                                     <View style={{ flex: 1 }}>
                                         <Text style={styles.modalName}>{selectedNote.userId?.pseudo}</Text>
                                         <Text style={styles.modalSubtitle}>
@@ -458,9 +482,16 @@ export default function NotesStrip({ navigation }: any) {
 
                                 {selectedTrack?.title ? (
                                     <View style={styles.trackCard}>
-                                        <View style={styles.trackIcon}>
-                                            <Ionicons name="musical-notes" size={18} color={colors.primary} />
-                                        </View>
+                                        {selectedTrack.coverUrl ? (
+                                            <Image
+                                                source={{ uri: selectedTrack.coverUrl }}
+                                                style={styles.trackCover}
+                                            />
+                                        ) : (
+                                            <View style={styles.trackCoverFallback}>
+                                                <Ionicons name="musical-notes" size={18} color={colors.primary} />
+                                            </View>
+                                        )}
 
                                         <View style={{ flex: 1 }}>
                                             <Text style={styles.trackTitle} numberOfLines={1}>
@@ -488,11 +519,11 @@ export default function NotesStrip({ navigation }: any) {
                                                     }
                                                 }}
                                             >
-                                                <Ionicons
-                                                    name={isCurrentTrack && isPlaying ? "pause" : "play"}
-                                                    size={18}
-                                                    color={colors.text}
-                                                />
+                                                {isCurrentTrack && isPlaying ? (
+                                                    <PlayerWave active size="sm" color={colors.text} inactiveColor={colors.text} />
+                                                ) : (
+                                                    <Ionicons name="play" size={18} color={colors.text} />
+                                                )}
                                             </TouchableOpacity>
                                         ) : null}
                                     </View>
@@ -786,10 +817,16 @@ const styles = StyleSheet.create({
     modalLikeTextActive: {
         color: colors.danger,
     },
-    trackIcon: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
+    trackCover: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        backgroundColor: colors.surface4,
+    },
+    trackCoverFallback: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: "rgba(151, 89, 255, 0.12)",

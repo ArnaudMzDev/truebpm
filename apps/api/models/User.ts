@@ -16,6 +16,21 @@ const MusicRefSchema = new Schema(
     { _id: false }
 );
 
+const NotificationSettingsSchema = new Schema(
+    {
+        enabled: { type: Boolean, default: true },
+        follows: { type: Boolean, default: true },
+        likes: { type: Boolean, default: true },
+        comments: { type: Boolean, default: true },
+        reposts: { type: Boolean, default: true },
+        postsFromFollowing: { type: Boolean, default: true },
+        notesFromFollowing: { type: Boolean, default: true },
+        sameMusic: { type: Boolean, default: true },
+        artistReleases: { type: Boolean, default: true },
+    },
+    { _id: false }
+);
+
 const UserSchema = new Schema(
     {
         pseudo: {
@@ -123,6 +138,16 @@ const UserSchema = new Schema(
             type: String,
             enum: ["everyone", "following"],
             default: "everyone",
+        },
+
+        notificationSettings: {
+            type: NotificationSettingsSchema,
+            default: () => ({}),
+        },
+
+        mutedNotificationUsers: {
+            type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+            default: [],
         },
 
         isBanned: {

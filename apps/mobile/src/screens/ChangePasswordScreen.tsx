@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { getStoredToken } from "../lib/authStorage";
+import { colors, fontWeights, radius } from "../theme";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -196,7 +197,7 @@ export default function ChangePasswordScreen({ navigation }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         paddingHorizontal: 16,
     },
     topBar: {
@@ -206,35 +207,31 @@ const styles = StyleSheet.create({
         marginBottom: 18,
     },
     title: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 20,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
     subtitle: {
-        color: "#9A9A9A",
+        color: colors.textMuted,
         fontSize: 13,
         lineHeight: 19,
         marginBottom: 16,
     },
     card: {
-        backgroundColor: "#0F0F0F",
-        borderWidth: 1,
-        borderColor: "#1F1F1F",
-        borderRadius: 18,
+        backgroundColor: colors.surfaceFeed,
+        borderRadius: radius.xxl,
         padding: 14,
     },
     label: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 14,
-        fontWeight: "700",
+        fontWeight: fontWeights.extraBold,
         marginBottom: 8,
     },
     inputWrap: {
         minHeight: 50,
-        borderRadius: 12,
-        backgroundColor: "#151515",
-        borderWidth: 1,
-        borderColor: "#2A2A2A",
+        borderRadius: radius.lg,
+        backgroundColor: colors.surfaceRaised,
         paddingHorizontal: 12,
         flexDirection: "row",
         alignItems: "center",
@@ -242,27 +239,27 @@ const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
         paddingVertical: 12,
     },
     helperError: {
-        color: "#FF8A8A",
+        color: colors.danger,
         fontSize: 12,
         marginTop: 10,
         lineHeight: 17,
     },
     saveBtn: {
         marginTop: 18,
-        backgroundColor: "#5E17EB",
-        borderRadius: 14,
+        backgroundColor: colors.controlActive,
+        borderRadius: radius.xl,
         minHeight: 52,
         alignItems: "center",
         justifyContent: "center",
     },
     saveText: {
-        color: "#fff",
+        color: colors.text,
         fontSize: 15,
-        fontWeight: "800",
+        fontWeight: fontWeights.black,
     },
 });

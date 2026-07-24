@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { getStoredToken } from "../lib/authStorage";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
 
 type MessagePrivacy = "everyone" | "following";
 
@@ -171,11 +172,7 @@ export default function PrivacySettingsScreen({ navigation }: any) {
     };
 
     if (loading) {
-        return (
-            <View style={styles.loader}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement de la confidentialité..." />;
     }
 
     return (
@@ -246,12 +243,6 @@ export default function PrivacySettingsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    loader: {
-        flex: 1,
-        backgroundColor: "#000",
-        justifyContent: "center",
-        alignItems: "center",
-    },
     container: {
         flex: 1,
         backgroundColor: "#000",
@@ -315,16 +306,13 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        borderWidth: 1,
-        borderColor: "#232323",
-        backgroundColor: "#141414",
+        backgroundColor: "#151923",
         borderRadius: 14,
         padding: 12,
         marginTop: 10,
     },
     optionRowActive: {
-        borderColor: "#5E17EB",
-        backgroundColor: "#171126",
+        backgroundColor: "#1C2230",
     },
     optionTitle: {
         color: "#fff",

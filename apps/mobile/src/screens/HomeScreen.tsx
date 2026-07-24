@@ -24,8 +24,11 @@ import AppScreen from "../components/ui/AppScreen";
 import AppHeader from "../components/ui/AppHeader";
 import AppSectionLoader from "../components/ui/AppSectionLoader";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { DefaultAvatar } from "../components/ProfileFallbacks";
+import PlayerWave from "../components/PlayerWave";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import { useUser } from "../context/UserContext";
+import { usePlayer } from "../context/PlayerContext";
 import { getStoredToken } from "../lib/authStorage";
 
 type SuggestedUser = {
@@ -43,9 +46,30 @@ type FeedListItem =
     | { type: "post"; post: PostType }
     | { type: "suggestions"; id: string; suggestions: SuggestedUser[] };
 
+type ReleaseItem = {
+    id: string;
+    type: "song" | "album" | "artist";
+    title?: string;
+    name?: string;
+    artist?: string;
+    cover?: string | null;
+    previewUrl?: string | null;
+    releaseDate?: string | null;
+};
+
+type ReleaseSection = {
+    id: string;
+    title: string;
+    subtitle: string;
+    items: ReleaseItem[];
+};
+
 const LIMIT = 15;
 const SUGGESTIONS_LIMIT = 8;
 const HIDDEN_SUGGESTIONS_KEY = "home_hidden_suggestions";
+const SEEN_FOR_YOU_POSTS_KEY = "home_seen_for_you_posts";
+const MAX_SEEN_FOR_YOU_POSTS = 90;
+const EXCLUDED_FOR_YOU_POSTS = 70;
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -70,6 +94,169 @@ function stripToken(raw: string | null) {
         t = t.slice(1, -1).trim();
     }
     return t || null;
+}
+
+function getPostIdentityIds(post: PostType) {
+    const ids = [post?._id, (post as any)?.repostOf?._id]
+        .map((id) => (id ? String(id) : ""))
+        .filter(Boolean);
+    return Array.from(new Set(ids));
+}
+
+function ReleaseCard({
+                         item,
+                         navigation,
+                         isActive,
+                         isPlaying,
+                         onPlay,
+                     }: {
+    item: ReleaseItem;
+    navigation: any;
+    isActive: boolean;
+    isPlaying: boolean;
+    onPlay: () => void;
+}) {
+    const title = item.type === "artist" ? item.name || "" : item.title || "";
+    const artist = item.type === "artist" ? "Artiste" : item.artist || "";
+
+    const openTarget = () => {
+        if (item.type === "artist") {
+            navigation.navigate("ArtistDetail", {
+                artistId: item.id,
+                name: title,
+                cover: item.cover || null,
+            });
+            return;
+        }
+
+        navigation.navigate("CreatePost", {
+            entityType: item.type,
+            entityId: item.id || null,
+            track: {
+                title,
+                artist,
+                cover: item.cover || null,
+                previewUrl: item.previewUrl || null,
+            },
+        });
+    };
+
+    return (
+        <TouchableOpacity style={styles.releaseCard} activeOpacity={0.88} onPress={openTarget}>
+            {item.cover ? (
+                <Image source={{ uri: item.cover }} style={styles.releaseCover} />
+            ) : (
+                <View style={styles.releaseCoverFallback}>
+                    <Ionicons
+                        name={item.type === "album" ? "disc" : item.type === "artist" ? "person" : "musical-notes"}
+                        size={22}
+                        color={colors.textMuted}
+                    />
+                </View>
+            )}
+
+            <View style={styles.releaseBody}>
+                <Text style={styles.releaseTitle} numberOfLines={2}>
+                    {title}
+                </Text>
+                <Text style={styles.releaseArtist} numberOfLines={1}>
+                    {artist}
+                </Text>
+            </View>
+
+            {item.type === "song" && item.previewUrl ? (
+                <TouchableOpacity
+                    style={[styles.releasePlay, isActive && styles.releasePlayActive]}
+                    activeOpacity={0.84}
+                    onPress={(event) => {
+                        event.stopPropagation();
+                        onPlay();
+                    }}
+                >
+                    {isActive && isPlaying ? (
+                        <PlayerWave active size="sm" color={colors.text} inactiveColor={colors.text} />
+                    ) : (
+                        <Ionicons name="play" size={13} color={colors.text} />
+                    )}
+                </TouchableOpacity>
+            ) : null}
+        </TouchableOpacity>
+    );
+}
+
+function ReleasesBlock({
+                           sections,
+                           loading,
+                           navigation,
+                           isCurrentPreview,
+                           isPlaying,
+                           onPlay,
+                           onHorizontalTouchStart,
+                           onHorizontalTouchEnd,
+                       }: {
+    sections: ReleaseSection[];
+    loading: boolean;
+    navigation: any;
+    isCurrentPreview: (item: ReleaseItem) => boolean;
+    isPlaying: boolean;
+    onPlay: (item: ReleaseItem) => void;
+    onHorizontalTouchStart: () => void;
+    onHorizontalTouchEnd: () => void;
+}) {
+    const hasItems = sections.some((section) => section.items.length > 0);
+    if (!loading && !hasItems) return null;
+
+    return (
+        <View
+            style={styles.releasesWrap}
+            onTouchStart={onHorizontalTouchStart}
+            onTouchEnd={onHorizontalTouchEnd}
+            onTouchCancel={onHorizontalTouchEnd}
+        >
+            <View style={styles.releasesHeader}>
+                <Text style={styles.releaseEyebrow}>Vendredi sorties</Text>
+                <Text style={styles.releasesTitle}>Les nouveautés à noter</Text>
+                <Text style={styles.releasesSubtitle}>
+                    France et international, prêtes à passer en avis.
+                </Text>
+            </View>
+
+            {loading ? (
+                <AppSectionLoader />
+            ) : (
+                sections.map((section) =>
+                    section.items.length > 0 ? (
+                        <View key={section.id} style={styles.releaseSection}>
+                            <View style={styles.releaseSectionHead}>
+                                <Text style={styles.releaseSectionTitle}>{section.title}</Text>
+                                <Text style={styles.releaseSectionSubtitle}>{section.subtitle}</Text>
+                            </View>
+                            <FlatList
+                                horizontal
+                                data={section.items}
+                                keyExtractor={(item, index) => `release:${section.id}:${item.type}:${item.id}:${index}`}
+                                renderItem={({ item }) => (
+                                    <ReleaseCard
+                                        item={item}
+                                        navigation={navigation}
+                                        isActive={isCurrentPreview(item)}
+                                        isPlaying={isPlaying}
+                                        onPlay={() => onPlay(item)}
+                                    />
+                                )}
+                                showsHorizontalScrollIndicator={false}
+                                nestedScrollEnabled
+                                contentContainerStyle={styles.releaseList}
+                                onScrollBeginDrag={onHorizontalTouchStart}
+                                onScrollEndDrag={onHorizontalTouchEnd}
+                                onMomentumScrollEnd={onHorizontalTouchEnd}
+                            />
+                        </View>
+                    ) : null
+                )
+            )}
+        </View>
+    );
 }
 
 function SuggestionCard({
@@ -102,10 +289,11 @@ function SuggestionCard({
                 onPress={() => navigation.navigate("UserProfile", { userId: user._id })}
             >
                 <View style={styles.suggestionTopRow}>
-                    <Image
-                        source={{ uri: user.avatarUrl || "https://picsum.photos/200" }}
-                        style={styles.suggestionAvatar}
-                    />
+                    {user.avatarUrl ? (
+                        <Image source={{ uri: user.avatarUrl }} style={styles.suggestionAvatar} />
+                    ) : (
+                        <DefaultAvatar label={user.pseudo} seed={user._id} size={54} style={styles.suggestionAvatar} />
+                    )}
 
                     <View style={styles.suggestionIdentity}>
                         <Text style={styles.suggestionPseudo} numberOfLines={1}>
@@ -143,6 +331,7 @@ function SuggestionCard({
 
 export default function HomeScreen({ navigation }: any) {
     const { toggleFollow, me } = useUser();
+    const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const tabBarHeight = useBottomTabBarHeight();
     const insets = useSafeAreaInsets();
@@ -150,6 +339,7 @@ export default function HomeScreen({ navigation }: any) {
 
     const [posts, setPosts] = useState<PostType[]>([]);
     const [activeFeed, setActiveFeed] = useState<HomeFeed>("forYou");
+    const [feedError, setFeedError] = useState("");
     const [initialLoading, setInitialLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -163,11 +353,14 @@ export default function HomeScreen({ navigation }: any) {
     const [loadingSuggestions, setLoadingSuggestions] = useState(true);
     const [hiddenSuggestionIds, setHiddenSuggestionIds] = useState<string[]>([]);
     const [followLoadingMap, setFollowLoadingMap] = useState<Record<string, boolean>>({});
+    const [releaseSections, setReleaseSections] = useState<ReleaseSection[]>([]);
+    const [loadingReleases, setLoadingReleases] = useState(false);
 
     const didInit = useRef(false);
     const lastFeedRef = useRef<HomeFeed>("forYou");
     const socketRef = useRef<Socket | null>(null);
     const suggestionsTouchRef = useRef(false);
+    const horizontalInteractionRef = useRef(false);
 
     const followingIds = useMemo(() => {
         const arr = Array.isArray(me?.followingList) ? me.followingList : [];
@@ -188,6 +381,47 @@ export default function HomeScreen({ navigation }: any) {
             await AsyncStorage.setItem(HIDDEN_SUGGESTIONS_KEY, JSON.stringify(ids));
         } catch {}
     }, []);
+
+    const getSeenForYouIds = useCallback(async () => {
+        try {
+            const raw = await AsyncStorage.getItem(SEEN_FOR_YOU_POSTS_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map((id) => String(id)).filter(Boolean).slice(0, MAX_SEEN_FOR_YOU_POSTS);
+        } catch {
+            return [];
+        }
+    }, []);
+
+    const rememberSeenForYouPosts = useCallback(async (nextPosts: PostType[]) => {
+        if (!nextPosts.length) return;
+
+        try {
+            const previous = await getSeenForYouIds();
+            const seen = new Set<string>();
+            const merged: string[] = [];
+
+            for (const id of nextPosts.flatMap(getPostIdentityIds)) {
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    merged.push(id);
+                }
+            }
+
+            for (const id of previous) {
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    merged.push(id);
+                }
+            }
+
+            await AsyncStorage.setItem(
+                SEEN_FOR_YOU_POSTS_KEY,
+                JSON.stringify(merged.slice(0, MAX_SEEN_FOR_YOU_POSTS))
+            );
+        } catch {}
+    }, [getSeenForYouIds]);
 
     const fetchPrefs = useCallback(async () => {
         try {
@@ -255,37 +489,99 @@ export default function HomeScreen({ navigation }: any) {
         }
     }, []);
 
+    const fetchReleases = useCallback(async () => {
+        try {
+            setLoadingReleases(true);
+            const res = await fetch(`${API_URL}/api/search/apple?mode=releases`);
+            const json = await safeJson(res);
+
+            if (!res.ok || !Array.isArray(json?.sections)) {
+                console.log("Home releases error:", res.status, json);
+                setReleaseSections([]);
+                return;
+            }
+
+            setReleaseSections(json.sections as ReleaseSection[]);
+        } catch (err) {
+            console.log("Home releases fetch error:", err);
+            setReleaseSections([]);
+        } finally {
+            setLoadingReleases(false);
+        }
+    }, []);
+
     const fetchInitial = useCallback(async () => {
         try {
             setInitialLoading(true);
+            setFeedError("");
             setPosts([]);
             setCursor(null);
             setHasMore(true);
 
             const token = await getStoredToken();
+            const params = new URLSearchParams({
+                feed: activeFeed,
+                limit: String(LIMIT),
+            });
+            let excludedForYouIds: string[] = [];
 
-            const res = await fetch(`${API_URL}/api/posts?feed=${activeFeed}&limit=${LIMIT}`, {
+            if (activeFeed === "forYou") {
+                excludedForYouIds = (await getSeenForYouIds()).slice(0, EXCLUDED_FOR_YOU_POSTS);
+                params.set("seed", `${Date.now()}`);
+                if (excludedForYouIds.length) {
+                    params.set("exclude", excludedForYouIds.join(","));
+                }
+            }
+
+            let res = await fetch(`${API_URL}/api/posts?${params.toString()}`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
-            const json = await safeJson(res);
+            let json = await safeJson(res);
 
-            if (!res.ok) {
+            if (
+                activeFeed === "forYou" &&
+                res.ok &&
+                excludedForYouIds.length > 0 &&
+                Array.isArray(json?.posts) &&
+                json.posts.length === 0
+            ) {
+                params.delete("exclude");
+                await AsyncStorage.removeItem(SEEN_FOR_YOU_POSTS_KEY);
+                res = await fetch(`${API_URL}/api/posts?${params.toString()}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                json = await safeJson(res);
+            }
+
+            if (!res.ok || !Array.isArray(json?.posts)) {
                 console.log("Home fetchInitial error:", res.status, json);
                 setPosts([]);
                 setCursor(null);
                 setHasMore(false);
+                setFeedError(
+                    res.status === 404 || (res.ok && !json)
+                        ? "Le feed n’est pas disponible sur ce serveur. Vérifie que l’API TrueBPM est bien lancée."
+                        : json?.error || "Impossible de charger les posts pour le moment."
+                );
                 return;
             }
 
-            setPosts(json?.posts || []);
+            const nextPosts = json.posts;
+
+            setPosts(nextPosts);
             setCursor(json?.nextCursor || null);
             setHasMore(!!json?.nextCursor);
+
+            if (activeFeed === "forYou") {
+                await rememberSeenForYouPosts(nextPosts);
+            }
         } catch (err) {
             console.log("Home fetchInitial error:", err);
+            setFeedError("Impossible de joindre l’API TrueBPM. Vérifie ta connexion locale.");
         } finally {
             setInitialLoading(false);
         }
-    }, [activeFeed]);
+    }, [activeFeed, getSeenForYouIds, rememberSeenForYouPosts]);
 
     const loadMore = useCallback(async () => {
         if (!cursor || loadingMore || !hasMore) return;
@@ -319,12 +615,16 @@ export default function HomeScreen({ navigation }: any) {
 
             setCursor(json?.nextCursor || null);
             setHasMore(!!json?.nextCursor);
+
+            if (activeFeed === "forYou") {
+                await rememberSeenForYouPosts(newPosts);
+            }
         } catch (err) {
             console.log("Home loadMore error:", err);
         } finally {
             setLoadingMore(false);
         }
-    }, [activeFeed, cursor, loadingMore, hasMore]);
+    }, [activeFeed, cursor, loadingMore, hasMore, rememberSeenForYouPosts]);
 
     const onRefresh = async () => {
         setRefreshing(true);
@@ -332,6 +632,7 @@ export default function HomeScreen({ navigation }: any) {
             fetchInitial(),
             fetchUnreadNotifications(),
             fetchSuggestions(),
+            fetchReleases(),
         ]);
         setRefreshing(false);
     };
@@ -346,8 +647,9 @@ export default function HomeScreen({ navigation }: any) {
             fetchInitial(),
             fetchUnreadNotifications(),
             fetchSuggestions(),
+            fetchReleases(),
         ]).catch(() => {});
-    }, [activeFeed, fetchPrefs, fetchInitial, fetchUnreadNotifications, fetchSuggestions]);
+    }, [activeFeed, fetchPrefs, fetchInitial, fetchUnreadNotifications, fetchSuggestions, fetchReleases]);
 
     useEffect(() => {
         if (!didInit.current) return;
@@ -448,6 +750,36 @@ export default function HomeScreen({ navigation }: any) {
         navigation.navigate("SocialNotifications");
     }, [navigation]);
 
+    const openBlindTest = useCallback(() => {
+        navigation.navigate("BlindTestHome");
+    }, [navigation]);
+
+    const isCurrentReleasePreview = useCallback(
+        (item: ReleaseItem) => {
+            return item.type === "song" && !!item.previewUrl && currentTrack?.url === item.previewUrl;
+        },
+        [currentTrack]
+    );
+
+    const playReleasePreview = useCallback(
+        async (item: ReleaseItem) => {
+            if (item.type !== "song" || !item.previewUrl) return;
+
+            if (isCurrentReleasePreview(item)) {
+                await togglePlay();
+                return;
+            }
+
+            await playPreview({
+                title: item.title || "",
+                artist: item.artist || "",
+                url: item.previewUrl,
+                coverUrl: item.cover || "",
+            });
+        },
+        [isCurrentReleasePreview, playPreview, togglePlay]
+    );
+
     const suggestionKeyExtractor = useCallback((item: SuggestedUser) => item._id, []);
 
     const renderSuggestionItem = useCallback(
@@ -466,12 +798,24 @@ export default function HomeScreen({ navigation }: any) {
 
     const markSuggestionsTouchStart = useCallback(() => {
         suggestionsTouchRef.current = true;
+        horizontalInteractionRef.current = true;
     }, []);
 
     const markSuggestionsTouchEnd = useCallback(() => {
         setTimeout(() => {
             suggestionsTouchRef.current = false;
-        }, 80);
+            horizontalInteractionRef.current = false;
+        }, 240);
+    }, []);
+
+    const markHorizontalTouchStart = useCallback(() => {
+        horizontalInteractionRef.current = true;
+    }, []);
+
+    const markHorizontalTouchEnd = useCallback(() => {
+        setTimeout(() => {
+            horizontalInteractionRef.current = false;
+        }, 240);
     }, []);
 
     const feedSeed = useMemo(() => {
@@ -582,17 +926,19 @@ export default function HomeScreen({ navigation }: any) {
         () =>
             PanResponder.create({
                 onMoveShouldSetPanResponder: (_, gesture) => {
-                    if (suggestionsTouchRef.current) return false;
+                    if (suggestionsTouchRef.current || horizontalInteractionRef.current) return false;
 
                     const horizontal = Math.abs(gesture.dx);
                     const vertical = Math.abs(gesture.dy);
-                    return horizontal > 28 && horizontal > vertical * 1.35;
+                    return horizontal > 46 && horizontal > vertical * 1.65;
                 },
                 onPanResponderRelease: (_, gesture) => {
+                    if (suggestionsTouchRef.current || horizontalInteractionRef.current) return;
+
                     const horizontal = Math.abs(gesture.dx);
                     const vertical = Math.abs(gesture.dy);
 
-                    if (horizontal < 72 || horizontal < vertical * 1.2) return;
+                    if (horizontal < 96 || horizontal < vertical * 1.45) return;
 
                     if (gesture.dx < 0 && activeFeed === "forYou") {
                         switchFeed("following");
@@ -617,6 +963,21 @@ export default function HomeScreen({ navigation }: any) {
     const listEmpty = useMemo(() => {
         if (initialLoading) return null;
 
+        if (feedError) {
+            return (
+                <View style={styles.emptyFeedBox}>
+                    <View style={styles.emptyFeedIconWrap}>
+                        <Ionicons name="cloud-offline-outline" size={19} color={colors.danger} />
+                    </View>
+                    <Text style={styles.emptyFeedTitle}>Le feed ne répond pas.</Text>
+                    <Text style={styles.emptyFeedText}>{feedError}</Text>
+                    <TouchableOpacity style={styles.emptyRetry} activeOpacity={0.84} onPress={() => fetchInitial()}>
+                        <Text style={styles.emptyRetryText}>Réessayer</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
         return (
             <View style={styles.emptyFeedBox}>
                 <View style={styles.emptyFeedIconWrap}>
@@ -636,7 +997,7 @@ export default function HomeScreen({ navigation }: any) {
                 </Text>
             </View>
         );
-    }, [activeFeed, initialLoading]);
+    }, [activeFeed, feedError, fetchInitial, initialLoading]);
 
     const listHeader = useMemo(() => (
         <View>
@@ -664,9 +1025,27 @@ export default function HomeScreen({ navigation }: any) {
                 </View>
             </View>
 
-            <View style={styles.notesWrap}>
+            <View
+                style={styles.notesWrap}
+                onTouchStart={markHorizontalTouchStart}
+                onTouchEnd={markHorizontalTouchEnd}
+                onTouchCancel={markHorizontalTouchEnd}
+            >
                 <NotesStrip navigation={navigation} />
             </View>
+
+            {activeFeed === "forYou" ? (
+                <ReleasesBlock
+                    sections={releaseSections}
+                    loading={loadingReleases}
+                    navigation={navigation}
+                    isCurrentPreview={isCurrentReleasePreview}
+                    isPlaying={isPlaying}
+                    onPlay={playReleasePreview}
+                    onHorizontalTouchStart={markHorizontalTouchStart}
+                    onHorizontalTouchEnd={markHorizontalTouchEnd}
+                />
+            ) : null}
 
             <Text style={styles.feedTitle}>
                 {activeFeed === "forYou" ? "Avis récents" : "Chez les profils suivis"}
@@ -674,7 +1053,14 @@ export default function HomeScreen({ navigation }: any) {
         </View>
     ), [
         activeFeed,
+        isCurrentReleasePreview,
+        isPlaying,
+        loadingReleases,
+        markHorizontalTouchEnd,
+        markHorizontalTouchStart,
         navigation,
+        playReleasePreview,
+        releaseSections,
         switchFeed,
     ]);
 
@@ -687,21 +1073,32 @@ export default function HomeScreen({ navigation }: any) {
             <AppHeader
                 title="Accueil"
                 right={
-                    <TouchableOpacity
-                        style={styles.notifButton}
-                        activeOpacity={0.85}
-                        onPress={openNotifications}
-                    >
-                        <Ionicons name="notifications-outline" size={22} color={colors.text} />
+                    <View style={styles.headerActions}>
+                        <TouchableOpacity
+                            accessibilityLabel="Ouvrir le Blind Test"
+                            style={styles.blindTestButton}
+                            activeOpacity={0.85}
+                            onPress={openBlindTest}
+                        >
+                            <Ionicons name="game-controller-outline" size={21} color={colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            accessibilityLabel="Ouvrir les notifications"
+                            style={styles.notifButton}
+                            activeOpacity={0.85}
+                            onPress={openNotifications}
+                        >
+                            <Ionicons name="notifications-outline" size={22} color={colors.text} />
 
-                        {notifUnread > 0 ? (
-                            <View style={styles.notifBadge}>
-                                <Text style={styles.notifBadgeText}>
-                                    {notifUnread > 99 ? "99+" : notifUnread}
-                                </Text>
-                            </View>
-                        ) : null}
-                    </TouchableOpacity>
+                            {notifUnread > 0 ? (
+                                <View style={styles.notifBadge}>
+                                    <Text style={styles.notifBadgeText}>
+                                        {notifUnread > 99 ? "99+" : notifUnread}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </TouchableOpacity>
+                    </View>
                 }
             />
 
@@ -749,6 +1146,141 @@ const styles = StyleSheet.create({
         marginBottom: spacing.lg,
     },
 
+    releasesWrap: {
+        marginBottom: spacing.xl,
+    },
+
+    releasesHeader: {
+        paddingHorizontal: spacing.xs,
+        marginBottom: spacing.sm,
+    },
+
+    releaseEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+        letterSpacing: 2.2,
+        marginBottom: 4,
+    },
+
+    releasesTitle: {
+        color: colors.text,
+        fontSize: 20,
+        fontWeight: fontWeights.black,
+    },
+
+    releasesSubtitle: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        lineHeight: 18,
+        marginTop: 4,
+    },
+
+    releaseSection: {
+        marginTop: spacing.md,
+    },
+
+    releaseSectionHead: {
+        paddingHorizontal: spacing.xs,
+        marginBottom: spacing.sm,
+    },
+
+    releaseSectionTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+
+    releaseSectionSubtitle: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.medium,
+        marginTop: 3,
+    },
+
+    releaseList: {
+        gap: spacing.sm,
+        paddingRight: spacing.md,
+        paddingHorizontal: spacing.xs,
+    },
+
+    releaseCard: {
+        width: 154,
+        minHeight: 218,
+        borderRadius: radius.xxl,
+        backgroundColor: colors.surfaceRaised,
+        padding: spacing.sm,
+        position: "relative",
+    },
+
+    releaseCover: {
+        width: "100%",
+        aspectRatio: 1,
+        borderRadius: 20,
+        backgroundColor: colors.surface4,
+    },
+
+    releaseCoverFallback: {
+        width: "100%",
+        aspectRatio: 1,
+        borderRadius: 20,
+        backgroundColor: colors.surface4,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    releaseBody: {
+        paddingTop: spacing.sm,
+        paddingRight: 32,
+    },
+
+    releaseTitle: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        lineHeight: 18,
+        fontWeight: fontWeights.black,
+    },
+
+    releaseArtist: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        lineHeight: 17,
+        fontWeight: fontWeights.medium,
+        marginTop: 3,
+    },
+
+    releasePlay: {
+        position: "absolute",
+        right: spacing.sm,
+        bottom: spacing.sm,
+        width: 30,
+        height: 30,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.control,
+    },
+
+    releasePlayActive: {
+        backgroundColor: colors.controlActive,
+    },
+
+    headerActions: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+    },
+
+    blindTestButton: {
+        width: 42,
+        height: 42,
+        borderRadius: radius.lg,
+        backgroundColor: colors.primarySoft,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+
     notifButton: {
         width: 42,
         height: 42,
@@ -784,10 +1316,7 @@ const styles = StyleSheet.create({
         marginTop: spacing.sm,
         marginBottom: spacing.xl,
         paddingVertical: spacing.md,
-        backgroundColor: "rgba(9, 11, 16, 0.72)",
-        borderTopWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: "rgba(130, 146, 171, 0.14)",
+        backgroundColor: colors.surfaceFeed,
     },
 
     inlineSuggestionsHeader: {
@@ -834,7 +1363,7 @@ const styles = StyleSheet.create({
         marginRight: spacing.sm,
         position: "relative",
         padding: spacing.md,
-        backgroundColor: "rgba(20, 24, 33, 0.72)",
+        backgroundColor: colors.surfaceRaised,
         borderRadius: radius.xxl,
     },
 
@@ -899,11 +1428,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.md,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
     },
 
     suggestionActionFollowing: {
-        backgroundColor: colors.primaryFaint,
+        backgroundColor: colors.control,
     },
 
     suggestionActionDisabled: {
@@ -917,14 +1446,14 @@ const styles = StyleSheet.create({
     },
 
     suggestionActionTextFollowing: {
-        color: colors.primary,
+        color: colors.textMuted,
     },
 
     feedTabs: {
         flexDirection: "row",
         alignItems: "center",
         gap: 2,
-        backgroundColor: "rgba(20, 24, 33, 0.34)",
+        backgroundColor: colors.surfaceInset,
         borderRadius: radius.pill,
         padding: 3,
     },
@@ -939,7 +1468,7 @@ const styles = StyleSheet.create({
     },
 
     feedTabBtnActive: {
-        backgroundColor: "rgba(151, 89, 255, 0.18)",
+        backgroundColor: colors.control,
     },
 
     feedTabText: {
@@ -963,7 +1492,7 @@ const styles = StyleSheet.create({
 
     emptyFeedBox: {
         marginTop: spacing.xs,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.lg,
         alignItems: "center",
@@ -992,6 +1521,22 @@ const styles = StyleSheet.create({
         fontSize: typography.bodySm,
         lineHeight: 19,
         textAlign: "center",
+    },
+
+    emptyRetry: {
+        minHeight: 44,
+        marginTop: spacing.lg,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: spacing.xl,
+        borderRadius: radius.pill,
+        backgroundColor: colors.primarySoft,
+    },
+
+    emptyRetryText: {
+        color: colors.accentMuted,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.black,
     },
 
     footerSpacer: {

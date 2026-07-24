@@ -7,7 +7,7 @@ import {
     ViewStyle,
     TextStyle,
 } from "react-native";
-import { colors, radius, spacing, typography, fontWeights, shadows } from "../../theme";
+import { colors, radius, spacing, typography, fontWeights } from "../../theme";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -78,12 +78,11 @@ const styles = StyleSheet.create({
     },
 
     primary: {
-        backgroundColor: colors.primaryDark,
-        ...shadows.glowPrimary,
+        backgroundColor: colors.controlActive,
     },
 
     secondary: {
-        backgroundColor: "rgba(20, 24, 33, 0.78)",
+        backgroundColor: colors.control,
     },
 
     ghost: {
@@ -93,7 +92,7 @@ const styles = StyleSheet.create({
     },
 
     danger: {
-        backgroundColor: "rgba(255, 77, 109, 0.13)",
+        backgroundColor: colors.dangerSoft,
     },
 
     disabled: {

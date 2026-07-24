@@ -18,6 +18,7 @@ import { API_URL } from "../lib/config";
 import PostCard from "../components/PostCard";
 import { PostType } from "../components/PostCard/types";
 import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { DefaultAvatar } from "../components/ProfileFallbacks";
 import { colors, spacing, radius, typography, fontWeights, shadows } from "../theme";
 import { getStoredToken } from "../lib/authStorage";
 
@@ -460,12 +461,14 @@ export default function PostScreen({ route, navigation }: any) {
     }, [postId, replyTo, text]);
 
     const UserLine = ({ u, createdAt }: { u: CommentUser; createdAt?: string }) => {
-        const uri = u.avatarUrl || "https://picsum.photos/200";
-
         return (
             <View style={styles.userLine}>
                 <TouchableOpacity onPress={() => openUserProfile(u._id)} activeOpacity={0.85}>
-                    <Image source={{ uri }} style={styles.avatar} />
+                    {u.avatarUrl ? (
+                        <Image source={{ uri: u.avatarUrl }} style={styles.avatar} />
+                    ) : (
+                        <DefaultAvatar label={u.pseudo} seed={u._id} size={34} style={styles.avatar} />
+                    )}
                 </TouchableOpacity>
 
                 <View style={styles.userMeta}>
@@ -848,7 +851,7 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
         paddingHorizontal: spacing.md,
         marginBottom: spacing.md,
-        backgroundColor: "rgba(15, 18, 24, 0.62)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
     },
 
@@ -1071,13 +1074,12 @@ const styles = StyleSheet.create({
     },
 
     sendBtn: {
-        backgroundColor: colors.primary,
+        backgroundColor: colors.controlActive,
         width: 44,
         height: 44,
         borderRadius: 22,
         justifyContent: "center",
         alignItems: "center",
-        ...shadows.glowPrimary,
     },
 
     sendBtnDisabled: {

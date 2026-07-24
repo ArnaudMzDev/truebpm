@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayer } from "../../context/PlayerContext";
 import { colors, spacing, radius, typography, fontWeights } from "../../theme";
+import PlayerWave from "../PlayerWave";
 
 type Props = {
     previewUrl: string | null;
@@ -11,37 +12,9 @@ type Props = {
     coverUrl: string | null;
 };
 
-function MiniWave({
-                      active,
-                      scales,
-                  }: {
-    active: boolean;
-    scales: Animated.Value[];
-}) {
-    return (
-        <View style={styles.waveWrap}>
-            {[0, 1, 2].map((i) => (
-                <Animated.View
-                    key={i}
-                    style={[
-                        styles.waveBar,
-                        active ? styles.waveBarActive : styles.waveBarInactive,
-                        { transform: [{ scaleY: active ? scales[i] : 0.52 + i * 0.13 }] },
-                    ]}
-                />
-            ))}
-        </View>
-    );
-}
-
 function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     const player = usePlayer();
     const scale = React.useRef(new Animated.Value(1)).current;
-    const waveScales = React.useRef([
-        new Animated.Value(0.48),
-        new Animated.Value(0.72),
-        new Animated.Value(0.56),
-    ]).current;
 
     const currentTrack = player?.currentTrack ?? null;
     const isPlaying = !!player?.isPlaying;
@@ -51,39 +24,6 @@ function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
     }, [currentTrack, previewUrl]);
 
     const isActive = isCurrentTrack && isPlaying;
-
-    React.useEffect(() => {
-        if (!isActive) {
-            waveScales[0].setValue(0.48);
-            waveScales[1].setValue(0.72);
-            waveScales[2].setValue(0.56);
-            return;
-        }
-
-        const animations = waveScales.map((value, index) =>
-            Animated.loop(
-                Animated.sequence([
-                    Animated.delay(index * 90),
-                    Animated.timing(value, {
-                        toValue: index === 1 ? 0.48 : 1,
-                        duration: 320,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(value, {
-                        toValue: index === 1 ? 1 : 0.5,
-                        duration: 360,
-                        useNativeDriver: true,
-                    }),
-                ])
-            )
-        );
-
-        animations.forEach((animation) => animation.start());
-
-        return () => {
-            animations.forEach((animation) => animation.stop());
-        };
-    }, [isActive, waveScales]);
 
     const animateTo = useCallback(
         (value: number) => {
@@ -159,7 +99,7 @@ function AudioPreview({ previewUrl, title, artist, coverUrl }: Props) {
                         </Text>
                     </View>
 
-                    <MiniWave active={isActive} scales={waveScales} />
+                    <PlayerWave active={isActive} style={styles.wave} />
                 </Animated.View>
             </Pressable>
         </View>
@@ -197,15 +137,8 @@ const styles = StyleSheet.create({
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
-        borderWidth: 1,
-        borderColor: colors.primaryGlow,
+        backgroundColor: colors.controlActive,
         marginRight: spacing.sm,
-        shadowColor: colors.primary,
-        shadowOpacity: 0.28,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: 5,
     },
 
     playDotActive: {
@@ -238,28 +171,7 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.medium,
     },
 
-    waveWrap: {
-        width: 24,
-        height: 22,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
+    wave: {
         marginLeft: spacing.sm,
-    },
-
-    waveBar: {
-        height: 18,
-        width: 4,
-        borderRadius: 999,
-    },
-
-    waveBarInactive: {
-        backgroundColor: colors.textFaint,
-        opacity: 0.4,
-    },
-
-    waveBarActive: {
-        backgroundColor: colors.primary,
-        opacity: 0.95,
     },
 });

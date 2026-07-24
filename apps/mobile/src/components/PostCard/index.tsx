@@ -2,6 +2,7 @@ import React, { useMemo, useState, useCallback, useEffect, useRef } from "react"
 import { Image, View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { EntityType, PostType } from "./types";
 import Header from "./Header";
@@ -37,7 +38,7 @@ function getCriteriaLabel(entityType: EntityType | undefined, key: string) {
             emotion: "Émotion",
         },
         album: {
-            cohesion: "Cohésion",
+            cohesion: "Cover",
             production: "Production",
             originality: "Originalité",
         },
@@ -216,6 +217,13 @@ function PostCard({
                             />
                         </View>
                     )}
+
+                    <LinearGradient
+                        pointerEvents="none"
+                        colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.24)", "rgba(0,0,0,0.72)"]}
+                        locations={[0, 0.45, 1]}
+                        style={styles.coverReadabilityScrim}
+                    />
 
                     {score ? (
                         <View style={styles.scoreBadge}>
@@ -432,6 +440,14 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: colors.surfaceEditorial,
+    },
+
+    coverReadabilityScrim: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: "58%",
     },
 
     scoreBadge: {

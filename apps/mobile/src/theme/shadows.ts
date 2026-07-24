@@ -1,8 +1,8 @@
 export const shadows = {
     glowPrimary: {
         shadowColor: "#9B5CFF",
-        shadowOpacity: 0.18,
-        shadowRadius: 16,
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
         shadowOffset: { width: 0, height: 0 },
     },
     card: {

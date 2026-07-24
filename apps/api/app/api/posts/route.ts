@@ -58,6 +58,39 @@ function idString(value: any) {
     return value?._id?.toString?.() || value?.toString?.() || "";
 }
 
+function parseObjectIdList(value: string | null, max = 90) {
+    if (!value) return [];
+    const seen = new Set<string>();
+    return value
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => {
+            if (!mongoose.Types.ObjectId.isValid(id) || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        })
+        .slice(0, max)
+        .map((id) => toObjectId(id));
+}
+
+function hashToUnit(input: string) {
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i += 1) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+}
+
+function getFeedSeed(me: mongoose.Types.ObjectId | null, sessionSeed: string | null) {
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    const sixHourBucket = Math.floor(now.getUTCHours() / 6);
+    const userPart = me?.toString?.() || "guest";
+    const sessionPart = sessionSeed?.trim().slice(0, 48) || "default";
+    return `${userPart}:${day}:${sixHourBucket}:${sessionPart}`;
+}
+
 function isVisibleAuthor(author: any, me: mongoose.Types.ObjectId | null, followingSet: Set<string>) {
     if (!author) return false;
     const authorId = idString(author);
@@ -93,11 +126,19 @@ function getInterestTokens(meUser: any) {
         .map((x: string) => x.trim().toLowerCase());
 }
 
-function scoreForYouPost(doc: any, me: mongoose.Types.ObjectId | null, followingSet: Set<string>, interests: string[]) {
+function scoreForYouPost(
+    doc: any,
+    me: mongoose.Types.ObjectId | null,
+    followingSet: Set<string>,
+    interests: string[],
+    feedSeed: string
+) {
     const isRepost = doc.type === "repost" && doc.repostOf;
     const base = isRepost ? doc.repostOf : doc;
     const baseAuthorId = idString(base?.userId);
     const wrapperAuthorId = idString(doc?.userId);
+    const docId = idString(doc?._id);
+    const baseId = idString(base?._id);
 
     const likes = Array.isArray(base?.likes) ? base.likes.length : Number(base?.likesCount || 0);
     const reposts = Array.isArray(base?.reposts) ? base.reposts.length : Number(base?.repostsCount || 0);
@@ -107,10 +148,12 @@ function scoreForYouPost(doc: any, me: mongoose.Types.ObjectId | null, following
 
     const createdAt = new Date(doc?.createdAt || base?.createdAt || Date.now()).getTime();
     const ageHours = Math.max(1, (Date.now() - createdAt) / 36e5);
-    const recency = 34 / Math.pow(ageHours + 6, 0.72);
+    const recency = 42 / Math.pow(ageHours + 5, 0.68);
+    const freshnessBonus = ageHours <= 24 ? 10 : ageHours <= 72 ? 5 : ageHours <= 168 ? 2 : 0;
 
     const searchable = `${base?.trackTitle || ""} ${base?.artist || ""} ${base?.comment || ""}`.toLowerCase();
-    const interestBonus = interests.some((token) => searchable.includes(token)) ? 12 : 0;
+    const interestHits = interests.reduce((count, token) => count + (searchable.includes(token) ? 1 : 0), 0);
+    const interestBonus = Math.min(18, interestHits * 8);
     const mediaBonus = base?.previewUrl ? 3 : 0;
     const commentBonus = Math.min(6, commentLength / 42);
     const ratingBonus = ratingAvg ? ratingAvg * 1.8 : 0;
@@ -121,8 +164,68 @@ function scoreForYouPost(doc: any, me: mongoose.Types.ObjectId | null, following
     const selfPenalty =
         me && (baseAuthorId === me.toString() || wrapperAuthorId === me.toString()) ? -18 : 0;
     const repostBonus = isRepost ? 2.5 : 0;
+    const explorationNoise = hashToUnit(`${feedSeed}:${docId || baseId}`) * 24;
+    const underdogBonus = likes + reposts + comments <= 2 ? hashToUnit(`new:${feedSeed}:${baseId || docId}`) * 8 : 0;
 
-    return recency + socialScore + ratingBonus + commentBonus + mediaBonus + interestBonus + followingPenalty + selfPenalty + repostBonus;
+    return (
+        recency +
+        freshnessBonus +
+        socialScore +
+        ratingBonus +
+        commentBonus +
+        mediaBonus +
+        interestBonus +
+        followingPenalty +
+        selfPenalty +
+        repostBonus +
+        explorationNoise +
+        underdogBonus
+    );
+}
+
+function diversifyForYouRankedDocs(rankedDocs: { doc: any; score: number }[], limit: number) {
+    const picked: { doc: any; score: number }[] = [];
+    const remaining = [...rankedDocs];
+    const authorCounts = new Map<string, number>();
+    const entityCounts = new Map<string, number>();
+
+    while (picked.length < limit && remaining.length) {
+        let bestIndex = 0;
+        let bestAdjusted = -Infinity;
+
+        remaining.forEach((item, index) => {
+            const isRepost = item.doc.type === "repost" && item.doc.repostOf;
+            const base = isRepost ? item.doc.repostOf : item.doc;
+            const authorId = idString(base?.userId) || idString(item.doc?.userId);
+            const entityKey =
+                base?.entityType && base?.entityId
+                    ? `${base.entityType}:${base.entityId}`
+                    : `${base?.trackTitle || ""}:${base?.artist || ""}`.toLowerCase();
+            const authorPenalty = (authorCounts.get(authorId) || 0) * 18;
+            const entityPenalty = (entityCounts.get(entityKey) || 0) * 22;
+            const adjusted = item.score - authorPenalty - entityPenalty;
+
+            if (adjusted > bestAdjusted) {
+                bestAdjusted = adjusted;
+                bestIndex = index;
+            }
+        });
+
+        const [next] = remaining.splice(bestIndex, 1);
+        const isRepost = next.doc.type === "repost" && next.doc.repostOf;
+        const base = isRepost ? next.doc.repostOf : next.doc;
+        const authorId = idString(base?.userId) || idString(next.doc?.userId);
+        const entityKey =
+            base?.entityType && base?.entityId
+                ? `${base.entityType}:${base.entityId}`
+                : `${base?.trackTitle || ""}:${base?.artist || ""}`.toLowerCase();
+
+        authorCounts.set(authorId, (authorCounts.get(authorId) || 0) + 1);
+        entityCounts.set(entityKey, (entityCounts.get(entityKey) || 0) + 1);
+        picked.push(next);
+    }
+
+    return picked;
 }
 
 function serializePost(p: any, me: mongoose.Types.ObjectId | null, feedScore?: number) {
@@ -240,6 +343,9 @@ export async function GET(req: Request) {
         const cursor = searchParams.get("cursor");
         const userId = searchParams.get("userId");
         const feed = searchParams.get("feed") === "following" ? "following" : "forYou";
+        const sessionSeed = searchParams.get("seed");
+        const excludedIds = feed === "forYou" ? parseObjectIdList(searchParams.get("exclude")) : [];
+        const excludedSet = new Set(excludedIds.map((id) => id.toString()));
 
         const query: any = {};
         if (userId && mongoose.Types.ObjectId.isValid(userId)) {
@@ -247,6 +353,12 @@ export async function GET(req: Request) {
         }
         if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
             query._id = { $lt: toObjectId(cursor) };
+        }
+        if (excludedIds.length) {
+            query._id = {
+                ...(query._id || {}),
+                $nin: excludedIds,
+            };
         }
 
         const meId = await getOptionalUserId(req);
@@ -267,6 +379,7 @@ export async function GET(req: Request) {
 
         const followingSet: Set<string> = new Set(followingIds.map((id) => id.toString()));
         const interestTokens = getInterestTokens(meUser);
+        const feedSeed = getFeedSeed(me, sessionSeed);
 
         if (feed === "following") {
             if (!me || followingIds.length === 0) {
@@ -275,7 +388,7 @@ export async function GET(req: Request) {
             query.userId = { $in: followingIds };
         }
 
-        const fetchLimit = feed === "forYou" ? Math.min(Math.max(limit * 6, 45), 150) : limit + 1;
+        const fetchLimit = feed === "forYou" ? Math.min(Math.max(limit * 12, 120), 320) : limit + 1;
 
         const docs: any[] = await Post.find(query)
             .sort({ _id: -1 })
@@ -290,6 +403,9 @@ export async function GET(req: Request) {
 
         const visibleDocs = docs.filter((p: any) => {
             const isRepost = p.type === "repost" && p.repostOf;
+            const docId = idString(p?._id);
+            const repostOfId = idString(p?.repostOf?._id);
+            if (excludedSet.has(docId) || (repostOfId && excludedSet.has(repostOfId))) return false;
             if (!isVisibleAuthor(p.userId, me, followingSet)) return false;
             if (isRepost && !isVisibleAuthor(p.repostOf?.userId, me, followingSet)) return false;
             return true;
@@ -300,7 +416,7 @@ export async function GET(req: Request) {
                 ? visibleDocs
                     .map((doc) => ({
                         doc,
-                        score: scoreForYouPost(doc, me, followingSet, interestTokens),
+                        score: scoreForYouPost(doc, me, followingSet, interestTokens, feedSeed),
                     }))
                     .sort((a, b) => {
                         if (b.score !== a.score) return b.score - a.score;
@@ -308,7 +424,10 @@ export async function GET(req: Request) {
                     })
                 : visibleDocs.map((doc) => ({ doc, score: undefined }));
 
-        const pageDocs = rankedDocs.slice(0, limit);
+        const pageDocs =
+            feed === "forYou"
+                ? diversifyForYouRankedDocs(rankedDocs as { doc: any; score: number }[], limit)
+                : rankedDocs.slice(0, limit);
         const nextCursor =
             docs.length === fetchLimit
                 ? docs[docs.length - 1]?._id?.toString?.() ?? null

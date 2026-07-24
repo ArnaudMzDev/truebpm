@@ -14,4 +14,7 @@ export type RootStackParamList = {
     Feedback: undefined;
     CreatePost: undefined;
     Search: undefined;
+    BlindTestHome: undefined;
+    BlindTestGame: { sessionId: string };
+    BlindTestResult: { sessionId: string };
 };

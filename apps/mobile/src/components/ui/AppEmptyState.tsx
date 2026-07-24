@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     },
     cta: {
         marginTop: 16,
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
         borderRadius: radius.lg,
         paddingHorizontal: 16,
         paddingVertical: 12,

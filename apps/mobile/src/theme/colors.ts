@@ -9,6 +9,10 @@ export const colors = {
     surfaceRaised: "#10141C",
     surfaceInset: "#080A0E",
     surfacePressed: "#1A1F2B",
+    control: "#151923",
+    controlPressed: "#1C2230",
+    controlActive: "#5E17EB",
+    controlMuted: "#11151D",
 
     border: "rgba(215, 220, 229, 0.12)",
     borderSoft: "rgba(215, 220, 229, 0.08)",

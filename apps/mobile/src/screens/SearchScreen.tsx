@@ -15,6 +15,7 @@ import { API_URL } from "../lib/config";
 import AppScreen from "../components/ui/AppScreen";
 import AppHeader from "../components/ui/AppHeader";
 import AppSectionLoader from "../components/ui/AppSectionLoader";
+import PlayerWave from "../components/PlayerWave";
 import { colors, spacing, radius, typography, fontWeights } from "../theme";
 import {
     isShazamKitAvailable,
@@ -56,11 +57,20 @@ type AnyItem = SongItem | AlbumItem | ArtistItem;
 
 type RecognizedTrack = ShazamKitTrack;
 
+type ReleaseSection = {
+    id: "france" | "international" | string;
+    title: string;
+    subtitle: string;
+    items: AnyItem[];
+};
+
 type PickProfileKind =
     | "pinnedTrack"
     | "favoriteArtists"
     | "favoriteAlbums"
-    | "favoriteTracks";
+    | "favoriteTracks"
+    | "listenLater"
+    | "alreadyListened";
 
 type CreatePostNavPayload = {
     entityType: "song" | "album" | "artist";
@@ -157,8 +167,10 @@ export default function SearchScreen({ navigation, route }: any) {
     const [type, setType] = useState<SearchType>(initialType);
     const [results, setResults] = useState<AnyItem[]>([]);
     const [discoverItems, setDiscoverItems] = useState<AnyItem[]>([]);
+    const [releaseSections, setReleaseSections] = useState<ReleaseSection[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingDiscover, setLoadingDiscover] = useState(false);
+    const [loadingReleases, setLoadingReleases] = useState(false);
     const [recognizing, setRecognizing] = useState(false);
     const [recognitionResult, setRecognitionResult] = useState<RecognizedTrack | null>(null);
     const [recognitionError, setRecognitionError] = useState("");
@@ -183,6 +195,25 @@ export default function SearchScreen({ navigation, route }: any) {
             return [];
         }
         return json.items as AnyItem[];
+    }, []);
+
+    const loadReleaseSections = useCallback(async () => {
+        try {
+            setLoadingReleases(true);
+            const res = await fetch(`${API_URL}/api/search/apple?mode=releases`);
+            const json = await safeJson(res);
+            if (!res.ok || !Array.isArray(json?.sections)) {
+                console.log("Apple releases error:", res.status, json);
+                setReleaseSections([]);
+                return;
+            }
+            setReleaseSections(json.sections as ReleaseSection[]);
+        } catch (err) {
+            console.log("Apple releases fetch error:", err);
+            setReleaseSections([]);
+        } finally {
+            setLoadingReleases(false);
+        }
     }, []);
 
     const loadDiscover = useCallback(async (effective: SearchType = type) => {
@@ -234,6 +265,10 @@ export default function SearchScreen({ navigation, route }: any) {
         }
     }, [debouncedQuery, loadDiscover, search, type]);
 
+    useEffect(() => {
+        loadReleaseSections().catch(() => {});
+    }, [loadReleaseSections]);
+
     const goToCreatePost = (payload: CreatePostNavPayload) => {
         navigation.navigate("CreatePost", payload);
     };
@@ -247,6 +282,13 @@ export default function SearchScreen({ navigation, route }: any) {
         if (kind === "favoriteArtists" && normalized.entityType !== "artist") return;
         if (kind === "favoriteAlbums" && normalized.entityType !== "album") return;
         if (kind === "favoriteTracks" && normalized.entityType !== "song") return;
+        if (
+            (kind === "listenLater" || kind === "alreadyListened") &&
+            normalized.entityType !== "song" &&
+            normalized.entityType !== "album"
+        ) {
+            return;
+        }
 
         try {
             await AsyncStorage.setItem(
@@ -356,15 +398,10 @@ export default function SearchScreen({ navigation, route }: any) {
             return;
         }
 
-        goToCreatePost({
-            entityType: "artist",
-            entityId: item.id,
-            track: {
-                title: item.name,
-                artist: item.name,
-                cover: item.cover,
-                previewUrl: null,
-            },
+        navigation.navigate("ArtistDetail", {
+            artistId: item.id,
+            name: item.name,
+            cover: item.cover,
         });
     };
 
@@ -393,6 +430,9 @@ export default function SearchScreen({ navigation, route }: any) {
         },
         [isCurrentPreview, playPreview, togglePlay]
     );
+
+    const visibleItems = query.trim().length >= 2 ? results : discoverItems;
+    const isSearching = query.trim().length >= 2;
 
     const renderItem = ({ item }: { item: AnyItem }) => {
         if (item.type === "song") {
@@ -429,11 +469,11 @@ export default function SearchScreen({ navigation, route }: any) {
                                 playSongPreview(item).catch(() => {});
                             }}
                         >
-                            <Ionicons
-                                name={isPreviewActive && isPlaying ? "pause" : "play"}
-                                size={14}
-                                color={colors.text}
-                            />
+                            {isPreviewActive && isPlaying ? (
+                                <PlayerWave active size="sm" color={colors.text} inactiveColor={colors.text} />
+                            ) : (
+                                <Ionicons name="play" size={14} color={colors.text} />
+                            )}
                         </TouchableOpacity>
                     ) : null}
                 </TouchableOpacity>
@@ -489,6 +529,104 @@ export default function SearchScreen({ navigation, route }: any) {
         );
     };
 
+    const renderReleaseItem = useCallback(
+        ({ item }: { item: AnyItem }) => {
+            const title = item.type === "artist" ? item.name : item.title;
+            const artist = item.type === "artist" ? "Artiste" : item.artist;
+            const cover = item.cover;
+            const isSong = item.type === "song";
+            const isPreviewActive = isSong ? isCurrentPreview(item) : false;
+
+            return (
+                <TouchableOpacity
+                    style={styles.releaseCard}
+                    activeOpacity={0.88}
+                    onPress={() => handlePress(item)}
+                >
+                    {cover ? (
+                        <Image source={{ uri: cover }} style={styles.releaseCover} />
+                    ) : (
+                        <View style={styles.releaseCoverFallback}>
+                            <Ionicons
+                                name={item.type === "album" ? "disc" : item.type === "artist" ? "person" : "musical-notes"}
+                                size={22}
+                                color={colors.textMuted}
+                            />
+                        </View>
+                    )}
+                    <View style={styles.releaseBody}>
+                        <Text numberOfLines={2} style={styles.releaseTitle}>
+                            {title}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.releaseArtist}>
+                            {artist}
+                        </Text>
+                    </View>
+                    {isSong && item.previewUrl ? (
+                        <TouchableOpacity
+                            style={[styles.releasePlay, isPreviewActive && styles.releasePlayActive]}
+                            activeOpacity={0.84}
+                            onPress={(event) => {
+                                event.stopPropagation();
+                                playSongPreview(item).catch(() => {});
+                            }}
+                        >
+                            {isPreviewActive && isPlaying ? (
+                                <PlayerWave active size="sm" color={colors.text} inactiveColor={colors.text} />
+                            ) : (
+                                <Ionicons name="play" size={13} color={colors.text} />
+                            )}
+                        </TouchableOpacity>
+                    ) : null}
+                </TouchableOpacity>
+            );
+        },
+        [handlePress, isCurrentPreview, isPlaying, playSongPreview]
+    );
+
+    const releasesBlock = useMemo(() => {
+        if (isSearching) return null;
+        if (loadingReleases) {
+            return (
+                <View style={styles.releasesWrap}>
+                    <Text style={styles.sectionEyebrow}>Sorties</Text>
+                    <Text style={styles.sectionTitle}>Dernières sorties</Text>
+                    <AppSectionLoader />
+                </View>
+            );
+        }
+        if (!releaseSections.some((section) => section.items.length > 0)) return null;
+
+        return (
+            <View style={styles.releasesWrap}>
+                <View style={styles.releasesHeader}>
+                    <Text style={styles.sectionEyebrow}>Sorties</Text>
+                    <Text style={styles.sectionTitle}>Dernières sorties</Text>
+                </View>
+                {releaseSections.map((section) =>
+                    section.items.length > 0 ? (
+                        <View key={section.id} style={styles.releaseSection}>
+                            <View style={styles.releaseSectionHead}>
+                                <Text style={styles.releaseSectionTitle}>{section.title}</Text>
+                                <Text style={styles.releaseSectionSubtitle}>{section.subtitle}</Text>
+                            </View>
+                            <FlatList
+                                horizontal
+                                data={section.items}
+                                keyExtractor={(item, index) => `release:${section.id}:${item.type}:${item.id}:${index}`}
+                                renderItem={renderReleaseItem}
+                                showsHorizontalScrollIndicator={false}
+                                keyboardShouldPersistTaps="handled"
+                                nestedScrollEnabled
+                                contentContainerStyle={styles.releaseList}
+                            />
+                        </View>
+                    ) : null
+                )}
+            </View>
+        );
+    }, [isSearching, loadingReleases, releaseSections, renderReleaseItem]);
+
     const screenTitle =
         mode === "pickProfileMusic"
             ? kind === "pinnedTrack"
@@ -497,13 +635,15 @@ export default function SearchScreen({ navigation, route }: any) {
                     ? "Choisir des artistes favoris"
                     : kind === "favoriteAlbums"
                         ? "Choisir des albums favoris"
-                        : "Choisir des morceaux favoris"
+                        : kind === "listenLater"
+                            ? "Ajouter à écouter"
+                            : kind === "alreadyListened"
+                                ? "Ajouter à déjà écoutés"
+                                : "Choisir des morceaux favoris"
             : mode === "pickNoteTrack"
                 ? "Choisir un son pour la note"
                 : "Rechercher";
 
-    const visibleItems = query.trim().length >= 2 ? results : discoverItems;
-    const isSearching = query.trim().length >= 2;
     const canGoBack = typeof navigation?.canGoBack === "function" && navigation.canGoBack();
 
     return (
@@ -639,11 +779,6 @@ export default function SearchScreen({ navigation, route }: any) {
                 ) : null}
             </View>
 
-            <View style={styles.sectionHead}>
-                <Text style={styles.sectionEyebrow}>{isSearching ? "Résultats" : "Découverte"}</Text>
-                <Text style={styles.sectionTitle}>{isSearching ? `Recherche “${query.trim()}”` : typeCopy}</Text>
-            </View>
-
             {loading || loadingDiscover ? (
                 <AppSectionLoader />
             ) : (
@@ -651,6 +786,15 @@ export default function SearchScreen({ navigation, route }: any) {
                     data={visibleItems}
                     keyExtractor={(item, index) => `${item.type}:${item.id}:${index}`}
                     renderItem={renderItem}
+                    ListHeaderComponent={
+                        <>
+                            {releasesBlock}
+                            <View style={styles.sectionHead}>
+                                <Text style={styles.sectionEyebrow}>{isSearching ? "Résultats" : "Découverte"}</Text>
+                                <Text style={styles.sectionTitle}>{isSearching ? `Recherche “${query.trim()}”` : typeCopy}</Text>
+                            </View>
+                        </>
+                    }
                     contentContainerStyle={styles.resultsContent}
                     keyboardShouldPersistTaps="handled"
                     ListEmptyComponent={
@@ -714,7 +858,7 @@ const styles = StyleSheet.create({
         gap: 3,
         marginTop: spacing.md,
         marginBottom: spacing.lg,
-        backgroundColor: "rgba(20, 24, 33, 0.42)",
+        backgroundColor: colors.surfaceInset,
         padding: 4,
         borderRadius: radius.pill,
     },
@@ -728,7 +872,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.pill,
     },
     filterActive: {
-        backgroundColor: "rgba(151, 89, 255, 0.2)",
+        backgroundColor: colors.control,
     },
     filterText: {
         color: colors.textMuted,
@@ -740,7 +884,7 @@ const styles = StyleSheet.create({
         fontWeight: fontWeights.black,
     },
     recognitionCard: {
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.md,
         marginBottom: spacing.md,
@@ -782,7 +926,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
     },
     recognitionButtonDisabled: {
         opacity: 0.68,
@@ -884,10 +1028,91 @@ const styles = StyleSheet.create({
     resultsContent: {
         paddingBottom: 200,
     },
+    releasesWrap: {
+        marginBottom: spacing.xl,
+    },
+    releasesHeader: {
+        paddingHorizontal: spacing.xs,
+        marginBottom: spacing.sm,
+    },
+    releaseSection: {
+        marginTop: spacing.md,
+    },
+    releaseSectionHead: {
+        paddingHorizontal: spacing.xs,
+        marginBottom: spacing.sm,
+    },
+    releaseSectionTitle: {
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.black,
+    },
+    releaseSectionSubtitle: {
+        color: colors.textMuted,
+        fontSize: typography.bodySm,
+        fontWeight: fontWeights.medium,
+        marginTop: 3,
+    },
+    releaseList: {
+        gap: spacing.sm,
+        paddingRight: spacing.md,
+    },
+    releaseCard: {
+        width: 156,
+        minHeight: 222,
+        borderRadius: radius.xxl,
+        backgroundColor: colors.surfaceRaised,
+        padding: spacing.sm,
+    },
+    releaseCover: {
+        width: "100%",
+        aspectRatio: 1,
+        borderRadius: 20,
+        backgroundColor: colors.surface3,
+    },
+    releaseCoverFallback: {
+        width: "100%",
+        aspectRatio: 1,
+        borderRadius: 20,
+        backgroundColor: colors.surface3,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    releaseBody: {
+        paddingTop: spacing.sm,
+        paddingRight: 34,
+    },
+    releaseTitle: {
+        color: colors.text,
+        fontSize: typography.bodySm,
+        lineHeight: 18,
+        fontWeight: fontWeights.black,
+    },
+    releaseArtist: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        lineHeight: 17,
+        fontWeight: fontWeights.medium,
+        marginTop: 3,
+    },
+    releasePlay: {
+        position: "absolute",
+        right: spacing.sm,
+        bottom: spacing.sm,
+        width: 30,
+        height: 30,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.control,
+    },
+    releasePlayActive: {
+        backgroundColor: colors.controlActive,
+    },
     item: {
         flexDirection: "row",
         padding: 12,
-        backgroundColor: "rgba(12, 15, 21, 0.68)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: 24,
         marginBottom: spacing.sm,
         alignItems: "center",
@@ -923,17 +1148,14 @@ const styles = StyleSheet.create({
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(151, 89, 255, 0.22)",
-        borderWidth: 1,
-        borderColor: "rgba(151, 89, 255, 0.34)",
+        backgroundColor: colors.control,
     },
     playPillActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
+        backgroundColor: colors.controlActive,
     },
     emptyBox: {
         marginTop: spacing.xl,
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         borderRadius: radius.xxl,
         padding: spacing.lg,
         alignItems: "center",

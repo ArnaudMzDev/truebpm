@@ -11,7 +11,7 @@ const NotificationSchema = new Schema(
         actorId: {
             type: Schema.Types.ObjectId,
             ref: "User",
-            required: true,
+            default: null,
         },
         type: {
             type: String,
@@ -24,6 +24,11 @@ const NotificationSchema = new Schema(
                 "reply_comment",
                 "like_comment",
                 "repost_post",
+                "like_note",
+                "new_post",
+                "new_note",
+                "same_entity_post",
+                "artist_release",
             ],
             required: true,
             index: true,
@@ -42,6 +47,10 @@ const NotificationSchema = new Schema(
             type: Boolean,
             default: false,
             index: true,
+        },
+        metadata: {
+            type: Schema.Types.Mixed,
+            default: {},
         },
     },
     { timestamps: true }

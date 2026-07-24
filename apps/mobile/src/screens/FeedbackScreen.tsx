@@ -256,9 +256,7 @@ const styles = StyleSheet.create({
         width: 42,
         height: 42,
         borderRadius: radius.lg,
-        backgroundColor: colors.surface3,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.control,
         alignItems: "center",
         justifyContent: "center",
     },
@@ -275,7 +273,7 @@ const styles = StyleSheet.create({
     hero: {
         padding: spacing.lg,
         borderRadius: radius.xxl,
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceFeed,
         marginBottom: spacing.xl,
     },
     heroTitle: {
@@ -315,10 +313,10 @@ const styles = StyleSheet.create({
         gap: 8,
         paddingHorizontal: spacing.md,
         borderRadius: radius.xl,
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.controlMuted,
     },
     chipActive: {
-        backgroundColor: colors.surface3,
+        backgroundColor: colors.control,
     },
     chipText: {
         color: colors.textMuted,
@@ -331,7 +329,7 @@ const styles = StyleSheet.create({
     input: {
         minHeight: 52,
         borderRadius: radius.xl,
-        backgroundColor: "rgba(15, 18, 24, 0.72)",
+        backgroundColor: colors.surfaceRaised,
         color: colors.text,
         paddingHorizontal: spacing.md,
         fontSize: typography.body,
@@ -365,8 +363,8 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     checkboxActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
+        backgroundColor: colors.controlActive,
+        borderColor: colors.controlActive,
     },
     toggleText: {
         flex: 1,
@@ -380,7 +378,7 @@ const styles = StyleSheet.create({
         borderRadius: radius.lg,
         paddingVertical: 15,
         alignItems: "center",
-        backgroundColor: colors.primaryDark,
+        backgroundColor: colors.controlActive,
     },
     submitButtonDisabled: {
         opacity: 0.45,

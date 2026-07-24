@@ -76,11 +76,21 @@ export async function GET(
         const isPrivateLocked =
             !!user.isPrivate && !isSelf && !isFollowing;
 
+        const viewer: any =
+            viewerId && !isSelf
+                ? await User.findById(viewerId).select("_id mutedNotificationUsers").lean()
+                : null;
+        const notificationsMutedByMe =
+            !!viewer &&
+            Array.isArray(viewer.mutedNotificationUsers) &&
+            viewer.mutedNotificationUsers.some((id: any) => String(id) === String(user._id));
+
         const safeUser = {
             ...user,
             notesCount: realNotesCount,
             followStatus,
             isPrivateLocked,
+            notificationsMutedByMe,
         };
 
         return NextResponse.json({ user: safeUser }, { status: 200 });

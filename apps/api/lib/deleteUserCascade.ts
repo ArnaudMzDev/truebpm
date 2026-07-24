@@ -10,6 +10,8 @@ import Notification from "@/models/Notification";
 import PushToken from "@/models/PushToken";
 import SupportTicket from "@/models/SupportTicket";
 import Feedback from "@/models/Feedback";
+import ArtistRelease from "@/models/ArtistRelease";
+import BlindTestSession from "@/models/BlindTestSession";
 
 function deletedCount(result: any) {
     return typeof result?.deletedCount === "number" ? result.deletedCount : 0;
@@ -79,6 +81,8 @@ export async function deleteUserCascade(userId: string | mongoose.Types.ObjectId
         conversationDeletion,
         supportDeletion,
         feedbackDeletion,
+        artistReleaseDeletion,
+        blindTestSessionDeletion,
     ] = await Promise.all([
         Comment.deleteMany({
             $or: [
@@ -141,6 +145,8 @@ export async function deleteUserCascade(userId: string | mongoose.Types.ObjectId
         Conversation.deleteMany({ _id: { $in: conversationIds } }),
         SupportTicket.deleteMany({ userId: userObjectId }),
         Feedback.deleteMany({ userId: userObjectId }),
+        ArtistRelease.deleteMany({ userId: userObjectId }),
+        BlindTestSession.deleteMany({ userId: userObjectId }),
     ]);
 
     await Promise.all([
@@ -204,6 +210,8 @@ export async function deleteUserCascade(userId: string | mongoose.Types.ObjectId
             conversations: deletedCount(conversationDeletion),
             supportTickets: deletedCount(supportDeletion),
             feedback: deletedCount(feedbackDeletion),
+            artistReleases: deletedCount(artistReleaseDeletion),
+            blindTestSessions: deletedCount(blindTestSessionDeletion),
             postSocialUpdates: postSocialPull.modifiedCount || 0,
             commentSocialUpdates: commentSocialPull.modifiedCount || 0,
             noteSocialUpdates: noteSocialPull.modifiedCount || 0,

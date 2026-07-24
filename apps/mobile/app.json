@@ -22,6 +22,7 @@
       },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "TrueBPM utilise le micro pour identifier le morceau que tu écoutes.",
+        "NSAppleMusicUsageDescription": "TrueBPM utilise Apple Music pour identifier les morceaux et afficher leurs métadonnées.",
         "NSPhotoLibraryUsageDescription": "TrueBPM utilise ta galerie pour choisir une photo de profil, une bannière ou une image de message.",
         "ITSAppUsesNonExemptEncryption": false
       }

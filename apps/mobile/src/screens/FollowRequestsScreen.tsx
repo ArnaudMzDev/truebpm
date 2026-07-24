@@ -15,6 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { API_URL } from "../lib/config";
 import { useUser } from "../context/UserContext";
 import { getStoredToken } from "../lib/authStorage";
+import AppScreenLoader from "../components/ui/AppScreenLoader";
+import { DefaultAvatar } from "../components/ProfileFallbacks";
 
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
@@ -107,11 +109,7 @@ export default function FollowRequestsScreen({ navigation }: any) {
     );
 
     if (loading) {
-        return (
-            <View style={styles.loader}>
-                <ActivityIndicator size="large" color="#9B5CFF" />
-            </View>
-        );
+        return <AppScreenLoader label="Chargement des demandes..." />;
     }
 
     return (
@@ -149,10 +147,11 @@ export default function FollowRequestsScreen({ navigation }: any) {
                                     })
                                 }
                             >
-                                <Image
-                                    source={{ uri: requester?.avatarUrl || "https://picsum.photos/200" }}
-                                    style={styles.avatar}
-                                />
+                                {requester?.avatarUrl ? (
+                                    <Image source={{ uri: requester.avatarUrl }} style={styles.avatar} />
+                                ) : (
+                                    <DefaultAvatar label={requester?.pseudo} seed={requester?._id} size={52} style={styles.avatar} />
+                                )}
 
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.pseudo}>{requester?.pseudo || "Utilisateur"}</Text>
@@ -194,12 +193,6 @@ export default function FollowRequestsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-    loader: {
-        flex: 1,
-        backgroundColor: "#000",
-        justifyContent: "center",
-        alignItems: "center",
-    },
     container: {
         flex: 1,
         backgroundColor: "#000",
@@ -272,9 +265,7 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     declineBtn: {
-        backgroundColor: "#161616",
-        borderWidth: 1,
-        borderColor: "#2A2A2A",
+        backgroundColor: "#171A22",
     },
     acceptBtn: {
         backgroundColor: "#5E17EB",

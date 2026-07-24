@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import Note from "@/models/Note";
+import Notification from "@/models/Notification";
+import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +39,22 @@ export async function POST(req: Request, { params }: { params: { noteId: string 
         const currentLikes = Array.isArray((note as any).likes) ? (note as any).likes : [];
         const alreadyLiked = currentLikes.some((id: any) => String(id) === String(meId));
 
-        await Note.updateOne(
-            { _id: noteId },
-            alreadyLiked ? { $pull: { likes: meObjectId } } : { $addToSet: { likes: meObjectId } }
-        );
+        if (alreadyLiked) {
+            await Note.updateOne({ _id: noteId }, { $pull: { likes: meObjectId } });
+            await Notification.deleteOne({
+                type: "like_note",
+                recipientId: (note as any).userId,
+                actorId: meObjectId,
+            });
+        } else {
+            await Note.updateOne({ _id: noteId }, { $addToSet: { likes: meObjectId } });
+
+            await createNotification({
+                recipientId: String((note as any).userId),
+                actorId: String(meId),
+                type: "like_note",
+            });
+        }
 
         const fresh = await Note.findById(noteId).select("likes").lean();
         const likes = Array.isArray((fresh as any)?.likes) ? (fresh as any).likes : [];
