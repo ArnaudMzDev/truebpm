@@ -1,10 +1,12 @@
 import "@/lib/loadModels";
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { requireAdminRequest, writeAdminAuditLog } from "@/lib/adminAuth";
 import { cleanText } from "@/lib/sanitize";
 import { deleteUserCascade } from "@/lib/deleteUserCascade";
+import { PasswordSchema } from "@/lib/validators/auth";
 import User from "@/models/User";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +95,46 @@ export async function PATCH(req: Request, { params }: { params: { userId: string
                 targetType: "user",
                 targetId: userId,
                 reason,
+            });
+
+            return NextResponse.json({ success: true, user });
+        }
+
+        if (action === "reset_password") {
+            const newPassword =
+                typeof body?.newPassword === "string" ? body.newPassword.trim() : "";
+
+            if (!reason) {
+                return NextResponse.json({ error: "Raison de modification obligatoire." }, { status: 400 });
+            }
+
+            const parsedPassword = PasswordSchema.safeParse(newPassword);
+            if (!parsedPassword.success) {
+                return NextResponse.json(
+                    { error: parsedPassword.error.issues[0]?.message || "Mot de passe invalide." },
+                    { status: 400 }
+                );
+            }
+
+            const hashedPassword = await bcrypt.hash(newPassword, 12);
+            const user = await User.findByIdAndUpdate(
+                userId,
+                { $set: { password: hashedPassword } },
+                { new: true }
+            )
+                .select("_id pseudo email avatarUrl isBanned bannedAt bannedUntil banReason bannedBy")
+                .lean();
+
+            if (!user) return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
+
+            await writeAdminAuditLog({
+                req,
+                adminId: auth.session!.adminId,
+                action: "user_password_reset",
+                targetType: "user",
+                targetId: userId,
+                reason,
+                metadata: { pseudo: (user as any).pseudo || "", email: (user as any).email || "" },
             });
 
             return NextResponse.json({ success: true, user });

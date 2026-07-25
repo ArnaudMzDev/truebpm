@@ -213,6 +213,9 @@ export default function AdminDashboard() {
     const [selectedDeleteUser, setSelectedDeleteUser] = useState<AdminUser | null>(null);
     const [deleteUserReason, setDeleteUserReason] = useState("");
     const [deleteUserConfirmation, setDeleteUserConfirmation] = useState("");
+    const [selectedPasswordUser, setSelectedPasswordUser] = useState<AdminUser | null>(null);
+    const [newUserPassword, setNewUserPassword] = useState("");
+    const [passwordResetReason, setPasswordResetReason] = useState("");
     const [selectedPost, setSelectedPost] = useState<AdminPost | null>(null);
     const [deleteReason, setDeleteReason] = useState("");
     const [selectedSupport, setSelectedSupport] = useState<SupportTicket | null>(null);
@@ -424,6 +427,35 @@ export default function AdminDashboard() {
         setSelectedDeleteUser(user);
         setDeleteUserReason("");
         setDeleteUserConfirmation("");
+    }
+
+    function openPasswordModal(user: AdminUser) {
+        setSelectedPasswordUser(user);
+        setNewUserPassword("");
+        setPasswordResetReason("");
+    }
+
+    async function resetUserPassword() {
+        if (!selectedPasswordUser) return;
+        setBusy(true);
+        try {
+            await api(`/api/admin/users/${selectedPasswordUser._id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "reset_password",
+                    newPassword: newUserPassword,
+                    reason: passwordResetReason,
+                }),
+            });
+            setNotice(`Mot de passe modifié pour ${selectedPasswordUser.pseudo}.`);
+            setSelectedPasswordUser(null);
+            setNewUserPassword("");
+            setPasswordResetReason("");
+            await Promise.all([loadUsers(), loadAudit(), loadOverview()]);
+        } finally {
+            setBusy(false);
+        }
     }
 
     async function deleteUser() {
@@ -661,6 +693,9 @@ export default function AdminDashboard() {
                                         {user.isBanned && <span className={styles.dangerBadge}>banni</span>}
                                     </div>
                                     <div className={styles.rowActions}>
+                                        <button className={styles.secondaryButton} disabled={busy} onClick={() => openPasswordModal(user)}>
+                                            Mot de passe
+                                        </button>
                                         {user.isBanned ? (
                                             <button className={styles.secondaryButton} disabled={busy} onClick={() => unbanUser(user)}>Unban</button>
                                         ) : (
@@ -882,6 +917,48 @@ export default function AdminDashboard() {
                                 onClick={deleteUser}
                             >
                                 Supprimer définitivement
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedPasswordUser && (
+                <div className={styles.modalBackdrop}>
+                    <div className={styles.modal}>
+                        <h3>Modifier le mot de passe</h3>
+                        <p className={styles.muted}>
+                            Nouveau mot de passe pour {selectedPasswordUser.pseudo}. L&apos;action sera ajoutée au journal d&apos;audit.
+                        </p>
+                        <label className={styles.field}>
+                            <span>Nouveau mot de passe</span>
+                            <input
+                                type="password"
+                                value={newUserPassword}
+                                onChange={(event) => setNewUserPassword(event.target.value)}
+                                autoComplete="new-password"
+                                autoFocus
+                            />
+                        </label>
+                        <p className={styles.muted}>
+                            8 caractères minimum, avec une majuscule, un chiffre et un symbole.
+                        </p>
+                        <label className={styles.field}>
+                            <span>Raison admin</span>
+                            <textarea
+                                value={passwordResetReason}
+                                onChange={(event) => setPasswordResetReason(event.target.value)}
+                                maxLength={500}
+                            />
+                        </label>
+                        <div className={styles.modalActions}>
+                            <button className={styles.secondaryButton} onClick={() => setSelectedPasswordUser(null)}>Annuler</button>
+                            <button
+                                className={styles.primaryButton}
+                                disabled={busy || !newUserPassword.trim() || !passwordResetReason.trim()}
+                                onClick={resetUserPassword}
+                            >
+                                Enregistrer le mot de passe
                             </button>
                         </div>
                     </div>
