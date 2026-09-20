@@ -4,6 +4,8 @@ import Comment from "./Comment";
 import Conversation from "./Conversation";
 import Message from "./Message";
 import RevokedToken from "./RevokedToken";
+import PasswordResetToken from "./PasswordResetToken";
+import EmailVerificationToken from "./EmailVerificationToken";
 import Notification from "./Notification";
 import PushToken from "./PushToken";
 import AdminAuditLog from "./AdminAuditLog";
@@ -12,6 +14,7 @@ import Feedback from "./Feedback";
 import BlindTest from "./BlindTest";
 import BlindTestTrack from "./BlindTestTrack";
 import BlindTestSession from "./BlindTestSession";
+import BlindTestRoom from "./BlindTestRoom";
 
 export {
     User,
@@ -20,6 +23,8 @@ export {
     Conversation,
     Message,
     RevokedToken,
+    PasswordResetToken,
+    EmailVerificationToken,
     Notification,
     PushToken,
     AdminAuditLog,
@@ -28,4 +33,5 @@ export {
     BlindTest,
     BlindTestTrack,
     BlindTestSession,
+    BlindTestRoom,
 };

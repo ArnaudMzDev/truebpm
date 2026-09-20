@@ -291,9 +291,6 @@ export default function BlindTestGameScreen({ navigation, route }: any) {
                                                 </View>
                                             )}
                                             <View style={styles.optionCopy}>
-                                                <Text style={[styles.optionLetter, choice === option && styles.optionLetterSelected]}>
-                                                    {String.fromCharCode(65 + index)}
-                                                </Text>
                                                 <Text
                                                     style={[styles.optionText, choice === option && styles.optionTextSelected]}
                                                     numberOfLines={2}
@@ -474,9 +471,7 @@ const styles = StyleSheet.create({
     optionSelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
     optionArtwork: { width: 58, height: 58, flexShrink: 0, borderRadius: radius.md, backgroundColor: colors.surface3 },
     optionArtworkFallback: { width: 58, height: 58, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: colors.control },
-    optionCopy: { flex: 1, minWidth: 0, gap: 3 },
-    optionLetter: { color: colors.primary, fontSize: 10, fontWeight: fontWeights.black },
-    optionLetterSelected: { color: colors.accentMuted },
+    optionCopy: { flex: 1, minWidth: 0 },
     optionText: { color: colors.textSoft, fontSize: typography.bodySm, lineHeight: 17, fontWeight: fontWeights.extraBold },
     optionTextSelected: { color: colors.text },
     optionCheck: { position: "absolute", top: 6, right: 6, width: 22, height: 22, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, backgroundColor: colors.primaryDark },

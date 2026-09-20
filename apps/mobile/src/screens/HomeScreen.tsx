@@ -71,6 +71,13 @@ const SEEN_FOR_YOU_POSTS_KEY = "home_seen_for_you_posts";
 const MAX_SEEN_FOR_YOU_POSTS = 90;
 const EXCLUDED_FOR_YOU_POSTS = 70;
 
+function weeklyReleaseKey(date = new Date()) {
+    const utc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    const day = new Date(utc).getUTCDay();
+    const daysSinceFriday = (day + 2) % 7;
+    return new Date(utc - daysSinceFriday * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
@@ -203,7 +210,21 @@ function ReleasesBlock({
     onHorizontalTouchStart: () => void;
     onHorizontalTouchEnd: () => void;
 }) {
-    const hasItems = sections.some((section) => section.items.length > 0);
+    const items = useMemo(() => {
+        const byKey = new Map<string, ReleaseItem>();
+
+        sections
+            .flatMap((section) => section.items)
+            .forEach((item) => {
+                const key = item.id || `${item.type}:${item.title || item.name}:${item.artist || ""}`.toLowerCase();
+                if (!key || byKey.has(key)) return;
+                byKey.set(key, item);
+            });
+
+        return Array.from(byKey.values()).slice(0, 18);
+    }, [sections]);
+
+    const hasItems = items.length > 0;
     if (!loading && !hasItems) return null;
 
     return (
@@ -216,44 +237,31 @@ function ReleasesBlock({
             <View style={styles.releasesHeader}>
                 <Text style={styles.releaseEyebrow}>Vendredi sorties</Text>
                 <Text style={styles.releasesTitle}>Les nouveautés à noter</Text>
-                <Text style={styles.releasesSubtitle}>
-                    France et international, prêtes à passer en avis.
-                </Text>
             </View>
 
             {loading ? (
                 <AppSectionLoader />
             ) : (
-                sections.map((section) =>
-                    section.items.length > 0 ? (
-                        <View key={section.id} style={styles.releaseSection}>
-                            <View style={styles.releaseSectionHead}>
-                                <Text style={styles.releaseSectionTitle}>{section.title}</Text>
-                                <Text style={styles.releaseSectionSubtitle}>{section.subtitle}</Text>
-                            </View>
-                            <FlatList
-                                horizontal
-                                data={section.items}
-                                keyExtractor={(item, index) => `release:${section.id}:${item.type}:${item.id}:${index}`}
-                                renderItem={({ item }) => (
-                                    <ReleaseCard
-                                        item={item}
-                                        navigation={navigation}
-                                        isActive={isCurrentPreview(item)}
-                                        isPlaying={isPlaying}
-                                        onPlay={() => onPlay(item)}
-                                    />
-                                )}
-                                showsHorizontalScrollIndicator={false}
-                                nestedScrollEnabled
-                                contentContainerStyle={styles.releaseList}
-                                onScrollBeginDrag={onHorizontalTouchStart}
-                                onScrollEndDrag={onHorizontalTouchEnd}
-                                onMomentumScrollEnd={onHorizontalTouchEnd}
-                            />
-                        </View>
-                    ) : null
-                )
+                <FlatList
+                    horizontal
+                    data={items}
+                    keyExtractor={(item, index) => `release:global:${item.type}:${item.id}:${index}`}
+                    renderItem={({ item }) => (
+                        <ReleaseCard
+                            item={item}
+                            navigation={navigation}
+                            isActive={isCurrentPreview(item)}
+                            isPlaying={isPlaying}
+                            onPlay={() => onPlay(item)}
+                        />
+                    )}
+                    showsHorizontalScrollIndicator={false}
+                    nestedScrollEnabled
+                    contentContainerStyle={styles.releaseList}
+                    onScrollBeginDrag={onHorizontalTouchStart}
+                    onScrollEndDrag={onHorizontalTouchEnd}
+                    onMomentumScrollEnd={onHorizontalTouchEnd}
+                />
             )}
         </View>
     );
@@ -355,6 +363,7 @@ export default function HomeScreen({ navigation }: any) {
     const [followLoadingMap, setFollowLoadingMap] = useState<Record<string, boolean>>({});
     const [releaseSections, setReleaseSections] = useState<ReleaseSection[]>([]);
     const [loadingReleases, setLoadingReleases] = useState(false);
+    const releaseRefreshRef = useRef(0);
 
     const didInit = useRef(false);
     const lastFeedRef = useRef<HomeFeed>("forYou");
@@ -492,7 +501,12 @@ export default function HomeScreen({ navigation }: any) {
     const fetchReleases = useCallback(async () => {
         try {
             setLoadingReleases(true);
-            const res = await fetch(`${API_URL}/api/search/apple?mode=releases`);
+            releaseRefreshRef.current += 1;
+            const params = new URLSearchParams({
+                mode: "releases",
+                seed: `${weeklyReleaseKey()}:${releaseRefreshRef.current}`,
+            });
+            const res = await fetch(`${API_URL}/api/search/apple?${params.toString()}`);
             const json = await safeJson(res);
 
             if (!res.ok || !Array.isArray(json?.sections)) {
@@ -1168,35 +1182,6 @@ const styles = StyleSheet.create({
         color: colors.text,
         fontSize: 20,
         fontWeight: fontWeights.black,
-    },
-
-    releasesSubtitle: {
-        color: colors.textMuted,
-        fontSize: typography.bodySm,
-        lineHeight: 18,
-        marginTop: 4,
-    },
-
-    releaseSection: {
-        marginTop: spacing.md,
-    },
-
-    releaseSectionHead: {
-        paddingHorizontal: spacing.xs,
-        marginBottom: spacing.sm,
-    },
-
-    releaseSectionTitle: {
-        color: colors.text,
-        fontSize: typography.body,
-        fontWeight: fontWeights.black,
-    },
-
-    releaseSectionSubtitle: {
-        color: colors.textMuted,
-        fontSize: typography.caption,
-        fontWeight: fontWeights.medium,
-        marginTop: 3,
     },
 
     releaseList: {

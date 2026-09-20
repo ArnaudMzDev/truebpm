@@ -12,6 +12,7 @@ import { io, Socket } from "socket.io-client";
 import SplashScreen from "./src/screens/SplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
+import EmailVerificationScreen from "./src/screens/EmailVerificationScreen";
 import ProfileSetupScreen from "./src/screens/ProfileSetupScreen";
 import AppDiscoveryScreen from "./src/screens/AppDiscoveryScreen";
 
@@ -36,6 +37,7 @@ import ArtistDetailScreen from "./src/screens/ArtistDetailScreen";
 import ArtistReleaseListScreen from "./src/screens/ArtistReleaseListScreen";
 import CreateNoteScreen from "./src/screens/CreateNoteScreen";
 import BlindTestHomeScreen from "./src/screens/BlindTestHomeScreen";
+import BlindTestLobbyScreen from "./src/screens/BlindTestLobbyScreen";
 import BlindTestGameScreen from "./src/screens/BlindTestGameScreen";
 import BlindTestResultScreen from "./src/screens/BlindTestResultScreen";
 
@@ -115,6 +117,7 @@ function HomeNavigator() {
             <HomeStack.Screen name="CreatePost" component={CreatePostScreen as any} />
             <HomeStack.Screen name="CreateNote" component={CreateNoteScreen} />
             <HomeStack.Screen name="BlindTestHome" component={BlindTestHomeScreen} />
+            <HomeStack.Screen name="BlindTestLobby" component={BlindTestLobbyScreen} />
             <HomeStack.Screen name="BlindTestGame" component={BlindTestGameScreen} />
             <HomeStack.Screen name="BlindTestResult" component={BlindTestResultScreen} />
         </HomeStack.Navigator>
@@ -369,6 +372,11 @@ function MainTabs() {
                 name="SearchTab"
                 component={SearchNavigator}
                 options={{ title: "Recherche" }}
+                listeners={({ navigation }) => ({
+                    tabPress: () => {
+                        navigation.navigate("SearchTab", { screen: "ExploreIndex" });
+                    },
+                })}
             />
 
             <Tabs.Screen
@@ -380,7 +388,7 @@ function MainTabs() {
                         e.preventDefault();
                         navigation.navigate("SearchTab", {
                             screen: "MusicSearch",
-                            params: { mode: "pickTrack" },
+                            params: { mode: "pickTrack", returnToSearchIndex: true },
                         });
                     },
                 })}
@@ -530,6 +538,7 @@ export default function App() {
                             <RootStack.Screen name="Splash" component={SplashScreen} />
                             <RootStack.Screen name="Login" component={LoginScreen} />
                             <RootStack.Screen name="Register" component={RegisterScreen} />
+                            <RootStack.Screen name="EmailVerification" component={EmailVerificationScreen} />
                             <RootStack.Screen name="Legal" component={LegalScreen} />
                             <RootStack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
                             <RootStack.Screen name="AppDiscovery" component={AppDiscoveryScreen} />

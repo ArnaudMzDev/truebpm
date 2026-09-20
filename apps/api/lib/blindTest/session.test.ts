@@ -35,3 +35,24 @@ test("les choix QCM gardent leur artwork aligné avec leur libellé", () => {
         assert.equal(round.optionArtworks[index], expectedArtwork.get(option));
     });
 });
+
+test("le mode mixte répartit les manches entre QCM et réponses libres", () => {
+    const tracks = Array.from({ length: 10 }, (_, index) => ({
+        _id: String(index + 1),
+        title: `Titre ${index + 1}`,
+        artist: `Artiste ${index + 1}`,
+        artworkUrl: `cover-${index + 1}`,
+    }));
+
+    const rounds = buildRounds(tracks, "mixed", "mixed", tracks);
+    const qcmRounds = rounds.filter((round) => round.questionType.startsWith("qcm-"));
+    const freeRounds = rounds.filter((round) => !round.questionType.startsWith("qcm-"));
+    const askedKinds = new Set(rounds.map((round) => round.questionType.replace("qcm-", "")));
+
+    assert.equal(rounds.length, 10);
+    assert.equal(qcmRounds.length, 4);
+    assert.equal(freeRounds.length, 6);
+    assert.ok(askedKinds.has("title"));
+    assert.ok(askedKinds.has("artist"));
+    assert.ok(askedKinds.has("both"));
+});

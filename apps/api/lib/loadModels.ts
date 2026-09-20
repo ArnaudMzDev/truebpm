@@ -4,6 +4,8 @@ import "@/models/Comment";
 import "@/models/Conversation";
 import "@/models/Message";
 import "@/models/RevokedToken";
+import "@/models/PasswordResetToken";
+import "@/models/EmailVerificationToken";
 import "@/models/Notification";
 import "@/models/ArtistRelease";
 import "@/models/PushToken";
@@ -14,5 +16,6 @@ import "@/models/Feedback";
 import "@/models/BlindTest";
 import "@/models/BlindTestTrack";
 import "@/models/BlindTestSession";
+import "@/models/BlindTestRoom";
 
 export {};

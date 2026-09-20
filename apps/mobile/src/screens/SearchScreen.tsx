@@ -104,6 +104,13 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
     return debounced;
 }
 
+function weeklyReleaseKey(date = new Date()) {
+    const utc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    const day = new Date(utc).getUTCDay();
+    const daysSinceFriday = (day + 2) % 7;
+    return new Date(utc - daysSinceFriday * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function normalizeToProfileMusic(item: AnyItem) {
     if (item.type === "song") {
         return {
@@ -151,6 +158,7 @@ function recognizedToSongItem(track: RecognizedTrack): SongItem {
 export default function SearchScreen({ navigation, route }: any) {
     const mode: "pickTrack" | "pickProfileMusic" | "pickNoteTrack" =
         route?.params?.mode || "pickTrack";
+    const returnToSearchIndex = route?.params?.returnToSearchIndex === true;
 
     const kind: PickProfileKind | undefined = route?.params?.kind;
 
@@ -175,6 +183,7 @@ export default function SearchScreen({ navigation, route }: any) {
     const [recognitionResult, setRecognitionResult] = useState<RecognizedTrack | null>(null);
     const [recognitionError, setRecognitionError] = useState("");
     const lastRequestKey = useRef("");
+    const releaseRefreshRef = useRef(0);
     const { playPreview, togglePlay, isPlaying, currentTrack } = usePlayer();
 
     const typeCopy = useMemo(() => {
@@ -200,7 +209,12 @@ export default function SearchScreen({ navigation, route }: any) {
     const loadReleaseSections = useCallback(async () => {
         try {
             setLoadingReleases(true);
-            const res = await fetch(`${API_URL}/api/search/apple?mode=releases`);
+            releaseRefreshRef.current += 1;
+            const params = new URLSearchParams({
+                mode: "releases",
+                seed: `${weeklyReleaseKey()}:search:${releaseRefreshRef.current}`,
+            });
+            const res = await fetch(`${API_URL}/api/search/apple?${params.toString()}`);
             const json = await safeJson(res);
             if (!res.ok || !Array.isArray(json?.sections)) {
                 console.log("Apple releases error:", res.status, json);
@@ -608,7 +622,9 @@ export default function SearchScreen({ navigation, route }: any) {
                         <View key={section.id} style={styles.releaseSection}>
                             <View style={styles.releaseSectionHead}>
                                 <Text style={styles.releaseSectionTitle}>{section.title}</Text>
-                                <Text style={styles.releaseSectionSubtitle}>{section.subtitle}</Text>
+                                {section.subtitle ? (
+                                    <Text style={styles.releaseSectionSubtitle}>{section.subtitle}</Text>
+                                ) : null}
                             </View>
                             <FlatList
                                 horizontal
@@ -645,6 +661,14 @@ export default function SearchScreen({ navigation, route }: any) {
                 : "Rechercher";
 
     const canGoBack = typeof navigation?.canGoBack === "function" && navigation.canGoBack();
+    const handleBack = useCallback(() => {
+        if (returnToSearchIndex && typeof navigation?.popToTop === "function") {
+            navigation.popToTop();
+            return;
+        }
+
+        navigation.goBack();
+    }, [navigation, returnToSearchIndex]);
 
     return (
         <AppScreen>
@@ -654,7 +678,7 @@ export default function SearchScreen({ navigation, route }: any) {
                 left={
                     canGoBack ? (
                         <TouchableOpacity
-                            onPress={() => navigation.goBack()}
+                            onPress={handleBack}
                             style={styles.headerBackButton}
                             activeOpacity={0.85}
                         >

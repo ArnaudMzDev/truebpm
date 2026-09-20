@@ -31,6 +31,31 @@ const NotificationSettingsSchema = new Schema(
     { _id: false }
 );
 
+const OAuthAccountSchema = new Schema(
+    {
+        provider: {
+            type: String,
+            enum: ["apple", "google"],
+            required: true,
+        },
+        providerId: {
+            type: String,
+            required: true,
+        },
+        email: {
+            type: String,
+            default: "",
+            trim: true,
+            lowercase: true,
+        },
+        linkedAt: {
+            type: Date,
+            default: Date.now,
+        },
+    },
+    { _id: false }
+);
+
 const UserSchema = new Schema(
     {
         pseudo: {
@@ -54,6 +79,39 @@ const UserSchema = new Schema(
         password: {
             type: String,
             required: true,
+        },
+
+        sessionVersion: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        passwordChangedAt: {
+            type: Date,
+            default: null,
+        },
+
+        emailVerifiedAt: {
+            type: Date,
+            default: null,
+        },
+
+        oauthAccounts: {
+            type: [OAuthAccountSchema],
+            default: [],
+        },
+
+        loginFailedCount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        loginLockedUntil: {
+            type: Date,
+            default: null,
+            index: true,
         },
 
         avatarUrl: {
@@ -196,6 +254,11 @@ const UserSchema = new Schema(
         },
     },
     { timestamps: true }
+);
+
+UserSchema.index(
+    { "oauthAccounts.provider": 1, "oauthAccounts.providerId": 1 },
+    { name: "oauth_account_lookup", sparse: true }
 );
 
 UserSchema.index(

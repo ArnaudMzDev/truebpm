@@ -7,6 +7,7 @@ import { connectDB } from "@/lib/db";
 import Comment from "@/models/Comment";
 import mongoose from "mongoose";
 import { getOptionalUserId } from "@/lib/requestAuth";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 
 export async function GET(req: Request, { params }: { params: { commentId: string } }) {
@@ -21,15 +22,21 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
         }
 
         const { searchParams } = new URL(req.url);
-        const limit = Math.min(Number(searchParams.get("limit") || 10), 50);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 10,
+            maxLimit: 50,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = {
             rootId: commentId,
             parentId: { $ne: null }, // exclut le commentaire racine
         };
 
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+        if (cursor) {
             query._id = { $lt: cursor };
         }
 
@@ -43,14 +50,10 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
             .populate("replyToUserId", "pseudo")
             .lean();
 
-        let nextCursor: string | null = null;
-        if (items.length > limit) {
-            const next = items.pop();
-            nextCursor = next?._id?.toString() ?? null;
-        }
+        const page = paginateSlice(items, limit, (item: any) => item?._id?.toString?.());
 
         // ✅ likedByMe + likesCount
-        const replies = items.map((r: any) => {
+        const replies = page.data.map((r: any) => {
             const likesArr = Array.isArray(r.likes) ? r.likes : [];
             const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
 
@@ -61,7 +64,7 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
             return { ...rest, likesCount, likedByMe };
         });
 
-        return NextResponse.json({ replies, nextCursor }, { status: 200 });
+        return pageResponse({ replies }, { ...page.pageInfo, count: replies.length }, { status: 200 });
     } catch (e) {
         console.error("❌ GET thread error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

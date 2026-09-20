@@ -8,7 +8,7 @@ import { cleanHttpUrl, cleanMultilineText, cleanText } from "@/lib/sanitize";
 export const dynamic = "force-dynamic";
 
 const SELECT_USER =
-    "_id pseudo email bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy";
+    "_id pseudo email emailVerifiedAt bio avatarUrl bannerUrl followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy";
 
 function normalizeMusicRef(input: any, expectedType?: "song" | "album" | "artist") {
     if (!input || typeof input !== "object") return null;

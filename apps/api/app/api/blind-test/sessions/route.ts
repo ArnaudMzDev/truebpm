@@ -6,6 +6,7 @@ import { ensureOfficialBlindTests, getPlayableTracks } from "@/lib/blindTest/cat
 import { buildRounds, parseGameRules, roundTimes, serializeSession } from "@/lib/blindTest/session";
 import BlindTest from "@/models/BlindTest";
 import BlindTestSession from "@/models/BlindTestSession";
+import BlindTestTrack from "@/models/BlindTestTrack";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +42,32 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Nombre de manches non pris en charge." }, { status: 400 });
         }
 
-        const tracks = await getPlayableTracks(blindTest, rules.roundCount);
-        const rounds = buildRounds(tracks, rules.answerMode, rules.target);
+        const recentSessions = await BlindTestSession.find({
+            userId,
+            status: { $in: ["active", "completed", "abandoned"] },
+            createdAt: { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) },
+        })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .select("rounds.trackId")
+            .lean();
+        const recentlyPlayedTrackIds = recentSessions
+            .flatMap((session: any) => Array.isArray(session.rounds) ? session.rounds : [])
+            .map((round: any) => String(round?.trackId || ""))
+            .filter(Boolean);
+        const recentTracks = recentlyPlayedTrackIds.length
+            ? await BlindTestTrack.find({ _id: { $in: recentlyPlayedTrackIds } }).select("artist").lean()
+            : [];
+        const recentlyPlayedArtists = recentTracks
+            .map((track: any) => String(track?.artist || "").trim())
+            .filter(Boolean);
+        const trackPool = await getPlayableTracks(blindTest, rules.roundCount, {
+            poolSize: Math.max(32, rules.roundCount * 5),
+            excludedTrackIds: recentlyPlayedTrackIds,
+            excludedArtistNames: recentlyPlayedArtists,
+        });
+        const tracks = trackPool.slice(0, rules.roundCount);
+        const rounds = buildRounds(tracks, rules.answerMode, rules.target, trackPool);
         const firstRoundTimes = roundTimes(rules.roundDurationMs);
         rounds[0] = { ...rounds[0], ...firstRoundTimes };
 

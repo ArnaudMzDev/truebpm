@@ -46,31 +46,6 @@ type MusicRef = {
 type ProfileTab = "posts" | "reposts" | "likes";
 type FollowStatus = "self" | "none" | "requested" | "following";
 
-type Compatibility = {
-    locked?: boolean;
-    score?: number;
-    sharedEntities?: Array<{
-        key: string;
-        title: string;
-        artist: string;
-        coverUrl?: string | null;
-        myRating: number;
-        theirRating: number;
-        diff: number;
-    }>;
-    sharedArtists?: string[];
-    sharedFavorites?: number;
-    agreements?: number;
-    disagreements?: Array<{
-        key: string;
-        title: string;
-        artist: string;
-        myRating: number;
-        theirRating: number;
-        diff: number;
-    }>;
-};
-
 async function safeJson(res: Response): Promise<any | null> {
     const text = await res.text();
     if (!text) return null;
@@ -235,7 +210,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
     const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
     const [requestActionLoading, setRequestActionLoading] = useState(false);
     const [muteNotificationsLoading, setMuteNotificationsLoading] = useState(false);
-    const [compatibility, setCompatibility] = useState<Compatibility | null>(null);
 
     const LIMIT = 15;
 
@@ -300,32 +274,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
         setPendingRequestId(match?._id ? String(match._id) : null);
     }, [isSelf, userId]);
 
-    const fetchCompatibility = useCallback(async () => {
-        if (isSelf) {
-            setCompatibility(null);
-            return;
-        }
-
-        const token = await getStoredToken();
-        if (!token) {
-            setCompatibility(null);
-            return;
-        }
-
-        const res = await fetch(`${API_URL}/api/user/${userId}/compatibility`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = await safeJson(res);
-
-        if (!res.ok) {
-            console.log("fetchCompatibility error:", res.status, json);
-            setCompatibility(null);
-            return;
-        }
-
-        setCompatibility(json?.compatibility || null);
-    }, [isSelf, userId]);
-
     const fetchTabPosts = useCallback(async (uid: string, tab: ProfileTab) => {
         const token = await getStoredToken();
 
@@ -354,11 +302,10 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 fetchUser(),
                 fetchTabPosts(userId, activeTab),
                 fetchPendingRequestForProfile(),
-                fetchCompatibility(),
             ]);
             setLoadingInitial(false);
         })();
-    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, fetchCompatibility, userId, activeTab]);
+    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, userId, activeTab]);
 
     useEffect(() => {
         if (!userId) return;
@@ -372,11 +319,10 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     fetchUser(),
                     fetchTabPosts(userId, activeTab),
                     fetchPendingRequestForProfile(),
-                    fetchCompatibility(),
                     refreshMe(),
                 ]);
             })();
-        }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, fetchCompatibility, refreshMe, userId, activeTab])
+        }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, refreshMe, userId, activeTab])
     );
 
     useEffect(() => {
@@ -436,11 +382,10 @@ export default function UserProfileScreen({ route, navigation }: any) {
             fetchUser(),
             fetchTabPosts(userId, activeTab),
             fetchPendingRequestForProfile(),
-            fetchCompatibility(),
             refreshMe(),
         ]);
         setRefreshing(false);
-    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, fetchCompatibility, refreshMe, userId, activeTab]);
+    }, [fetchUser, fetchTabPosts, fetchPendingRequestForProfile, refreshMe, userId, activeTab]);
 
     const handleFollowToggle = useCallback(async () => {
         if (isSelf || followLoading) return;
@@ -486,7 +431,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
             await Promise.all([
                 fetchTabPosts(userId, activeTab),
                 fetchPendingRequestForProfile(),
-                fetchCompatibility(),
                 refreshMe(),
             ]);
         } finally {
@@ -500,7 +444,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
         fetchTabPosts,
         activeTab,
         fetchPendingRequestForProfile,
-        fetchCompatibility,
         refreshMe,
     ]);
 
@@ -540,7 +483,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     fetchUser(),
                     fetchTabPosts(userId, activeTab),
                     fetchPendingRequestForProfile(),
-                    fetchCompatibility(),
                     refreshMe(),
                 ]);
 
@@ -557,7 +499,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
             fetchUser,
             fetchTabPosts,
             fetchPendingRequestForProfile,
-            fetchCompatibility,
             refreshMe,
             userId,
             activeTab,
@@ -843,51 +784,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
                     <Text style={styles.statLabel}>Notes</Text>
                 </View>
             </View>
-
-            {!isSelf && compatibility && !compatibility.locked ? (
-                <View style={styles.compatCard}>
-                    <View style={styles.compatTopRow}>
-                        <View style={styles.compatScoreWrap}>
-                            <Text style={styles.compatScore}>{compatibility.score || 0}</Text>
-                            <Text style={styles.compatScoreMax}>%</Text>
-                        </View>
-
-                        <View style={styles.compatCopy}>
-                            <Text style={styles.compatEyebrow}>Compatibilité musicale</Text>
-                            <Text style={styles.compatTitle}>
-                                {(compatibility.score || 0) >= 70
-                                    ? "Vous êtes sur la même longueur d’onde."
-                                    : (compatibility.score || 0) >= 45
-                                        ? "Il y a de quoi comparer vos goûts."
-                                        : "Vos goûts risquent de débattre."}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {compatibility.sharedArtists?.length ? (
-                        <Text style={styles.compatMeta} numberOfLines={2}>
-                            En commun : {compatibility.sharedArtists.slice(0, 3).join(", ")}
-                        </Text>
-                    ) : compatibility.sharedEntities?.length ? (
-                        <Text style={styles.compatMeta} numberOfLines={2}>
-                            Vous avez déjà noté {compatibility.sharedEntities.length} même son.
-                        </Text>
-                    ) : (
-                        <Text style={styles.compatMeta}>
-                            Note plus de sons pour affiner la comparaison.
-                        </Text>
-                    )}
-
-                    {compatibility.disagreements?.length ? (
-                        <View style={styles.compatDebateRow}>
-                            <Ionicons name="flash-outline" size={13} color={colors.warning} />
-                            <Text style={styles.compatDebateText} numberOfLines={1}>
-                                Désaccord sur {compatibility.disagreements[0].title}
-                            </Text>
-                        </View>
-                    ) : null}
-                </View>
-            ) : null}
 
             {!isSelf && pendingRequestId ? (
                 <View style={styles.requestCard}>
@@ -1345,88 +1241,6 @@ const styles = StyleSheet.create({
         fontSize: typography.caption,
         marginTop: 4,
         fontWeight: fontWeights.medium,
-    },
-
-    compatCard: {
-        marginHorizontal: 16,
-        marginTop: spacing.md,
-        borderRadius: radius.xxl,
-        padding: spacing.md,
-        backgroundColor: colors.surfaceFeed,
-    },
-
-    compatTopRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.md,
-    },
-
-    compatScoreWrap: {
-        width: 62,
-        height: 62,
-        borderRadius: 31,
-        backgroundColor: colors.primarySoft,
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "center",
-        paddingBottom: 13,
-    },
-
-    compatScore: {
-        color: colors.text,
-        fontSize: 24,
-        lineHeight: 27,
-        fontWeight: fontWeights.black,
-    },
-
-    compatScoreMax: {
-        color: colors.primary,
-        fontSize: 13,
-        lineHeight: 18,
-        fontWeight: fontWeights.black,
-    },
-
-    compatCopy: {
-        flex: 1,
-        minWidth: 0,
-    },
-
-    compatEyebrow: {
-        color: colors.primary,
-        fontSize: typography.tiny,
-        fontWeight: fontWeights.black,
-        textTransform: "uppercase",
-        letterSpacing: 1.2,
-        marginBottom: 4,
-    },
-
-    compatTitle: {
-        color: colors.text,
-        fontSize: typography.bodySm,
-        lineHeight: 19,
-        fontWeight: fontWeights.black,
-    },
-
-    compatMeta: {
-        color: colors.textMuted,
-        fontSize: typography.caption,
-        lineHeight: 18,
-        marginTop: spacing.sm,
-        fontWeight: fontWeights.bold,
-    },
-
-    compatDebateRow: {
-        marginTop: spacing.sm,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-    },
-
-    compatDebateText: {
-        flex: 1,
-        color: colors.textSoft,
-        fontSize: typography.caption,
-        fontWeight: fontWeights.extraBold,
     },
 
     actionsRow: {

@@ -5,6 +5,7 @@ import Post from "@/models/Post";
 import User from "@/models/User";
 import mongoose from "mongoose";
 import { getOptionalUserId } from "@/lib/requestAuth";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -86,16 +87,22 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
         const { searchParams } = new URL(req.url);
         const tab = (searchParams.get("tab") || "posts") as Tab;
-        const limit = Math.min(Number(searchParams.get("limit") || 15), 50);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 15,
+            maxLimit: 50,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         if (isPrivateLocked) {
-            return NextResponse.json(
+            return pageResponse(
                 {
                     posts: [],
-                    nextCursor: null,
                     isPrivateLocked: true,
                 },
+                { nextCursor: null, hasMore: false, limit, count: 0 },
                 { status: 200 }
             );
         }
@@ -113,8 +120,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             query.type = "post";
         }
 
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            query._id = { $lt: toObjectId(cursor) };
+        if (cursor) {
+            query._id = { $lt: cursor };
         }
 
         const me =
@@ -133,13 +140,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             })
             .lean();
 
-        let nextCursor: string | null = null;
-        if (docs.length > limit) {
-            const nextItem = docs.pop();
-            nextCursor = nextItem?._id?.toString?.() ?? null;
-        }
+        const page = paginateSlice(docs, limit, (item: any) => item?._id?.toString?.());
 
-        const posts = docs.map((p: any) => {
+        const posts = page.data.map((p: any) => {
             const isRepost = p.type === "repost" && p.repostOf;
             const base = normalizeBasePost(isRepost ? p.repostOf : p);
 
@@ -243,12 +246,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             };
         });
 
-        return NextResponse.json(
+        return pageResponse(
             {
                 posts,
-                nextCursor,
                 isPrivateLocked: false,
             },
+            { ...page.pageInfo, count: posts.length },
             { status: 200 }
         );
     } catch (err) {

@@ -6,6 +6,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,8 +20,10 @@ import {
     BlindTestAnswerMode,
     BlindTestCategory,
     BlindTestDifficulty,
+    createBlindTestRoom,
     getBlindTestCatalog,
     getBlindTestLeaderboard,
+    joinBlindTestRoom,
     startBlindTest,
 } from "../lib/blindTestApi";
 import { colors, fontWeights, radius, spacing, typography } from "../theme";
@@ -76,6 +79,8 @@ export default function BlindTestHomeScreen({ navigation }: any) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [starting, setStarting] = useState(false);
+    const [roomBusy, setRoomBusy] = useState<"create" | "join" | null>(null);
+    const [joinCode, setJoinCode] = useState("");
     const [error, setError] = useState("");
 
     const load = useCallback(async (refresh = false) => {
@@ -142,6 +147,44 @@ export default function BlindTestHomeScreen({ navigation }: any) {
         }
     }, [answerMode, difficulty, navigation, roundCount, selectedCategory, starting]);
 
+    const createRoom = useCallback(async () => {
+        if (!selectedCategory || roomBusy) return;
+        setRoomBusy("create");
+        setError("");
+        try {
+            const response = await createBlindTestRoom({
+                blindTestId: selectedCategory.slug,
+                roundCount,
+                difficulty,
+                answerMode,
+                target: answerMode === "free" ? "both" : "mixed",
+                maxPlayers: 6,
+                playMode: "casual",
+            });
+            navigation.navigate("BlindTestLobby", { code: response.room.code });
+        } catch (roomError: any) {
+            setError(roomError?.message || "Impossible de créer le salon.");
+        } finally {
+            setRoomBusy(null);
+        }
+    }, [answerMode, difficulty, navigation, roomBusy, roundCount, selectedCategory]);
+
+    const joinRoom = useCallback(async () => {
+        const code = joinCode.trim().toUpperCase();
+        if (code.length < 4 || roomBusy) return;
+        setRoomBusy("join");
+        setError("");
+        try {
+            const response = await joinBlindTestRoom(code);
+            setJoinCode("");
+            navigation.navigate("BlindTestLobby", { code: response.room.code });
+        } catch (roomError: any) {
+            setError(roomError?.message || "Impossible de rejoindre le salon.");
+        } finally {
+            setRoomBusy(null);
+        }
+    }, [joinCode, navigation, roomBusy]);
+
     if (loading && !catalog) return <AppScreenLoader label="Préparation des blind tests..." />;
 
     return (
@@ -185,6 +228,54 @@ export default function BlindTestHomeScreen({ navigation }: any) {
                         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                     </Pressable>
                 ) : null}
+
+                <View style={styles.section}>
+                    <StepTitle number="00" title="Salon privé" detail="Invite tes potes, chacun se met prêt, puis l’hôte lance la partie." />
+                    <View style={styles.roomPanel}>
+                        <View style={styles.roomHeader}>
+                            <View style={styles.roomIcon}>
+                                <Ionicons name="people-outline" size={22} color={colors.primary} />
+                            </View>
+                            <View style={styles.flexCopy}>
+                                <Text style={styles.roomTitle}>Jouer à plusieurs</Text>
+                                <Text style={styles.roomMeta}>
+                                    2 à 8 joueurs · code court · lobby en direct
+                                </Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.roomActions}>
+                            <AppButton
+                                label={roomBusy === "create" ? "Création..." : "Créer un salon"}
+                                loading={roomBusy === "create"}
+                                disabled={!selectedCategory || roomBusy === "join"}
+                                onPress={createRoom}
+                                style={styles.roomButton}
+                            />
+                            <View style={styles.joinRow}>
+                                <TextInput
+                                    value={joinCode}
+                                    onChangeText={(value) => setJoinCode(value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                                    placeholder="CODE"
+                                    placeholderTextColor={colors.textFaint}
+                                    autoCapitalize="characters"
+                                    autoCorrect={false}
+                                    style={styles.joinInput}
+                                    returnKeyType="go"
+                                    onSubmitEditing={joinRoom}
+                                />
+                                <AppButton
+                                    label="Rejoindre"
+                                    variant="secondary"
+                                    loading={roomBusy === "join"}
+                                    disabled={joinCode.trim().length < 4 || roomBusy === "create"}
+                                    onPress={joinRoom}
+                                    style={styles.joinButton}
+                                />
+                            </View>
+                        </View>
+                    </View>
+                </View>
 
                 <View style={styles.section}>
                     <StepTitle number="01" title="Choisis ton terrain" detail="Une ambiance, une cover, puis à toi de reconnaître les morceaux." />
@@ -413,6 +504,16 @@ const styles = StyleSheet.create({
     resumeTitle: { marginTop: 3, color: colors.text, fontSize: typography.body, fontWeight: fontWeights.extraBold },
     resumeCount: { color: colors.textSoft, fontSize: typography.bodySm, fontWeight: fontWeights.black, fontVariant: ["tabular-nums"] },
     section: { gap: spacing.lg },
+    roomPanel: { gap: spacing.md, padding: spacing.md, borderRadius: radius.xxl, backgroundColor: colors.surfaceFeed, borderWidth: 1, borderColor: colors.border },
+    roomHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+    roomIcon: { width: 48, height: 48, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryFaint },
+    roomTitle: { color: colors.text, fontSize: typography.subtitle, fontWeight: fontWeights.black },
+    roomMeta: { marginTop: 3, color: colors.textMuted, fontSize: typography.caption, fontWeight: fontWeights.medium },
+    roomActions: { gap: spacing.sm },
+    roomButton: { width: "100%" },
+    joinRow: { flexDirection: "row", gap: spacing.sm },
+    joinInput: { flex: 1, minHeight: 48, borderRadius: radius.md, paddingHorizontal: spacing.md, color: colors.text, fontSize: typography.body, fontWeight: fontWeights.black, letterSpacing: 2.5, backgroundColor: colors.surfaceRaised },
+    joinButton: { minWidth: 116 },
     stepHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
     stepNumber: { width: 32, color: colors.primary, fontSize: typography.caption, fontWeight: fontWeights.black, fontVariant: ["tabular-nums"] },
     stepCopy: { flex: 1, gap: 3 },

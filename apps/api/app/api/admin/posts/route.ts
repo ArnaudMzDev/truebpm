@@ -3,17 +3,12 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAdminRequest } from "@/lib/adminAuth";
 import Post from "@/models/Post";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
 function escapeRegex(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function clampLimit(value: string | null) {
-    const n = Number(value || 30);
-    if (!Number.isFinite(n)) return 30;
-    return Math.max(10, Math.min(100, Math.floor(n)));
 }
 
 export async function GET(req: Request) {
@@ -26,8 +21,15 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const q = (searchParams.get("q") || "").trim();
         const type = searchParams.get("type") || "all";
-        const limit = clampLimit(searchParams.get("limit"));
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 30,
+            maxLimit: 100,
+            minLimit: 10,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = {};
         if (q) {
@@ -49,13 +51,9 @@ export async function GET(req: Request) {
             })
             .lean();
 
-        let nextCursor: string | null = null;
-        if (rows.length > limit) {
-            const next = rows.pop();
-            nextCursor = next?._id?.toString?.() || null;
-        }
+        const page = paginateSlice(rows, limit, (item: any) => item?._id?.toString?.());
 
-        return NextResponse.json({ posts: rows, nextCursor });
+        return pageResponse({ posts: page.data }, page.pageInfo);
     } catch (e) {
         console.error("GET /api/admin/posts error:", e);
         return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });

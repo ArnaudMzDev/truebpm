@@ -8,6 +8,7 @@ import Message from "@/models/Message";
 import User from "@/models/User";
 import { sendPushToUser } from "@/lib/push";
 import { cleanHttpUrl, cleanMultilineText } from "@/lib/sanitize";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -38,12 +39,18 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
         const { searchParams } = new URL(req.url);
-        const limit = Math.min(Number(searchParams.get("limit") || 30), 60);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 30,
+            maxLimit: 60,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const q: any = { conversationId: new mongoose.Types.ObjectId(conversationId) };
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            q._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+        if (cursor) {
+            q._id = { $lt: cursor };
         }
 
         const docs: any[] = await Message.find(q)
@@ -61,13 +68,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             })
             .lean();
 
-        let nextCursor: string | null = null;
-        if (docs.length > limit) {
-            const nextItem = docs.pop();
-            nextCursor = nextItem?._id?.toString?.() ?? null;
-        }
+        const page = paginateSlice(docs, limit, (item: any) => item?._id?.toString?.());
 
-        return NextResponse.json({ messages: docs, nextCursor }, { status: 200 });
+        return pageResponse({ messages: page.data }, page.pageInfo, { status: 200 });
     } catch (e) {
         console.error("❌ GET /api/conversations/[id]/messages error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

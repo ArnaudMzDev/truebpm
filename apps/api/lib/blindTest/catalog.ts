@@ -307,8 +307,25 @@ async function refreshTrackPool(blindTest: any, wanted: number) {
     }
 }
 
-export async function getPlayableTracks(blindTest: any, roundCount: number) {
+export async function getPlayableTracks(
+    blindTest: any,
+    roundCount: number,
+    options: {
+        poolSize?: number;
+        excludedTrackIds?: string[];
+        excludedArtistNames?: string[];
+    } = {}
+) {
     const freshAfter = new Date(Date.now() - TRACK_FRESHNESS_MS);
+    const poolSize = options.poolSize ?? roundCount;
+    const wantedPoolSize = Math.max(roundCount, poolSize);
+    const excludedTrackIds = new Set((options.excludedTrackIds || []).map(String));
+    const excludedArtistNames = new Set(
+        (options.excludedArtistNames || [])
+            .map((artist) => artist.trim().toLowerCase())
+            .filter(Boolean)
+    );
+
     let tracks = await BlindTestTrack.find({
         available: true,
         sourceCategories: blindTest.slug,
@@ -317,8 +334,8 @@ export async function getPlayableTracks(blindTest: any, roundCount: number) {
         .limit(100)
         .lean();
 
-    if (tracks.length < roundCount) {
-        await refreshTrackPool(blindTest, Math.min(80, Math.max(roundCount + 8, roundCount * 2)));
+    if (tracks.length < wantedPoolSize) {
+        await refreshTrackPool(blindTest, Math.min(80, Math.max(wantedPoolSize, roundCount + 8, roundCount * 2)));
         tracks = await BlindTestTrack.find({
             available: true,
             sourceCategories: blindTest.slug,
@@ -332,5 +349,16 @@ export async function getPlayableTracks(blindTest: any, roundCount: number) {
         throw new Error("Pas assez d’extraits vérifiés pour lancer cette partie.");
     }
 
-    return shuffled(tracks).slice(0, roundCount);
+    const shuffledTracks = shuffled(tracks);
+    const freshTracks = shuffledTracks.filter((track: any) => {
+        const trackId = String(track?._id || "");
+        const artist = String(track?.artist || "").trim().toLowerCase();
+        return !excludedTrackIds.has(trackId) && !excludedArtistNames.has(artist);
+    });
+    const fallbackTracks = shuffledTracks.filter((track: any) => {
+        const trackId = String(track?._id || "");
+        return !freshTracks.some((fresh: any) => String(fresh?._id || "") === trackId);
+    });
+
+    return [...freshTracks, ...fallbackTracks].slice(0, Math.min(tracks.length, wantedPoolSize));
 }

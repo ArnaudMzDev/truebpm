@@ -13,6 +13,8 @@ import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
 import Notification from "@/models/Notification";
 import User from "@/models/User";
+import BlindTestRoom from "@/models/BlindTestRoom";
+import { normalizeRoomCode, serializeRoom } from "@/lib/blindTest/room";
 
 const PORT = Number(process.env.SOCKET_PORT || 3001);
 
@@ -50,6 +52,23 @@ async function emitPresenceToContacts(io: Server, userId: string, isOnline: bool
   }
  } catch (e: any) {
   console.log("emitPresenceToContacts error:", e?.message || e);
+ }
+}
+
+async function emitBlindRoomUpdate(io: Server, code: string) {
+ try {
+  const cleanCode = normalizeRoomCode(code);
+  if (!cleanCode) return;
+  const room: any = await BlindTestRoom.findOne({ code: cleanCode }).lean();
+  if (!room) {
+   io.to(`blind-room:${cleanCode}`).emit("blind-room:closed", { code: cleanCode });
+   return;
+  }
+  io.to(`blind-room:${cleanCode}`).emit("blind-room:update", {
+   room: await serializeRoom(room),
+  });
+ } catch (e: any) {
+  console.log("emitBlindRoomUpdate error:", e?.message || e);
  }
 }
 
@@ -171,6 +190,90 @@ async function main() {
    }
   });
 
+  socket.on("blind-room:join", async ({ code }, ack) => {
+   try {
+    const cleanCode = normalizeRoomCode(code);
+    if (!cleanCode) return ack?.({ ok: false, error: "Code invalide." });
+
+    const room: any = await BlindTestRoom.findOne({
+     code: cleanCode,
+     "players.userId": meId,
+     status: { $in: ["lobby", "starting", "active"] },
+    }).lean();
+    if (!room) return ack?.({ ok: false, error: "Salon introuvable." });
+
+    socket.join(`blind-room:${cleanCode}`);
+    await BlindTestRoom.updateOne(
+        { code: cleanCode, "players.userId": meId },
+        {
+         $set: {
+          "players.$.connected": true,
+          "players.$.lastSeenAt": new Date(),
+         },
+        }
+    );
+    await emitBlindRoomUpdate(io, cleanCode);
+    return ack?.({ ok: true });
+   } catch (e: any) {
+    console.log("blind-room:join error:", e?.message || e);
+    return ack?.({ ok: false, error: "Impossible de rejoindre le salon en direct." });
+   }
+  });
+
+  socket.on("blind-room:leave", async ({ code }, ack) => {
+   try {
+    const cleanCode = normalizeRoomCode(code);
+    if (!cleanCode) return ack?.({ ok: false, error: "Code invalide." });
+
+    socket.leave(`blind-room:${cleanCode}`);
+    await BlindTestRoom.updateOne(
+        { code: cleanCode, "players.userId": meId },
+        {
+         $set: {
+          "players.$.connected": false,
+          "players.$.lastSeenAt": new Date(),
+         },
+        }
+    );
+    await emitBlindRoomUpdate(io, cleanCode);
+    return ack?.({ ok: true });
+   } catch (e: any) {
+    console.log("blind-room:leave error:", e?.message || e);
+    return ack?.({ ok: false, error: "Impossible de quitter le salon en direct." });
+   }
+  });
+
+  socket.on("blind-room:ready", async ({ code, ready }, ack) => {
+   try {
+    const cleanCode = normalizeRoomCode(code);
+    if (!cleanCode) return ack?.({ ok: false, error: "Code invalide." });
+
+    const updated = await BlindTestRoom.updateOne(
+        { code: cleanCode, status: "lobby", "players.userId": meId },
+        {
+         $set: {
+          "players.$.ready": !!ready,
+          "players.$.lastSeenAt": new Date(),
+         },
+        }
+    );
+    if (!updated.matchedCount) return ack?.({ ok: false, error: "Salon introuvable." });
+
+    await emitBlindRoomUpdate(io, cleanCode);
+    return ack?.({ ok: true });
+   } catch (e: any) {
+    console.log("blind-room:ready error:", e?.message || e);
+    return ack?.({ ok: false, error: "Impossible de changer ton statut." });
+   }
+  });
+
+  socket.on("blind-room:refresh", async ({ code }, ack) => {
+   const cleanCode = normalizeRoomCode(code);
+   if (!cleanCode) return ack?.({ ok: false, error: "Code invalide." });
+   await emitBlindRoomUpdate(io, cleanCode);
+   return ack?.({ ok: true });
+  });
+
   socket.on("disconnect", async (reason) => {
    if (process.env.NODE_ENV !== "production") {
     console.log("🛑 socket disconnected:", {
@@ -193,9 +296,34 @@ async function main() {
      });
 
      await emitPresenceToContacts(io, meId, false, now);
+   }
+  } catch (e: any) {
+   console.log("presence disconnect error:", e?.message || e);
+  }
+
+   try {
+    const rooms: any[] = await BlindTestRoom.find({
+     "players.userId": meId,
+     status: { $in: ["lobby", "starting", "active"] },
+    })
+        .select("code")
+        .lean();
+
+    await BlindTestRoom.updateMany(
+        { "players.userId": meId, status: { $in: ["lobby", "starting", "active"] } },
+        {
+         $set: {
+          "players.$.connected": false,
+          "players.$.lastSeenAt": new Date(),
+         },
+        }
+    );
+
+    for (const room of rooms) {
+     await emitBlindRoomUpdate(io, room.code);
     }
    } catch (e: any) {
-    console.log("presence disconnect error:", e?.message || e);
+    console.log("blind-room disconnect error:", e?.message || e);
    }
   });
  });

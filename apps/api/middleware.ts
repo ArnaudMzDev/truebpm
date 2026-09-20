@@ -102,6 +102,8 @@ function getRatePolicy(pathname: string, method: string): RatePolicy {
     if (method === "OPTIONS") return { windowMs: 60_000, max: 120 };
     if (pathname === "/api/auth/login") return { windowMs: 60_000, max: 8 };
     if (pathname === "/api/auth/register") return { windowMs: 60_000, max: 4 };
+    if (pathname.startsWith("/api/auth/password/")) return { windowMs: 60_000, max: 4 };
+    if (pathname.startsWith("/api/auth/email/")) return { windowMs: 60_000, max: 6 };
     if (pathname.startsWith("/api/uploads/")) return { windowMs: 60_000, max: 8 };
     if (pathname.startsWith("/api/search") || pathname.startsWith("/api/apple") || pathname.startsWith("/api/music")) {
         return { windowMs: 60_000, max: 90 };
@@ -133,6 +135,51 @@ function checkRateLimit(req: NextRequest) {
             headers: { "Retry-After": String(retryAfter) },
         }
     );
+}
+
+async function checkRedisRateLimit(req: NextRequest, policy: RatePolicy, bucketKey: string) {
+    const url = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (!url || !token) return null;
+
+    const key = encodeURIComponent(`truebpm:rl:${bucketKey}`);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    try {
+        const incrRes = await fetch(`${url}/incr/${key}`, { headers, cache: "no-store" });
+        if (!incrRes.ok) return null;
+
+        const incrJson = await incrRes.json().catch(() => null);
+        const count = Number(incrJson?.result || 0);
+
+        if (count === 1) {
+            await fetch(`${url}/pexpire/${key}/${policy.windowMs}`, { headers, cache: "no-store" })
+                .catch(() => null);
+        }
+
+        if (count <= policy.max) return null;
+
+        return secureJson(
+            { error: "Trop de requêtes. Réessaie dans quelques secondes." },
+            {
+                status: 429,
+                headers: { "Retry-After": String(Math.ceil(policy.windowMs / 1000)) },
+            }
+        );
+    } catch {
+        return null;
+    }
+}
+
+async function checkRateLimitDurable(req: NextRequest) {
+    const { pathname } = req.nextUrl;
+    const policy = getRatePolicy(pathname, req.method);
+    const bucketKey = `${getClientIp(req)}:${req.method}:${pathname}`;
+
+    const redisResponse = await checkRedisRateLimit(req, policy, bucketKey);
+    if (redisResponse) return redisResponse;
+
+    return checkRateLimit(req);
 }
 
 function checkBodySize(req: NextRequest) {
@@ -192,7 +239,7 @@ export async function middleware(req: NextRequest) {
     const bodyLimitResponse = checkBodySize(req);
     if (bodyLimitResponse) return applyCors(req, bodyLimitResponse);
 
-    const rateLimitResponse = checkRateLimit(req);
+    const rateLimitResponse = await checkRateLimitDurable(req);
     if (rateLimitResponse) return applyCors(req, rateLimitResponse);
 
     // -----------------------------

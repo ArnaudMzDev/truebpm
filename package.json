@@ -10,6 +10,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "turbo run dev",
+    "dev:local": "sh scripts/dev-local.sh",
+    "dev:local:dev-client": "sh scripts/dev-local.sh --dev-client",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "format": "prettier --write .",

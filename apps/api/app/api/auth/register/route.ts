@@ -4,6 +4,7 @@ import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { RegisterSchema } from "@/lib/validators/auth";
 import { signToken } from "@/lib/auth";
+import { sendEmailVerification } from "@/lib/emailVerification";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +49,16 @@ export async function POST(req: Request) {
             privacyVersion,
         });
 
+        await sendEmailVerification({
+            userId: newUser._id.toString(),
+            email: newUser.email,
+            pseudo: newUser.pseudo,
+        }).catch((err) => {
+            console.error("Register email verification error:", err);
+        });
+
         // Générer token
-        const token = signToken(newUser._id.toString());
+        const token = signToken(newUser._id.toString(), newUser.sessionVersion || 0);
 
         return NextResponse.json(
             {
@@ -57,6 +66,7 @@ export async function POST(req: Request) {
                     _id: newUser._id,
                     pseudo: newUser.pseudo,
                     email: newUser.email,
+                    emailVerifiedAt: newUser.emailVerifiedAt || null,
                 },
                 token,
             },

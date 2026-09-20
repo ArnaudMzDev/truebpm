@@ -119,7 +119,13 @@ export async function PATCH(req: Request, { params }: { params: { userId: string
             const hashedPassword = await bcrypt.hash(newPassword, 12);
             const user = await User.findByIdAndUpdate(
                 userId,
-                { $set: { password: hashedPassword } },
+                {
+                    $set: {
+                        password: hashedPassword,
+                        passwordChangedAt: new Date(),
+                    },
+                    $inc: { sessionVersion: 1 },
+                },
                 { new: true }
             )
                 .select("_id pseudo email avatarUrl isBanned bannedAt bannedUntil banReason bannedBy")

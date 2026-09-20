@@ -8,6 +8,7 @@ import Message from "@/models/Message";
 import Post from "@/models/Post";
 import User from "@/models/User";
 import { sendPushToUser } from "@/lib/push";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -85,11 +86,17 @@ export async function GET(req: Request, { params }: any) {
         }
 
         const url = new URL(req.url);
-        const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") || 30)));
-        const cursor = url.searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(url.searchParams, {
+            defaultLimit: 30,
+            maxLimit: 50,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = { conversationId };
-        if (cursor && isObjectId(cursor)) {
+        if (cursor) {
             query._id = { $lt: cursor };
         }
 
@@ -103,11 +110,9 @@ export async function GET(req: Request, { params }: any) {
             })
             .lean();
 
-        const hasMore = messages.length > limit;
-        const sliced = hasMore ? messages.slice(0, limit) : messages;
-        const nextCursor = hasMore ? String(sliced[sliced.length - 1]._id) : null;
+        const page = paginateSlice(messages, limit, (item: any) => item?._id?.toString?.());
 
-        return NextResponse.json({ messages: sliced, nextCursor }, { status: 200 });
+        return pageResponse({ messages: page.data }, page.pageInfo, { status: 200 });
     } catch (e) {
         console.error("GET /api/conversations/[id]/messages error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

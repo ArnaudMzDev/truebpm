@@ -81,6 +81,15 @@ export default function SplashScreen() {
                 await AsyncStorage.setItem("user", JSON.stringify(json.user));
 
                 await minDelay;
+                if (json.user?.email && !json.user?.emailVerifiedAt) {
+                    navigation.replace("EmailVerification", {
+                        email: json.user.email,
+                        hasSession: true,
+                        nextRoute: "Main",
+                    });
+                    return;
+                }
+
                 navigation.replace("Main");
             } catch (e) {
                 if (__DEV__) console.log("Splash bootstrap error:", e);

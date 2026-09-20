@@ -97,19 +97,21 @@ async function searchUsers(q: string, limit: number, cursor: CursorPiece | null)
     );
 
     const rows = await User.aggregate(pipeline);
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
     let nextCursor: CursorPiece | null = null;
-    if (rows.length > limit) {
-        const last = rows.pop();
+    if (hasMore) {
+        const last = pageRows[pageRows.length - 1];
         if (last?._id) {
             nextCursor = { score: Number(last.score ?? 0), id: String(last._id) };
         }
     }
 
-    const fallbackNeed = cursor ? 0 : Math.max(0, Math.min(limit, limit - rows.length));
+    const fallbackNeed = cursor ? 0 : Math.max(0, Math.min(limit, limit - pageRows.length));
     if (fallbackNeed > 0) {
         const loose = buildLooseRegex(q);
-        const existingIds = rows.map((u: any) => u._id);
+        const existingIds = pageRows.map((u: any) => u._id);
         if (loose) {
             const fallback = await User.find({
                 _id: { $nin: existingIds },
@@ -120,7 +122,7 @@ async function searchUsers(q: string, limit: number, cursor: CursorPiece | null)
                 .select("-password -email -__v")
                 .lean();
 
-            rows.push(
+            pageRows.push(
                 ...fallback.map((u: any) => ({
                     ...u,
                     score: 0.1,
@@ -129,7 +131,7 @@ async function searchUsers(q: string, limit: number, cursor: CursorPiece | null)
         }
     }
 
-    const users = rows.map((u: any) => ({
+    const users = pageRows.map((u: any) => ({
         _id: String(u._id),
         pseudo: u.pseudo ?? "",
         avatarUrl: u.avatarUrl ?? "",
@@ -191,19 +193,21 @@ async function searchPosts(q: string, limit: number, cursor: CursorPiece | null)
     );
 
     const rows = await Post.aggregate(pipeline);
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
     let nextCursor: CursorPiece | null = null;
-    if (rows.length > limit) {
-        const last = rows.pop();
+    if (hasMore) {
+        const last = pageRows[pageRows.length - 1];
         if (last?._id) {
             nextCursor = { score: Number(last.score ?? 0), id: String(last._id) };
         }
     }
 
-    const fallbackNeed = cursor ? 0 : Math.max(0, Math.min(limit, limit - rows.length));
+    const fallbackNeed = cursor ? 0 : Math.max(0, Math.min(limit, limit - pageRows.length));
     if (fallbackNeed > 0) {
         const loose = buildLooseRegex(q);
-        const existingIds = rows.map((p: any) => p._id);
+        const existingIds = pageRows.map((p: any) => p._id);
         if (loose) {
             const fallback = await Post.find({
                 _id: { $nin: existingIds },
@@ -215,7 +219,7 @@ async function searchPosts(q: string, limit: number, cursor: CursorPiece | null)
                 .populate("userId", "pseudo avatarUrl")
                 .lean();
 
-            rows.push(
+            pageRows.push(
                 ...fallback.map((p: any) => ({
                     ...p,
                     score: 0.1,
@@ -224,7 +228,7 @@ async function searchPosts(q: string, limit: number, cursor: CursorPiece | null)
         }
     }
 
-    const posts = rows.map((p: any) => ({
+    const posts = pageRows.map((p: any) => ({
         _id: String(p._id),
         userId: p.userId,
         mode: p.mode,
@@ -258,7 +262,14 @@ export async function GET(req: Request) {
         const cursorParam = searchParams.get("cursor");
 
         if (q.length < 2) {
-            return NextResponse.json({ items: [], nextCursor: null }, { status: 200 });
+            return NextResponse.json(
+                {
+                    items: [],
+                    nextCursor: null,
+                    pageInfo: { nextCursor: null, hasMore: false, limit, count: 0 },
+                },
+                { status: 200 }
+            );
         }
 
         if (type !== "all" && type !== "users" && type !== "posts") {
@@ -272,8 +283,18 @@ export async function GET(req: Request) {
         if (type === "users") {
             const { users, nextCursor } = await searchUsers(q, limit, decodedSingle);
             const items = users.map((u) => ({ type: "user", user: u }));
+            const encodedNextCursor = nextCursor ? encodeCursor(nextCursor) : null;
             return NextResponse.json(
-                { items, nextCursor: nextCursor ? encodeCursor(nextCursor) : null },
+                {
+                    items,
+                    nextCursor: encodedNextCursor,
+                    pageInfo: {
+                        nextCursor: encodedNextCursor,
+                        hasMore: !!encodedNextCursor,
+                        limit,
+                        count: items.length,
+                    },
+                },
                 { status: 200 }
             );
         }
@@ -281,8 +302,18 @@ export async function GET(req: Request) {
         if (type === "posts") {
             const { posts, nextCursor } = await searchPosts(q, limit, decodedSingle);
             const items = posts.map((p) => ({ type: "post", post: p }));
+            const encodedNextCursor = nextCursor ? encodeCursor(nextCursor) : null;
             return NextResponse.json(
-                { items, nextCursor: nextCursor ? encodeCursor(nextCursor) : null },
+                {
+                    items,
+                    nextCursor: encodedNextCursor,
+                    pageInfo: {
+                        nextCursor: encodedNextCursor,
+                        hasMore: !!encodedNextCursor,
+                        limit,
+                        count: items.length,
+                    },
+                },
                 { status: 200 }
             );
         }
@@ -318,9 +349,19 @@ export async function GET(req: Request) {
                     posts: pRes.nextCursor,
                 }
                 : null;
+        const encodedNextCursor = nextCursorAll ? encodeCursor(nextCursorAll) : null;
 
         return NextResponse.json(
-            { items: merged, nextCursor: nextCursorAll ? encodeCursor(nextCursorAll) : null },
+            {
+                items: merged,
+                nextCursor: encodedNextCursor,
+                pageInfo: {
+                    nextCursor: encodedNextCursor,
+                    hasMore: !!encodedNextCursor,
+                    limit,
+                    count: merged.length,
+                },
+            },
             { status: 200 }
         );
     } catch (err) {

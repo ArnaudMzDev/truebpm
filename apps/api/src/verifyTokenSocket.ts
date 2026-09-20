@@ -47,8 +47,12 @@ export async function verifyTokenSocket(rawToken: any): Promise<string> {
     const revoked = await RevokedToken.exists({ token });
     if (revoked) throw new Error("Unauthorized");
 
-    const user = await User.findById(userId).select("_id isBanned bannedUntil").lean();
+    const user = await User.findById(userId).select("_id isBanned bannedUntil sessionVersion").lean();
     if (!user) throw new Error("Unauthorized");
+
+    const userSessionVersion = Math.max(0, Number((user as any).sessionVersion || 0));
+    const tokenSessionVersion = Math.max(0, Number((payload as any)?.sv || 0));
+    if (tokenSessionVersion !== userSessionVersion) throw new Error("Unauthorized");
 
     const bannedUntil = (user as any).bannedUntil ? new Date((user as any).bannedUntil) : null;
     const banActive = !!(user as any).isBanned && (!bannedUntil || bannedUntil.getTime() > Date.now());

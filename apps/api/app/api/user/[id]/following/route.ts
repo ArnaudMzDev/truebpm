@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import mongoose from "mongoose";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -23,18 +24,18 @@ export async function GET(
         }
 
         const { searchParams } = new URL(req.url);
-        const limit = Number(searchParams.get("limit") || 20);
-        const cursor = searchParams.get("cursor");
-        const search = searchParams.get("search") || "";
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 20,
+            maxLimit: 50,
+        });
+        const search = (searchParams.get("search") || "").trim();
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const user = await User.findById(userId)
-            .populate({
-                path: "followingList",
-                select: "pseudo avatarUrl",
-                match: search
-                    ? { pseudo: { $regex: search, $options: "i" } }
-                    : {},
-            })
+            .select("_id followingList")
             .lean();
 
         if (!user) {
@@ -44,26 +45,36 @@ export async function GET(
             );
         }
 
-        let following = user.followingList || [];
-
-        if (cursor) {
-            following = following.filter(
-                (u: any) => u._id.toString() < cursor
+        const followingIds = Array.isArray(user.followingList) ? user.followingList : [];
+        if (followingIds.length === 0) {
+            return pageResponse(
+                { users: [] },
+                { nextCursor: null, hasMore: false, limit, count: 0 },
+                { status: 200 }
             );
         }
 
-        const sliced = following.slice(0, limit + 1);
-        let nextCursor = null;
+        const query: any = {
+            _id: { $in: followingIds },
+        };
 
-        if (sliced.length > limit) {
-            const last = sliced.pop();
-            nextCursor = last?._id.toString();
+        if (cursor) {
+            query._id.$lt = cursor;
         }
 
-        return NextResponse.json({
-            users: sliced,
-            nextCursor,
-        });
+        if (search) {
+            query.pseudo = { $regex: search, $options: "i" };
+        }
+
+        const following = await User.find(query)
+            .select("pseudo avatarUrl followers following")
+            .sort({ _id: -1 })
+            .limit(limit + 1)
+            .lean();
+
+        const page = paginateSlice(following, limit, (item: any) => item?._id?.toString?.());
+
+        return pageResponse({ users: page.data }, page.pageInfo);
     } catch (err) {
         console.error("❌ GET following error:", err);
         return NextResponse.json(

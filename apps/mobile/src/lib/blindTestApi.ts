@@ -5,6 +5,7 @@ export type BlindTestDifficulty = "easy" | "normal" | "hard" | "expert";
 export type BlindTestAnswerMode = "free" | "qcm" | "mixed";
 export type BlindTestTarget = "title" | "artist" | "both" | "mixed";
 export type BlindTestQuestionType = "title" | "artist" | "both" | "qcm-title" | "qcm-artist";
+export type BlindTestRoomStatus = "lobby" | "starting" | "active" | "completed" | "expired" | "cancelled";
 
 export type BlindTestSuggestion = {
     id: string;
@@ -102,6 +103,63 @@ export type BlindTestResult = {
     isPersonalBest: boolean;
     completedAt: string;
     rounds: Array<{ index: number; questionType: BlindTestQuestionType } & BlindTestReveal>;
+};
+
+export type BlindTestRoom = {
+    id: string;
+    code: string;
+    status: BlindTestRoomStatus;
+    serverNow: string;
+    hostId: string;
+    blindTest: {
+        id: string;
+        slug: string;
+        title: string;
+        coverUrl: string;
+    };
+    settings: {
+        roundCount: number;
+        difficulty: BlindTestDifficulty;
+        answerMode: BlindTestAnswerMode;
+        target: BlindTestTarget;
+        roundDurationMs: number;
+        maxPlayers: number;
+        allowSpectators: boolean;
+        hintsEnabled: boolean;
+        region: "france" | "international" | "mixed";
+        playMode: "casual" | "competitive";
+    };
+    players: Array<{
+        userId: string;
+        pseudo: string;
+        avatarUrl: string;
+        role: "player" | "spectator";
+        ready: boolean;
+        connected: boolean;
+        joinedAt: string;
+        lastSeenAt: string;
+        score: number;
+        streak: number;
+        isHost: boolean;
+        isMe: boolean;
+        answeredRound: number;
+    }>;
+    currentRound: null | {
+        index: number;
+        number: number;
+        total: number;
+        questionType: BlindTestQuestionType;
+        options: string[];
+        optionArtworks: string[];
+        previewUrl: string;
+        artworkUrl: string;
+        startsAt: string;
+        endsAt: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    startedAt: string | null;
+    expiresAt: string;
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -287,4 +345,57 @@ export function getBlindTestLeaderboard(blindTestId: string) {
             bestStreak: number;
         };
     }>(`/api/blind-test/leaderboard?blindTestId=${encodeURIComponent(blindTestId)}`);
+}
+
+export function createBlindTestRoom(input: {
+    blindTestId: string;
+    roundCount: number;
+    difficulty: BlindTestDifficulty;
+    answerMode: BlindTestAnswerMode;
+    target: BlindTestTarget;
+    maxPlayers?: number;
+    excerptSeconds?: number;
+    hintsEnabled?: boolean;
+    allowSpectators?: boolean;
+    playMode?: "casual" | "competitive";
+}) {
+    return apiRequest<{ room: BlindTestRoom }>("/api/blind-test/rooms", {
+        method: "POST",
+        body: JSON.stringify(input),
+    });
+}
+
+export function joinBlindTestRoom(code: string) {
+    return apiRequest<{ room: BlindTestRoom }>("/api/blind-test/rooms/join", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+    });
+}
+
+export function getBlindTestRoom(code: string) {
+    return apiRequest<{ room: BlindTestRoom }>(`/api/blind-test/rooms/${encodeURIComponent(code)}`);
+}
+
+export function setBlindTestRoomReady(code: string, ready: boolean) {
+    return apiRequest<{ room: BlindTestRoom }>(
+        `/api/blind-test/rooms/${encodeURIComponent(code)}/ready`,
+        {
+            method: "POST",
+            body: JSON.stringify({ ready }),
+        }
+    );
+}
+
+export function leaveBlindTestRoom(code: string) {
+    return apiRequest<{ success: boolean; room: BlindTestRoom | null }>(
+        `/api/blind-test/rooms/${encodeURIComponent(code)}/leave`,
+        { method: "POST", body: "{}" }
+    );
+}
+
+export function startBlindTestRoom(code: string) {
+    return apiRequest<{ room: BlindTestRoom }>(
+        `/api/blind-test/rooms/${encodeURIComponent(code)}/start`,
+        { method: "POST", body: "{}" }
+    );
 }

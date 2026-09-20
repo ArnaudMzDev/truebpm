@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import { verifyToken } from "@/lib/auth";
+import { sendEmailVerification } from "@/lib/emailVerification";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export async function PATCH(req: Request) {
             );
         }
 
-        const user: any = await User.findById(userId).select("_id email password");
+        const user: any = await User.findById(userId).select("_id pseudo email password emailVerifiedAt");
         if (!user) {
             return NextResponse.json(
                 { error: "Utilisateur introuvable." },
@@ -90,10 +91,19 @@ export async function PATCH(req: Request) {
         }
 
         user.email = newEmail;
+        user.emailVerifiedAt = null;
         await user.save();
 
+        await sendEmailVerification({
+            userId: user._id.toString(),
+            email: newEmail,
+            pseudo: user.pseudo || "",
+        }).catch((err) => {
+            console.error("Email change verification error:", err);
+        });
+
         return NextResponse.json(
-            { success: true, email: newEmail },
+            { success: true, email: newEmail, emailVerifiedAt: null },
             { status: 200, headers: { "Cache-Control": "no-store" } }
         );
     } catch (err) {

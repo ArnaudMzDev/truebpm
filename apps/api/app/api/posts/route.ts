@@ -5,6 +5,7 @@ import Post from "@/models/Post";
 import User from "@/models/User";
 import mongoose from "mongoose";
 import { getOptionalUserId } from "@/lib/requestAuth";
+import { pageResponse, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -339,20 +340,26 @@ export async function GET(req: Request) {
         await connectDB();
 
         const { searchParams } = new URL(req.url);
-        const limit = Math.min(Number(searchParams.get("limit") || 15), 50);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 15,
+            maxLimit: 50,
+        });
         const userId = searchParams.get("userId");
         const feed = searchParams.get("feed") === "following" ? "following" : "forYou";
         const sessionSeed = searchParams.get("seed");
         const excludedIds = feed === "forYou" ? parseObjectIdList(searchParams.get("exclude")) : [];
         const excludedSet = new Set(excludedIds.map((id) => id.toString()));
 
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
+
         const query: any = {};
         if (userId && mongoose.Types.ObjectId.isValid(userId)) {
             query.userId = toObjectId(userId);
         }
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            query._id = { $lt: toObjectId(cursor) };
+        if (cursor) {
+            query._id = { $lt: cursor };
         }
         if (excludedIds.length) {
             query._id = {
@@ -383,7 +390,11 @@ export async function GET(req: Request) {
 
         if (feed === "following") {
             if (!me || followingIds.length === 0) {
-                return NextResponse.json({ posts: [], nextCursor: null, feed }, { status: 200 });
+                return pageResponse(
+                    { posts: [], feed },
+                    { nextCursor: null, hasMore: false, limit, count: 0 },
+                    { status: 200 }
+                );
             }
             query.userId = { $in: followingIds };
         }
@@ -437,7 +448,11 @@ export async function GET(req: Request) {
             serializePost(doc, me, typeof score === "number" ? Number(score.toFixed(3)) : undefined)
         );
 
-        return NextResponse.json({ posts, nextCursor, feed }, { status: 200 });
+        return pageResponse(
+            { posts, feed },
+            { nextCursor, hasMore: !!nextCursor, limit, count: posts.length },
+            { status: 200 }
+        );
     } catch (err) {
         console.error("❌ GET /api/posts error:", err);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

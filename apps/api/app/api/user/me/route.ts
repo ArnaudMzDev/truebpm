@@ -23,7 +23,7 @@ export async function GET(req: Request) {
 
         const user = await User.findById(userId)
             .select(
-                "_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy"
+                "_id pseudo email emailVerifiedAt avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt isOnline lastSeenAt pinnedTrack favoriteArtists favoriteAlbums favoriteTracks isPrivate messagePrivacy"
             )
             .lean();
 

@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/db";
 import { requireUserId } from "@/lib/requestAuth";
 import Notification from "@/models/Notification";
 import mongoose from "mongoose";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +18,18 @@ export async function GET(req: Request) {
         }
 
         const { searchParams } = new URL(req.url);
-        const limit = Math.min(Number(searchParams.get("limit") || 20), 50);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 20,
+            maxLimit: 50,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = { recipientId: meId };
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+        if (cursor) {
+            query._id = { $lt: cursor };
         }
 
         const items: any[] = await Notification.find(query)
@@ -33,23 +40,19 @@ export async function GET(req: Request) {
             .populate("commentId", "_id text")
             .lean();
 
-        let nextCursor: string | null = null;
-        if (items.length > limit) {
-            const next = items.pop();
-            nextCursor = next?._id?.toString?.() ?? null;
-        }
+        const page = paginateSlice(items, limit, (item: any) => item?._id?.toString?.());
 
         const unreadCount = await Notification.countDocuments({
             recipientId: meId,
             isRead: false,
         });
 
-        return NextResponse.json(
+        return pageResponse(
             {
-                notifications: items,
-                nextCursor,
+                notifications: page.data,
                 unreadCount,
             },
+            { ...page.pageInfo, count: page.data.length },
             { status: 200 }
         );
     } catch (e) {

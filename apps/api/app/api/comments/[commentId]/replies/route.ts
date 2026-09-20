@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import { getOptionalUserId, requireUserId } from "@/lib/requestAuth";
 import { createNotification } from "@/lib/notifications";
 import { cleanMultilineText } from "@/lib/sanitize";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +32,18 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
                 : null;
 
         const { searchParams } = new URL(req.url);
-        const limit = Math.min(Number(searchParams.get("limit") || 10), 50);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 10,
+            maxLimit: 50,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = { parentId: commentId };
 
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+        if (cursor) {
             query._id = { $gt: cursor };
         }
 
@@ -47,15 +54,9 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
             .populate("replyToUserId", "pseudo")
             .lean();
 
-        let nextCursor: string | null = null;
-        const hasMore = items.length > limit;
+        const page = paginateSlice(items, limit, (item: any) => item?._id?.toString?.());
 
-        const slice = hasMore ? items.slice(0, limit) : items;
-        if (hasMore && slice.length > 0) {
-            nextCursor = slice[slice.length - 1]?._id?.toString?.() ?? null;
-        }
-
-        const replies = slice.map((c: any) => {
+        const replies = page.data.map((c: any) => {
             const likesArr = Array.isArray(c.likes) ? c.likes : [];
             const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
             const likesCount = likesArr.length;
@@ -64,7 +65,7 @@ export async function GET(req: Request, { params }: { params: { commentId: strin
             return { ...rest, likesCount, likedByMe };
         });
 
-        return NextResponse.json({ replies, nextCursor }, { status: 200 });
+        return pageResponse({ replies }, { ...page.pageInfo, count: replies.length }, { status: 200 });
     } catch (e) {
         console.error("❌ GET /api/comments/[commentId]/replies error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

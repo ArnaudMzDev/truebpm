@@ -9,6 +9,8 @@ import { signToken } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 const INVALID_CREDENTIALS = "Identifiants invalides.";
+const LOGIN_LOCK_MINUTES = 15;
+const LOGIN_MAX_FAILED_ATTEMPTS = 5;
 const DUMMY_PASSWORD_HASH =
     "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
@@ -58,9 +60,28 @@ export async function POST(req: Request) {
         const userDoc = await User.findOne({ email });
         const passwordHash = userDoc?.password || DUMMY_PASSWORD_HASH;
         const match = await bcrypt.compare(password, passwordHash);
+        const lockedUntil = userDoc?.loginLockedUntil ? new Date(userDoc.loginLockedUntil) : null;
+        const isLocked = !!lockedUntil && lockedUntil.getTime() > Date.now();
 
         if (!userDoc || !match) {
+            if (userDoc && !isLocked) {
+                const failedCount = Math.max(0, Number(userDoc.loginFailedCount || 0)) + 1;
+                const update: any = { loginFailedCount: failedCount };
+
+                if (failedCount >= LOGIN_MAX_FAILED_ATTEMPTS) {
+                    update.loginLockedUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60_000);
+                }
+
+                await User.updateOne({ _id: userDoc._id }, { $set: update }).catch(() => null);
+            }
             return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
+        }
+
+        if (isLocked) {
+            return NextResponse.json(
+                { error: `Trop de tentatives. Réessaie dans ${LOGIN_LOCK_MINUTES} min.` },
+                { status: 429 }
+            );
         }
 
         const bannedUntil = userDoc.bannedUntil ? new Date(userDoc.bannedUntil) : null;
@@ -78,11 +99,29 @@ export async function POST(req: Request) {
             );
         }
 
-        const token = signToken(userDoc._id.toString());
+        if (userDoc.loginFailedCount || userDoc.loginLockedUntil) {
+            await User.updateOne(
+                { _id: userDoc._id },
+                { $set: { loginFailedCount: 0 }, $unset: { loginLockedUntil: "" } }
+            ).catch(() => null);
+        }
+
+        const requireVerifiedEmail = process.env.REQUIRE_EMAIL_VERIFICATION === "1";
+        if (requireVerifiedEmail && !userDoc.emailVerifiedAt) {
+            return NextResponse.json(
+                {
+                    error: "Adresse e-mail non vérifiée.",
+                    code: "EMAIL_NOT_VERIFIED",
+                },
+                { status: 403 }
+            );
+        }
+
+        const token = signToken(userDoc._id.toString(), userDoc.sessionVersion || 0);
 
         // ✅ user complet (source de vérité)
         const user = await User.findById(userDoc._id)
-            .select("_id pseudo email avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt")
+            .select("_id pseudo email emailVerifiedAt avatarUrl bannerUrl bio followers following followersList followingList notesCount createdAt")
             .lean();
 
         if (!user) {

@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
+import SocialAuthButtons from "../components/SocialAuthButtons";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -53,6 +54,18 @@ function validatePassword(pw: string) {
     );
 }
 
+async function safeJson(res: Response): Promise<any | null> {
+    const text = await res.text();
+    if (!text) return null;
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        if (__DEV__) console.log("Register non-JSON response:", text.slice(0, 200));
+        return null;
+    }
+}
+
 /* ----------------------------- SCREEN ----------------------------- */
 export default function RegisterScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
@@ -62,6 +75,8 @@ export default function RegisterScreen({ navigation }: any) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
     const [legalAccepted, setLegalAccepted] = useState(false);
 
     const [error, setError] = useState("");
@@ -103,11 +118,16 @@ export default function RegisterScreen({ navigation }: any) {
                 }),
             });
 
-            const data = await res.json();
+            const data = await safeJson(res);
 
             if (!res.ok) {
                 setLoading(false);
-                return setError(data.error || "Erreur inconnue.");
+                return setError(data?.error || "Erreur inconnue.");
+            }
+
+            if (!data?.token || !data?.user?._id) {
+                setLoading(false);
+                return setError("Réponse serveur invalide.");
             }
 
             // 🔥 Stockage du token & user -> AUTO LOGIN
@@ -116,8 +136,11 @@ export default function RegisterScreen({ navigation }: any) {
 
             setLoading(false);
 
-            // 🔥 Aller direct vers la création de profil
-            navigation.replace("ProfileSetup");
+            navigation.replace("EmailVerification", {
+                email: data.user.email || email.trim().toLowerCase(),
+                hasSession: true,
+                nextRoute: "ProfileSetup",
+            });
 
         } catch (err) {
             setLoading(false);
@@ -161,90 +184,131 @@ export default function RegisterScreen({ navigation }: any) {
                             <Text style={styles.subtitle}>Crée ton compte</Text>
                         </View>
 
-                        <Text style={styles.label}>Pseudo</Text>
-                        <TextInput
-                            style={[styles.input, focused === "pseudo" && styles.inputFocused]}
-                            placeholder="Ton pseudo"
-                            placeholderTextColor={colors.textFaint}
-                            onFocus={() => setFocused("pseudo")}
-                            onBlur={() => setFocused(null)}
-                            onChangeText={setPseudo}
-                            value={pseudo}
-                        />
+                        <View style={styles.authSection}>
+                            <Text style={styles.sectionEyebrow}>EMAIL</Text>
+                            <Text style={styles.label}>Pseudo</Text>
+                            <TextInput
+                                style={[styles.input, focused === "pseudo" && styles.inputFocused]}
+                                placeholder="Ton pseudo"
+                                placeholderTextColor={colors.textFaint}
+                                onFocus={() => setFocused("pseudo")}
+                                onBlur={() => setFocused(null)}
+                                onChangeText={setPseudo}
+                                value={pseudo}
+                            />
 
-                        <Text style={styles.label}>Email</Text>
-                        <TextInput
-                            style={[styles.input, focused === "email" && styles.inputFocused]}
-                            placeholder="exemple@mail.com"
-                            placeholderTextColor={colors.textFaint}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            onFocus={() => setFocused("email")}
-                            onBlur={() => setFocused(null)}
-                            onChangeText={setEmail}
-                            value={email}
-                        />
+                            <Text style={styles.label}>Adresse email</Text>
+                            <TextInput
+                                style={[styles.input, focused === "email" && styles.inputFocused]}
+                                placeholder="exemple@mail.com"
+                                placeholderTextColor={colors.textFaint}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                onFocus={() => setFocused("email")}
+                                onBlur={() => setFocused(null)}
+                                onChangeText={setEmail}
+                                value={email}
+                            />
 
-                        <Text style={styles.label}>Mot de passe</Text>
-                        <TextInput
-                            style={[styles.input, focused === "password" && styles.inputFocused]}
-                            placeholder="••••••••"
-                            placeholderTextColor={colors.textFaint}
-                            secureTextEntry
-                            onFocus={() => setFocused("password")}
-                            onBlur={() => setFocused(null)}
-                            onChangeText={setPassword}
-                            value={password}
-                        />
-
-                        <Text style={styles.label}>Confirmer le mot de passe</Text>
-                        <TextInput
-                            style={[styles.input, focused === "confirm" && styles.inputFocused]}
-                            placeholder="••••••••"
-                            placeholderTextColor={colors.textFaint}
-                            secureTextEntry
-                            onFocus={() => setFocused("confirm")}
-                            onBlur={() => setFocused(null)}
-                            onChangeText={setConfirm}
-                            value={confirm}
-                        />
-
-                        <ErrorMessage message={error} />
-
-                        <TouchableOpacity
-                            style={styles.legalRow}
-                            activeOpacity={0.85}
-                            onPress={() => setLegalAccepted((value) => !value)}
-                        >
-                            <View style={[styles.checkbox, legalAccepted && styles.checkboxActive]}>
-                                {legalAccepted ? <Ionicons name="checkmark" size={16} color={colors.bg} /> : null}
+                            <Text style={styles.label}>Mot de passe</Text>
+                            <View style={[styles.inputWrap, focused === "password" && styles.inputFocused]}>
+                                <TextInput
+                                    style={styles.inputWithIcon}
+                                    placeholder="••••••••"
+                                    placeholderTextColor={colors.textFaint}
+                                    secureTextEntry={!showPassword}
+                                    onFocus={() => setFocused("password")}
+                                    onBlur={() => setFocused(null)}
+                                    onChangeText={setPassword}
+                                    value={password}
+                                />
+                                <TouchableOpacity
+                                    onPress={() => setShowPassword((value) => !value)}
+                                    activeOpacity={0.85}
+                                    style={styles.eyeButton}
+                                >
+                                    <Ionicons
+                                        name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                        size={20}
+                                        color={colors.textMuted}
+                                    />
+                                </TouchableOpacity>
                             </View>
-                            <Text style={styles.legalText}>
-                                J'accepte les{" "}
-                                <Text
-                                    style={styles.legalLink}
-                                    onPress={() => navigation.navigate("Legal", { document: "terms" })}
-                                >
-                                    Conditions d'utilisation
-                                </Text>
-                                {" "}et la{" "}
-                                <Text
-                                    style={styles.legalLink}
-                                    onPress={() => navigation.navigate("Legal", { document: "privacy" })}
-                                >
-                                    Politique de confidentialité
-                                </Text>
-                                .
-                            </Text>
-                        </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.button, !canSubmit && styles.buttonDisabled]}
-                            disabled={!canSubmit}
-                            onPress={handleRegister}
-                        >
-                            <Text style={styles.buttonText}>Créer un compte</Text>
-                        </TouchableOpacity>
+                            <Text style={styles.label}>Confirmer le mot de passe</Text>
+                            <View style={[styles.inputWrap, focused === "confirm" && styles.inputFocused]}>
+                                <TextInput
+                                    style={styles.inputWithIcon}
+                                    placeholder="••••••••"
+                                    placeholderTextColor={colors.textFaint}
+                                    secureTextEntry={!showConfirm}
+                                    onFocus={() => setFocused("confirm")}
+                                    onBlur={() => setFocused(null)}
+                                    onChangeText={setConfirm}
+                                    value={confirm}
+                                />
+                                <TouchableOpacity
+                                    onPress={() => setShowConfirm((value) => !value)}
+                                    activeOpacity={0.85}
+                                    style={styles.eyeButton}
+                                >
+                                    <Ionicons
+                                        name={showConfirm ? "eye-off-outline" : "eye-outline"}
+                                        size={20}
+                                        color={colors.textMuted}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+
+                            <ErrorMessage message={error} />
+
+                            <TouchableOpacity
+                                style={styles.legalRow}
+                                activeOpacity={0.85}
+                                onPress={() => setLegalAccepted((value) => !value)}
+                            >
+                                <View style={[styles.checkbox, legalAccepted && styles.checkboxActive]}>
+                                    {legalAccepted ? <Ionicons name="checkmark" size={16} color={colors.bg} /> : null}
+                                </View>
+                                <Text style={styles.legalText}>
+                                    J'accepte les{" "}
+                                    <Text
+                                        style={styles.legalLink}
+                                        onPress={() => navigation.navigate("Legal", { document: "terms" })}
+                                    >
+                                        Conditions d'utilisation
+                                    </Text>
+                                    {" "}et la{" "}
+                                    <Text
+                                        style={styles.legalLink}
+                                        onPress={() => navigation.navigate("Legal", { document: "privacy" })}
+                                    >
+                                        Politique de confidentialité
+                                    </Text>
+                                    .
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.button, !canSubmit && styles.buttonDisabled]}
+                                disabled={!canSubmit}
+                                onPress={handleRegister}
+                            >
+                                <Text style={styles.buttonText}>Créer un compte</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.dividerRow}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>ou</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
+                        <SocialAuthButtons
+                            mode="register"
+                            onError={setError}
+                            onSuccess={() => navigation.replace("ProfileSetup")}
+                        />
 
                         <TouchableOpacity onPress={() => navigation.navigate("Login")}>
                             <Text style={styles.loginText}>
@@ -277,6 +341,21 @@ const styles = StyleSheet.create({
     header: { alignItems: "center", marginBottom: 32 },
     subtitle: { marginTop: 10, fontSize: 16, color: colors.textMuted, fontWeight: fontWeights.medium },
     loaderCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+    authSection: {
+        width: "100%",
+        padding: spacing.lg,
+        borderRadius: radius.xxl,
+        backgroundColor: colors.surfaceFeed,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    sectionEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 3,
+        marginBottom: spacing.xs,
+    },
     label: { color: colors.text, marginBottom: 8, marginTop: 12, fontSize: typography.bodySm, fontWeight: fontWeights.extraBold },
     input: {
         width: "100%", height: 52, borderRadius: radius.lg,
@@ -285,6 +364,75 @@ const styles = StyleSheet.create({
     },
     inputFocused: {
         backgroundColor: colors.control,
+    },
+    inputWrap: {
+        width: "100%",
+        height: 52,
+        borderRadius: radius.lg,
+        paddingLeft: 16,
+        paddingRight: 10,
+        backgroundColor: colors.surfaceRaised,
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    inputWithIcon: {
+        flex: 1,
+        height: "100%",
+        fontSize: 16,
+        color: colors.text,
+    },
+    eyeButton: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    dividerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        marginVertical: spacing.lg,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.separator,
+    },
+    dividerText: {
+        color: colors.textTertiary,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+    },
+    socialSection: {
+        width: "100%",
+        gap: spacing.sm,
+    },
+    socialButton: {
+        minHeight: 54,
+        borderRadius: radius.xl,
+        backgroundColor: colors.surfaceRaised,
+        borderWidth: 1,
+        borderColor: colors.border,
+        paddingHorizontal: spacing.md,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+    },
+    socialIcon: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: colors.surfaceInset,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    socialText: {
+        flex: 1,
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.extraBold,
     },
     errorText: { color: colors.danger, fontSize: 14, fontWeight: fontWeights.medium },
     legalRow: {

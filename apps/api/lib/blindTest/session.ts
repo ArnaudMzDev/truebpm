@@ -47,56 +47,117 @@ function shuffle<T>(values: T[]) {
     return copy;
 }
 
-function questionTypeForRound(
-    index: number,
-    answerMode: BlindTestAnswerMode,
-    target: BlindTestTarget
-): BlindTestQuestionType {
-    const targetCycle: Array<"title" | "artist" | "both"> = ["both", "title", "artist"];
-    const selectedTarget = target === "mixed" ? targetCycle[index % targetCycle.length] : target;
-    const useQcm = answerMode === "qcm" || (answerMode === "mixed" && index % 3 === 2);
-
-    if (!useQcm) return selectedTarget;
-    if (selectedTarget === "artist") return "qcm-artist";
-    if (selectedTarget === "title") return "qcm-title";
-    return index % 2 === 0 ? "qcm-title" : "qcm-artist";
-}
-
-function qcmChoices(tracks: any[], currentTrack: any, kind: "title" | "artist") {
+function qcmChoices(
+    tracks: any[],
+    currentTrack: any,
+    kind: "title" | "artist",
+    usedDistractors: Set<string>
+) {
     const correct = String(currentTrack[kind] || "").trim();
     const uniqueDistractors = new Map<string, { label: string; artworkUrl: string }>();
+    const repeatedDistractors = new Map<string, { label: string; artworkUrl: string }>();
 
     shuffle(tracks)
         .filter((track) => String(track._id) !== String(currentTrack._id))
         .forEach((track) => {
             const label = String(track[kind] || "").trim();
             const key = label.toLowerCase();
-            if (!label || key === correct.toLowerCase() || uniqueDistractors.has(key)) return;
-            uniqueDistractors.set(key, {
+            if (!label || key === correct.toLowerCase() || uniqueDistractors.has(key) || repeatedDistractors.has(key)) return;
+            const choice = {
                 label,
                 artworkUrl: String(track.artworkUrl || ""),
-            });
+            };
+            if (usedDistractors.has(key)) {
+                repeatedDistractors.set(key, choice);
+            } else {
+                uniqueDistractors.set(key, choice);
+            }
         });
+
+    const distractors = [
+        ...Array.from(uniqueDistractors.values()),
+        ...Array.from(repeatedDistractors.values()),
+    ].slice(0, 3);
+
+    distractors.forEach((item) => usedDistractors.add(item.label.toLowerCase()));
 
     return shuffle([
         {
             label: correct,
             artworkUrl: String(currentTrack.artworkUrl || ""),
         },
-        ...Array.from(uniqueDistractors.values()).slice(0, 3),
+        ...distractors,
     ]);
+}
+
+function repeatedShuffledTargets(roundCount: number, target: BlindTestTarget) {
+    if (target !== "mixed") {
+        return Array.from({ length: roundCount }, () => target as "title" | "artist" | "both");
+    }
+
+    const targets: Array<"title" | "artist" | "both"> = [];
+    while (targets.length < roundCount) {
+        targets.push(...shuffle<"title" | "artist" | "both">(["both", "title", "artist"]));
+    }
+
+    return targets.slice(0, roundCount);
+}
+
+function shuffledAnswerModes(roundCount: number, answerMode: BlindTestAnswerMode) {
+    if (answerMode === "free") return Array.from({ length: roundCount }, () => "free" as const);
+    if (answerMode === "qcm") return Array.from({ length: roundCount }, () => "qcm" as const);
+
+    const qcmCount = Math.min(
+        roundCount - 1,
+        Math.max(1, Math.round(roundCount * 0.4))
+    );
+    const modes = [
+        ...Array.from({ length: qcmCount }, () => "qcm" as const),
+        ...Array.from({ length: roundCount - qcmCount }, () => "free" as const),
+    ];
+
+    return shuffle(modes);
+}
+
+function buildQuestionTypes(
+    roundCount: number,
+    answerMode: BlindTestAnswerMode,
+    target: BlindTestTarget
+) {
+    const targets = repeatedShuffledTargets(roundCount, target);
+    const answerModes = shuffledAnswerModes(roundCount, answerMode);
+    let qcmBothOffset = randomInt(2);
+
+    return targets.map((selectedTarget, index): BlindTestQuestionType => {
+        if (answerModes[index] === "free") return selectedTarget;
+        if (selectedTarget === "artist") return "qcm-artist";
+        if (selectedTarget === "title") return "qcm-title";
+
+        qcmBothOffset += 1;
+        return qcmBothOffset % 2 === 0 ? "qcm-title" : "qcm-artist";
+    });
 }
 
 export function buildRounds(
     tracks: any[],
     answerMode: BlindTestAnswerMode,
-    target: BlindTestTarget
+    target: BlindTestTarget,
+    choicePool: any[] = tracks
 ) {
+    const titleDistractors = new Set<string>();
+    const artistDistractors = new Set<string>();
+    const questionTypes = buildQuestionTypes(tracks.length, answerMode, target);
+
     return tracks.map((track, index) => {
-        let questionType = questionTypeForRound(index, answerMode, target);
+        let questionType = questionTypes[index];
         const optionKind = questionType === "qcm-title" ? "title" : "artist";
         let choices = questionType.startsWith("qcm-")
-            ? qcmChoices(tracks, track, optionKind)
+            ? qcmChoices(
+                choicePool,
+                track,
+                optionKind,
+                optionKind === "title" ? titleDistractors : artistDistractors
+            )
             : [];
 
         if (questionType.startsWith("qcm-") && choices.length < 4) {

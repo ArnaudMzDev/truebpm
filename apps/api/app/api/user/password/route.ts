@@ -48,7 +48,7 @@ export async function PATCH(req: Request) {
             );
         }
 
-        const user: any = await User.findById(userId).select("_id password");
+        const user: any = await User.findById(userId).select("_id password sessionVersion passwordChangedAt");
         if (!user) {
             return NextResponse.json(
                 { error: "Utilisateur introuvable." },
@@ -67,6 +67,8 @@ export async function PATCH(req: Request) {
         const hashedPassword = await bcrypt.hash(newPassword, 12);
 
         user.password = hashedPassword;
+        user.passwordChangedAt = new Date();
+        user.sessionVersion = Math.max(0, Number(user.sessionVersion || 0)) + 1;
         await user.save();
 
         return NextResponse.json(

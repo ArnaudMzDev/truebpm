@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import mongoose from "mongoose";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,15 @@ export async function GET(
         }
 
         const { searchParams } = new URL(req.url);
-        const limit = Number(searchParams.get("limit") || 20);
-        const cursor = searchParams.get("cursor");
-        const search = searchParams.get("search") || "";
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 20,
+            maxLimit: 50,
+        });
+        const search = (searchParams.get("search") || "").trim();
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const user = await User.findById(userId).lean();
         if (!user) {
@@ -30,7 +37,11 @@ export async function GET(
 
         const followersIds = user.followersList || [];
         if (followersIds.length === 0) {
-            return NextResponse.json({ users: [], nextCursor: null });
+            return pageResponse(
+                { users: [] },
+                { nextCursor: null, hasMore: false, limit, count: 0 },
+                { status: 200 }
+            );
         }
 
         const query: any = {
@@ -51,16 +62,9 @@ export async function GET(
             .limit(limit + 1)
             .lean();
 
-        let nextCursor = null;
-        if (followers.length > limit) {
-            const last = followers.pop();
-            nextCursor = last?._id.toString();
-        }
+        const page = paginateSlice(followers, limit, (item: any) => item?._id?.toString?.());
 
-        return NextResponse.json({
-            users: followers,
-            nextCursor,
-        });
+        return pageResponse({ users: page.data }, page.pageInfo);
     } catch (err) {
         console.error("❌ GET followers error:", err);
         return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

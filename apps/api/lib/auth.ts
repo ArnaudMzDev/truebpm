@@ -4,6 +4,7 @@ import RevokedToken from "@/models/RevokedToken";
 import User from "@/models/User";
 
 type JwtPayload = { id: string };
+type TrueBpmJwtPayload = JwtPayload & { sv?: number };
 
 function getJwtSecret() {
     const secret = process.env.JWT_SECRET;
@@ -14,8 +15,12 @@ function getJwtSecret() {
     return secret;
 }
 
-export function signToken(id: string) {
-    return jwt.sign({ id }, getJwtSecret(), { expiresIn: "7d", algorithm: "HS256" });
+export function signToken(id: string, sessionVersion = 0) {
+    return jwt.sign(
+        { id, sv: Math.max(0, Math.floor(Number(sessionVersion) || 0)) },
+        getJwtSecret(),
+        { expiresIn: "7d", algorithm: "HS256" }
+    );
 }
 
 export async function verifyToken(req: Request): Promise<string | null> {
@@ -28,14 +33,18 @@ export async function verifyToken(req: Request): Promise<string | null> {
         if (scheme.toLowerCase() !== "bearer") return null;
         if (token.length > 4096) return null;
 
-        const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as JwtPayload;
+        const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as TrueBpmJwtPayload;
         if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) return null;
 
         const revoked = await RevokedToken.exists({ token });
         if (revoked) return null;
 
-        const user = await User.findById(decoded.id).select("_id isBanned bannedUntil").lean();
+        const user = await User.findById(decoded.id).select("_id isBanned bannedUntil sessionVersion").lean();
         if (!user) return null;
+
+        const userSessionVersion = Math.max(0, Number((user as any).sessionVersion || 0));
+        const tokenSessionVersion = Math.max(0, Number(decoded.sv || 0));
+        if (tokenSessionVersion !== userSessionVersion) return null;
 
         const bannedUntil = (user as any).bannedUntil ? new Date((user as any).bannedUntil) : null;
         const banActive = !!(user as any).isBanned && (!bannedUntil || bannedUntil.getTime() > Date.now());

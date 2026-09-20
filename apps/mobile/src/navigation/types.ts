@@ -2,6 +2,13 @@ export type RootStackParamList = {
     Splash: undefined;
     Login: undefined;
     Register: undefined;
+    EmailVerification:
+        | {
+              email?: string;
+              nextRoute?: "Login" | "ProfileSetup" | "Main";
+              hasSession?: boolean;
+          }
+        | undefined;
     Legal: { document?: "terms" | "privacy" | "community" | "sales" } | undefined;
     ProfileSetup: undefined;
     AppDiscovery: undefined;
@@ -15,6 +22,7 @@ export type RootStackParamList = {
     CreatePost: undefined;
     Search: undefined;
     BlindTestHome: undefined;
+    BlindTestLobby: { code: string };
     BlindTestGame: { sessionId: string };
     BlindTestResult: { sessionId: string };
 };

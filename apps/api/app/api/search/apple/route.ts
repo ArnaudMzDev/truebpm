@@ -90,6 +90,7 @@ function uniqueById(items: any[]) {
 async function appleFetch(path: string, token: string, storefront = STOREFRONT) {
     const res = await fetch(`https://api.music.apple.com/v1/catalog/${storefront}${path}`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
     });
     if (!res.ok) {
         console.error("❌ Apple API error:", await res.text());
@@ -128,8 +129,9 @@ function releasedTodayOrBefore(item: any) {
 }
 
 async function deezerReleaseFetch(editorialId: number) {
-    const res = await fetch(`https://api.deezer.com/editorial/${editorialId}/releases?limit=32`, {
+    const res = await fetch(`https://api.deezer.com/editorial/${editorialId}/releases?limit=100`, {
         headers: { Accept: "application/json" },
+        cache: "no-store",
     });
     if (!res.ok) {
         console.error("❌ Deezer releases error:", await res.text());
@@ -172,7 +174,10 @@ function mapDeezerArtist(artist: any) {
 }
 
 async function deezerJson(url: string) {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+    });
     if (!res.ok) return null;
     return res.json().catch(() => null);
 }
@@ -224,27 +229,84 @@ async function latestReleasesFromDeezer(editorialIds: number[]) {
         uniqueById(groups.flat())
             .filter((item) => item.id && item.title && item.artist)
             .filter(releasedTodayOrBefore)
-    ).slice(0, 18);
+    );
 }
 
-async function latestReleaseSections() {
+function releaseTime(item: any) {
+    if (!item?.releaseDate) return 0;
+    const time = Date.parse(`${item.releaseDate}T00:00:00.000Z`);
+    return Number.isFinite(time) ? time : 0;
+}
+
+function withinLastDays(item: any, days: number) {
+    const time = releaseTime(item);
+    if (!time) return false;
+    return time >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
+function hashSeed(value: string) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+
+function seededRandom(seed: string) {
+    let state = hashSeed(seed) || 1;
+    return () => {
+        state = Math.imul(1664525, state) + 1013904223;
+        return ((state >>> 0) / 4294967296);
+    };
+}
+
+function seededShuffle<T>(items: T[], seed: string) {
+    const random = seededRandom(seed);
+    const copy = [...items];
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(random() * (index + 1));
+        [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+    }
+    return copy;
+}
+
+function weeklyReleaseKey(date = new Date()) {
+    const utc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    const day = new Date(utc).getUTCDay();
+    const daysSinceFriday = (day + 2) % 7;
+    const friday = new Date(utc - daysSinceFriday * 24 * 60 * 60 * 1000);
+    return friday.toISOString().slice(0, 10);
+}
+
+function freshReleaseSelection(items: any[], seed: string) {
+    const sorted = sortByReleaseDate(uniqueById(items).filter((item) => item.id && item.title && item.artist));
+    const recent =
+        sorted.filter((item) => withinLastDays(item, 10)).length >= 8
+            ? sorted.filter((item) => withinLastDays(item, 10))
+            : sorted.filter((item) => withinLastDays(item, 31));
+    const candidates = recent.length >= 8 ? recent : sorted;
+
+    return seededShuffle(candidates.slice(0, 60), seed).slice(0, 24);
+}
+
+async function latestReleaseSections(seed: string) {
     const [france, international] = await Promise.all([
         latestReleasesFromDeezer(FRANCE_RELEASE_EDITORIALS),
         latestReleasesFromDeezer(INTERNATIONAL_RELEASE_EDITORIALS),
     ]);
+    const weekKey = weeklyReleaseKey();
+    const items = freshReleaseSelection(
+        [...france, ...international],
+        `${weekKey}:${seed || "default"}`
+    );
 
     return [
         {
-            id: "france",
-            title: "Dernières sorties en France",
-            subtitle: "Rap, pop et chanson française sorties récemment.",
-            items: france,
-        },
-        {
-            id: "international",
-            title: "Dernières sorties internationales",
-            subtitle: "Les nouveautés globales fraîchement publiées.",
-            items: international,
+            id: "weekly",
+            title: "Nouveautés de la semaine",
+            subtitle: "",
+            items,
         },
     ];
 }
@@ -283,11 +345,24 @@ export async function GET(req: Request) {
     const q = searchParams.get("q") || "";
     const type = searchParams.get("type") || "song";
     const mode = searchParams.get("mode") || "";
+    const seed = searchParams.get("seed") || "";
 
     try {
         if (mode === "releases") {
-            const sections = await latestReleaseSections();
-            return NextResponse.json({ sections, mode: "releases" });
+            const sections = await latestReleaseSections(seed);
+            return NextResponse.json(
+                {
+                    sections,
+                    mode: "releases",
+                    weekKey: weeklyReleaseKey(),
+                    generatedAt: new Date().toISOString(),
+                },
+                {
+                    headers: {
+                        "Cache-Control": "no-store, max-age=0",
+                    },
+                }
+            );
         }
 
         let devToken = "";

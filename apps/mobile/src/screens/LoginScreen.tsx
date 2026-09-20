@@ -10,8 +10,10 @@ import {
     Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import Logo from "../components/Logo";
 import LoaderLogo from "../components/LoaderLogo";
+import SocialAuthButtons from "../components/SocialAuthButtons";
 import { API_URL } from "../lib/config";
 import { colors, radius, spacing, typography, fontWeights } from "../theme";
 import { setStoredToken, clearStoredSession } from "../lib/authStorage";
@@ -59,6 +61,7 @@ export default function LoginScreen({ navigation }: any) {
     const [focused, setFocused] = useState<string | null>(null);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -84,6 +87,14 @@ export default function LoginScreen({ navigation }: any) {
 
             if (!loginRes.ok) {
                 setLoading(false);
+                if (loginData?.code === "EMAIL_NOT_VERIFIED") {
+                    navigation.navigate("EmailVerification", {
+                        email: email.trim().toLowerCase(),
+                        hasSession: false,
+                        nextRoute: "Login",
+                    });
+                    return;
+                }
                 return setError(loginData?.error || "Identifiants incorrects.");
             }
 
@@ -145,45 +156,73 @@ export default function LoginScreen({ navigation }: any) {
                 </View>
             ) : (
                 <View style={styles.form}>
-                    <Text style={styles.label}>Email</Text>
-                    <TextInput
-                        style={[styles.input, focused === "email" && styles.inputFocused]}
-                        placeholder="exemple@mail.com"
-                        placeholderTextColor={colors.textFaint}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        onFocus={() => setFocused("email")}
-                        onBlur={() => setFocused(null)}
-                        onChangeText={setEmail}
-                        value={email}
-                        returnKeyType="next"
+                    <View style={styles.authSection}>
+                        <Text style={styles.sectionEyebrow}>EMAIL</Text>
+                        <Text style={styles.label}>Adresse email</Text>
+                        <TextInput
+                            style={[styles.input, focused === "email" && styles.inputFocused]}
+                            placeholder="exemple@mail.com"
+                            placeholderTextColor={colors.textFaint}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            onFocus={() => setFocused("email")}
+                            onBlur={() => setFocused(null)}
+                            onChangeText={setEmail}
+                            value={email}
+                            returnKeyType="next"
+                        />
+
+                        <Text style={styles.label}>Mot de passe</Text>
+                        <View style={[styles.inputWrap, focused === "password" && styles.inputFocused]}>
+                            <TextInput
+                                style={styles.inputWithIcon}
+                                placeholder="••••••••"
+                                placeholderTextColor={colors.textFaint}
+                                secureTextEntry={!showPassword}
+                                onFocus={() => setFocused("password")}
+                                onBlur={() => setFocused(null)}
+                                onChangeText={setPassword}
+                                value={password}
+                                returnKeyType="done"
+                                onSubmitEditing={() => {
+                                    if (formFilled) handleLogin();
+                                }}
+                            />
+                            <TouchableOpacity
+                                onPress={() => setShowPassword((value) => !value)}
+                                activeOpacity={0.85}
+                                style={styles.eyeButton}
+                            >
+                                <Ionicons
+                                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                    size={20}
+                                    color={colors.textMuted}
+                                />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ErrorMessage message={error} />
+
+                        <TouchableOpacity
+                            style={[styles.button, !formFilled && styles.buttonDisabled]}
+                            disabled={!formFilled}
+                            onPress={handleLogin}
+                        >
+                            <Text style={styles.buttonText}>Se connecter</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.dividerRow}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.dividerText}>ou</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    <SocialAuthButtons
+                        mode="login"
+                        onError={setError}
+                        onSuccess={() => navigation.replace("Main")}
                     />
-
-                    <Text style={styles.label}>Mot de passe</Text>
-                    <TextInput
-                        style={[styles.input, focused === "password" && styles.inputFocused]}
-                        placeholder="Mot de passe"
-                        placeholderTextColor={colors.textFaint}
-                        secureTextEntry
-                        onFocus={() => setFocused("password")}
-                        onBlur={() => setFocused(null)}
-                        onChangeText={setPassword}
-                        value={password}
-                        returnKeyType="done"
-                        onSubmitEditing={() => {
-                            if (formFilled) handleLogin();
-                        }}
-                    />
-
-                    <ErrorMessage message={error} />
-
-                    <TouchableOpacity
-                        style={[styles.button, !formFilled && styles.buttonDisabled]}
-                        disabled={!formFilled}
-                        onPress={handleLogin}
-                    >
-                        <Text style={styles.buttonText}>Se connecter</Text>
-                    </TouchableOpacity>
 
                     <TouchableOpacity onPress={() => navigation.navigate("Register")}>
                         <Text style={styles.registerText}>
@@ -207,6 +246,21 @@ const styles = StyleSheet.create({
     header: { alignItems: "center", marginBottom: 40 },
     subtitle: { marginTop: 10, fontSize: 16, color: colors.textMuted, fontWeight: fontWeights.medium },
     form: { width: "100%" },
+    authSection: {
+        width: "100%",
+        padding: spacing.lg,
+        borderRadius: radius.xxl,
+        backgroundColor: colors.surfaceFeed,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    sectionEyebrow: {
+        color: colors.primary,
+        fontSize: typography.tiny,
+        fontWeight: fontWeights.black,
+        letterSpacing: 3,
+        marginBottom: spacing.xs,
+    },
     label: {
         color: colors.text,
         marginBottom: 8,
@@ -225,6 +279,75 @@ const styles = StyleSheet.create({
     },
     inputFocused: {
         backgroundColor: colors.control,
+    },
+    inputWrap: {
+        width: "100%",
+        height: 52,
+        borderRadius: radius.lg,
+        paddingLeft: 16,
+        paddingRight: 10,
+        backgroundColor: colors.surfaceRaised,
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    inputWithIcon: {
+        flex: 1,
+        height: "100%",
+        fontSize: 16,
+        color: colors.text,
+    },
+    eyeButton: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    dividerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        marginVertical: spacing.lg,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.separator,
+    },
+    dividerText: {
+        color: colors.textTertiary,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.black,
+        textTransform: "uppercase",
+    },
+    socialSection: {
+        width: "100%",
+        gap: spacing.sm,
+    },
+    socialButton: {
+        minHeight: 54,
+        borderRadius: radius.xl,
+        backgroundColor: colors.surfaceRaised,
+        borderWidth: 1,
+        borderColor: colors.border,
+        paddingHorizontal: spacing.md,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+    },
+    socialIcon: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: colors.surfaceInset,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    socialText: {
+        flex: 1,
+        color: colors.text,
+        fontSize: typography.body,
+        fontWeight: fontWeights.extraBold,
     },
     errorText: { color: colors.danger, fontSize: 14, fontWeight: fontWeights.medium },
     button: {

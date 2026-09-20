@@ -117,21 +117,56 @@ function MusicHorizontalCard({
 function SectionBlock({
                           title,
                           icon,
+                          count,
+                          collapsed = false,
+                          onToggle,
                           children,
                       }: {
     title: string;
     icon: keyof typeof Ionicons.glyphMap;
+    count?: number;
+    collapsed?: boolean;
+    onToggle?: () => void;
     children: React.ReactNode;
 }) {
-    return (
-        <View style={styles.sectionBlock}>
-            <View style={styles.sectionHeader}>
+    const headerContent = (
+        <>
+            <View style={styles.sectionTitleRow}>
                 <View style={styles.sectionIconWrap}>
                     <Ionicons name={icon} size={15} color={colors.primary} />
                 </View>
                 <Text style={styles.sectionBlockTitle}>{title}</Text>
             </View>
-            {children}
+
+            {onToggle ? (
+                <View style={styles.sectionToggleRow}>
+                    {typeof count === "number" ? (
+                        <Text style={styles.sectionCount}>{Math.min(count, 100)}</Text>
+                    ) : null}
+                    <Ionicons
+                        name={collapsed ? "chevron-down" : "chevron-up"}
+                        size={18}
+                        color={colors.textMuted}
+                    />
+                </View>
+            ) : null}
+        </>
+    );
+
+    return (
+        <View style={styles.sectionBlock}>
+            {onToggle ? (
+                <TouchableOpacity
+                    style={styles.sectionHeader}
+                    onPress={onToggle}
+                    activeOpacity={0.82}
+                >
+                    {headerContent}
+                </TouchableOpacity>
+            ) : (
+                <View style={styles.sectionHeader}>{headerContent}</View>
+            )}
+            {collapsed ? null : children}
         </View>
     );
 }
@@ -296,6 +331,8 @@ export default function ProfileScreen({ navigation }: any) {
     const [releasesToListen, setReleasesToListen] = useState<ArtistReleaseItem[]>([]);
     const [releasesListened, setReleasesListened] = useState<ArtistReleaseItem[]>([]);
     const [releaseUpdatingId, setReleaseUpdatingId] = useState<string | null>(null);
+    const [toListenCollapsed, setToListenCollapsed] = useState(false);
+    const [listenedCollapsed, setListenedCollapsed] = useState(false);
     const releaseSyncStartedRef = useRef(false);
 
     const LIMIT = 15;
@@ -781,7 +818,13 @@ export default function ProfileScreen({ navigation }: any) {
                 )}
             </SectionBlock>
 
-            <SectionBlock title="À écouter" icon="radio-outline">
+            <SectionBlock
+                title="À écouter"
+                icon="radio-outline"
+                count={releasesToListen.length}
+                collapsed={toListenCollapsed}
+                onToggle={() => setToListenCollapsed((value) => !value)}
+            >
                 {releasesToListen.length > 0 ? (
                     <View style={styles.releaseList}>
                         {releasesToListen.slice(0, 6).map((item) => {
@@ -819,7 +862,13 @@ export default function ProfileScreen({ navigation }: any) {
                 )}
             </SectionBlock>
 
-            <SectionBlock title="Déjà écoutés" icon="checkmark-circle-outline">
+            <SectionBlock
+                title="Déjà écoutés"
+                icon="checkmark-circle-outline"
+                count={releasesListened.length}
+                collapsed={listenedCollapsed}
+                onToggle={() => setListenedCollapsed((value) => !value)}
+            >
                 {releasesListened.length > 0 ? (
                     <View style={styles.releaseList}>
                         {releasesListened.slice(0, 5).map((item) => {
@@ -1099,8 +1148,29 @@ const styles = StyleSheet.create({
     sectionHeader: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
+        justifyContent: "space-between",
+        gap: spacing.sm,
         marginBottom: 12,
+    },
+
+    sectionTitleRow: {
+        flex: 1,
+        minWidth: 0,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+
+    sectionToggleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+
+    sectionCount: {
+        color: colors.textMuted,
+        fontSize: typography.caption,
+        fontWeight: fontWeights.extraBold,
     },
 
     sectionIconWrap: {

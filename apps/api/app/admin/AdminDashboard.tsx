@@ -348,6 +348,8 @@ export default function AdminDashboard() {
         return () => {
             mounted = false;
         };
+        // Bootstrap volontairement unique : les rechargements de filtres passent par les boutons/actions.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     async function handleLogin(event: FormEvent) {

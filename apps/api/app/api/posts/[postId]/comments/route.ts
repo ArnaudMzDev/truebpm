@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import { getOptionalUserId, requireUserId } from "@/lib/requestAuth";
 import { createNotification } from "@/lib/notifications";
 import { cleanMultilineText } from "@/lib/sanitize";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +23,17 @@ export async function GET(req: Request, { params }: { params: { postId: string }
         }
 
         const { searchParams } = new URL(req.url);
-        const limit = Math.min(Number(searchParams.get("limit") || 30), 50);
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 30,
+            maxLimit: 50,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = { postId, parentId: null };
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+        if (cursor) {
             query._id = { $lt: cursor };
         }
 
@@ -41,13 +48,9 @@ export async function GET(req: Request, { params }: { params: { postId: string }
             .populate("userId", "pseudo avatarUrl")
             .lean();
 
-        let nextCursor: string | null = null;
-        if (items.length > limit) {
-            const next = items.pop();
-            nextCursor = next?._id?.toString() ?? null;
-        }
+        const page = paginateSlice(items, limit, (item: any) => item?._id?.toString?.());
 
-        const comments = items.map((c: any) => {
+        const comments = page.data.map((c: any) => {
             const likesArr = Array.isArray(c.likes) ? c.likes : [];
             const likedByMe = !!me && likesArr.some((id: any) => id?.toString?.() === me.toString());
             const likesCount = likesArr.length;
@@ -56,7 +59,7 @@ export async function GET(req: Request, { params }: { params: { postId: string }
             return { ...rest, likesCount, likedByMe };
         });
 
-        return NextResponse.json({ comments, nextCursor }, { status: 200 });
+        return pageResponse({ comments }, { ...page.pageInfo, count: comments.length }, { status: 200 });
     } catch (e) {
         console.error("❌ GET /api/posts/[postId]/comments error:", e);
         return NextResponse.json({ error: "Erreur interne serveur." }, { status: 500 });

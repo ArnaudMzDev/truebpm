@@ -3,17 +3,12 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { requireAdminRequest } from "@/lib/adminAuth";
 import SupportTicket from "@/models/SupportTicket";
+import { pageResponse, paginateSlice, parsePagination } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
 function escapeRegex(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function clampLimit(value: string | null) {
-    const n = Number(value || 40);
-    if (!Number.isFinite(n)) return 40;
-    return Math.max(10, Math.min(100, Math.floor(n)));
 }
 
 export async function GET(req: Request) {
@@ -26,8 +21,15 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const q = (searchParams.get("q") || "").trim();
         const status = searchParams.get("status") || "active";
-        const limit = clampLimit(searchParams.get("limit"));
-        const cursor = searchParams.get("cursor");
+        const { limit, cursor, invalidCursor } = parsePagination(searchParams, {
+            defaultLimit: 40,
+            maxLimit: 100,
+            minLimit: 10,
+        });
+
+        if (invalidCursor) {
+            return NextResponse.json({ error: "Curseur invalide." }, { status: 400 });
+        }
 
         const query: any = {};
         if (status === "active") query.status = { $in: ["open", "in_review"] };
@@ -45,22 +47,18 @@ export async function GET(req: Request) {
         }
 
         const tickets: any[] = await SupportTicket.find(query)
-            .sort({ priority: -1, _id: -1 })
+            .sort({ _id: -1 })
             .limit(limit + 1)
             .populate("userId", "pseudo email avatarUrl isBanned")
             .lean();
 
-        let nextCursor: string | null = null;
-        if (tickets.length > limit) {
-            const next = tickets.pop();
-            nextCursor = next?._id?.toString?.() || null;
-        }
+        const page = paginateSlice(tickets, limit, (item: any) => item?._id?.toString?.());
 
         const counts = await SupportTicket.aggregate([
             { $group: { _id: "$status", count: { $sum: 1 } } },
         ]);
 
-        return NextResponse.json({ tickets, counts, nextCursor });
+        return pageResponse({ tickets: page.data, counts }, page.pageInfo);
     } catch (e) {
         console.error("GET /api/admin/support error:", e);
         return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
