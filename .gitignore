@@ -8,6 +8,5 @@ build
 .env.local
 .next
 .DS_Store
-pnpm-lock.yaml
 
 node_modules
