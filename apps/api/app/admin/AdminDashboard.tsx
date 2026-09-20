@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import styles from "./AdminDashboard.module.css";
 
 type Metrics = {
@@ -732,7 +733,7 @@ export default function AdminDashboard() {
                                 return (
                                     <article className={styles.postRow} key={post._id}>
                                         <div className={styles.cover}>
-                                            {post.coverUrl ? <img src={post.coverUrl} alt="" /> : initials(title)}
+                                            {post.coverUrl ? <Image src={post.coverUrl} alt="" fill sizes="56px" unoptimized /> : initials(title)}
                                         </div>
                                         <div className={styles.rowMain}>
                                             <strong>{title || "Post sans titre"}</strong>
